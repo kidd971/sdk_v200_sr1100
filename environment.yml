@@ -1,0 +1,23 @@
+name: spark
+channels:
+  - memfault
+  - conda-forge
+  - defaults
+  - msarahan
+dependencies:
+  # Build tools
+  - gcc-arm-none-eabi==10.3.2021.10
+  - make==4.3
+  - ninja==1.11.0
+  - cmake==3.23.3
+
+  # Utilities
+  - curl==8.2.1
+  - python==3.10.5
+  - pip==22.2.1
+  - git==2.38.1
+
+  # Python packages
+  - pip:
+    - pyocd==0.36.0
+
