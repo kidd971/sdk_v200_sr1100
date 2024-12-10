@@ -1,0 +1,2 @@
+target_link_libraries(hello_world_rtos_backend PRIVATE hardware module_tinyusb)
+target_sources(hello_world_rtos_backend PRIVATE hello_world_rtos_backend.c)

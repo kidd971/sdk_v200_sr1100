@@ -1,0 +1,2 @@
+target_link_libraries(datalink_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(datalink_backend PRIVATE datalink_backend.c)

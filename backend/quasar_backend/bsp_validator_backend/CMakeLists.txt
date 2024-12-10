@@ -1,0 +1,2 @@
+target_link_libraries(bsp_validator_backend PRIVATE hardware)
+target_sources(bsp_validator_backend PRIVATE bsp_validator_backend.c)

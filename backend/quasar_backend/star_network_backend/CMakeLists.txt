@@ -1,0 +1,2 @@
+target_link_libraries(star_network_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(star_network_backend PRIVATE star_network_backend.c)

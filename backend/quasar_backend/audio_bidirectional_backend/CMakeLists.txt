@@ -1,0 +1,2 @@
+target_link_libraries(audio_bidirectional_backend PRIVATE hardware module_tinyusb_baremetal max98091_driver)
+target_sources(audio_bidirectional_backend PRIVATE audio_bidirectional_backend.c)

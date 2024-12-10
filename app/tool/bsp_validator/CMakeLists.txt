@@ -1,0 +1,5 @@
+if (TRANSCEIVER STREQUAL "SR1000")
+    add_subdirectory(sr1000)
+elseif (TRANSCEIVER STREQUAL "SR1100")
+    add_subdirectory(sr1100)
+endif ()

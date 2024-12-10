@@ -1,0 +1,2 @@
+target_link_libraries(connection_priority_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(connection_priority_backend PRIVATE connection_priority_backend.c)

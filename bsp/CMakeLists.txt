@@ -1,0 +1,7 @@
+if (HARDWARE STREQUAL EVK)
+    add_subdirectory(evk1_4)
+elseif(HARDWARE STREQUAL PULSAR)
+    add_subdirectory(pulsar)
+elseif(HARDWARE STREQUAL QUASAR)
+    add_subdirectory(quasar)
+endif()

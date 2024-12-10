@@ -1,0 +1,2 @@
+target_link_libraries(hello_world_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(hello_world_backend PRIVATE hello_world_backend.c)

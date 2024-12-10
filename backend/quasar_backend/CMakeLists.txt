@@ -1,0 +1,38 @@
+# Core
+add_subdirectory(wireless_core_backend)
+
+# SDK Example Application
+if (APP STREQUAL "Connection-Priority")
+    add_subdirectory(connection_priority_backend)
+elseif (APP STREQUAL "Audio-Bidirectional")
+    add_subdirectory(audio_bidirectional_backend)
+    add_subdirectory(audio_core_backend)
+elseif (APP STREQUAL "Audio-Unidirectional")
+    add_subdirectory(audio_unidirectional_backend)
+    add_subdirectory(audio_core_backend)
+elseif (APP STREQUAL "Datalink")
+    add_subdirectory(datalink_backend)
+elseif (APP STREQUAL "Fragmentation")
+    add_subdirectory(fragmentation_backend)
+elseif (APP STREQUAL "Hello-World")
+    add_subdirectory(hello_world_backend)
+elseif (APP STREQUAL "Hello-World-RTOS")
+    add_subdirectory(hello_world_rtos_backend)
+elseif (APP STREQUAL "Star-Network")
+    add_subdirectory(star_network_backend)
+elseif (APP STREQUAL "BSP-validator")
+    add_subdirectory(bsp_validator_backend)
+elseif (APP STREQUAL "All")
+    add_subdirectory(connection_priority_backend)
+    add_subdirectory(audio_bidirectional_backend)
+    add_subdirectory(audio_unidirectional_backend)
+    add_subdirectory(datalink_backend)
+    add_subdirectory(fragmentation_backend)
+    add_subdirectory(hello_world_backend)
+    add_subdirectory(star_network_backend)
+    add_subdirectory(bsp_validator_backend)
+    add_subdirectory(audio_core_backend)
+endif()
+
+
+

@@ -1,0 +1,154 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "description": "Base configuration for all presets",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_CXX_FLAGS": "-g -O2",
+                "CMAKE_C_FLAGS": "-g -O2",
+                "RADIO_INTERFACE_QSPI": "OFF",
+                "RPC_ENABLED": "OFF",
+                "RTOS_ENABLED": "OFF",
+                "SWC_EXT_API_ENABLE": "OFF",
+                "TINY_USB_CFG": "TINY_USB_SINGLE_FS_BAREMETAL",
+                "WPS_ENABLE_PHY_STATS_PER_BANDS": "OFF"
+            }
+        },
+        {
+            "name": "quasar",
+            "description": "Base configuration quasar target",
+            "hidden": true,
+            "cacheVariables": {
+                "HARDWARE": "QUASAR",
+                "MCU_DRIVER": "STMU5XX"
+            }
+        },
+        {
+            "name": "audio-bidirectional-quasar",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Audio bidirectional example for SR11xx with Quasar",
+            "cacheVariables": {
+                "APP": "Audio-Bidirectional",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "audio-unidirectional-quasar",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Audio unidirectional example for SR11xx with Quasar",
+            "cacheVariables": {
+                "APP": "Audio-Unidirectional",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "connection-priority-quasar",
+            "description": "Connection priority example for SR11xx with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Connection-Priority",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "datalink-quasar",
+            "description": "Datalink example for SR11xx with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Datalink",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "fragmentation-quasar",
+            "description": "Fragmentation example for SR11xx with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Fragmentation",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "hello-world-quasar",
+            "description": "Hello-World example for SR11xx with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Hello-World",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "hello-world-rtos-quasar",
+            "description": "Hello-World RTOS example for SR11xx with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Hello-World-RTOS",
+                "TRANSCEIVER": "SR1100",
+                "TINY_USB_CFG": "TINY_USB_SINGLE_FS_RTOS",
+                "RTOS_ENABLED": "ON"
+            }
+        },
+        {
+            "name": "star-network-quasar",
+            "description": "Star Network example for SR11xx with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Star-Network",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "bsp-validator-tool-quasar",
+            "description": "BSP Validator tool with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "BSP-validator",
+                "TRANSCEIVER": "SR1100"
+            }
+        }
+    ]
+}

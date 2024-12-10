@@ -1,0 +1,10 @@
+message("Application: ${APP}")
+
+if (APP STREQUAL "BSP-validator")
+    add_subdirectory(tool/bsp_validator)
+elseif (APP STREQUAL "All")
+    add_subdirectory(tool/bsp_validator)
+    add_subdirectory(example)
+else()
+    add_subdirectory(example)
+endif()

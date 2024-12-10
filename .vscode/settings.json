@@ -1,0 +1,178 @@
+{
+  "cmake.autoSelectActiveFolder": false,
+  "cmake.configureOnOpen": false,
+  "cmake.showSystemKits": false,
+  "cmake.generator": "Ninja",
+  "cmake.buildDirectory": "${workspaceRoot}/build/${variant:buildType}/${variant:Application}/${variant:Target}",
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "C_Cpp.clang_format_style": "file",
+  "files.associations": {
+    "cmath": "c",
+    "*.h": "c",
+    "array": "cpp",
+    "bitset": "cpp",
+    "string_view": "cpp",
+    "rope": "cpp",
+    "slist": "cpp",
+    "initializer_list": "cpp",
+    "ranges": "cpp",
+    "span": "cpp",
+    "regex": "cpp",
+    "utility": "cpp",
+    "valarray": "cpp",
+    "cstddef": "cpp",
+    "any": "cpp",
+    "atomic": "cpp",
+    "bit": "cpp",
+    "*.tcc": "cpp",
+    "cctype": "cpp",
+    "cfenv": "cpp",
+    "charconv": "cpp",
+    "chrono": "cpp",
+    "cinttypes": "cpp",
+    "clocale": "cpp",
+    "codecvt": "cpp",
+    "compare": "cpp",
+    "complex": "cpp",
+    "concepts": "cpp",
+    "condition_variable": "cpp",
+    "coroutine": "cpp",
+    "csetjmp": "cpp",
+    "csignal": "cpp",
+    "cstdarg": "cpp",
+    "cstdint": "cpp",
+    "cstdio": "cpp",
+    "cstdlib": "cpp",
+    "cstring": "cpp",
+    "ctime": "cpp",
+    "cuchar": "cpp",
+    "cwchar": "cpp",
+    "cwctype": "cpp",
+    "deque": "cpp",
+    "forward_list": "cpp",
+    "list": "cpp",
+    "map": "cpp",
+    "set": "cpp",
+    "unordered_map": "cpp",
+    "unordered_set": "cpp",
+    "vector": "cpp",
+    "exception": "cpp",
+    "algorithm": "cpp",
+    "functional": "cpp",
+    "iterator": "cpp",
+    "memory": "cpp",
+    "memory_resource": "cpp",
+    "numeric": "cpp",
+    "optional": "cpp",
+    "random": "cpp",
+    "ratio": "cpp",
+    "source_location": "cpp",
+    "string": "cpp",
+    "system_error": "cpp",
+    "tuple": "cpp",
+    "type_traits": "cpp",
+    "fstream": "cpp",
+    "future": "cpp",
+    "iomanip": "cpp",
+    "iosfwd": "cpp",
+    "iostream": "cpp",
+    "istream": "cpp",
+    "limits": "cpp",
+    "mutex": "cpp",
+    "new": "cpp",
+    "numbers": "cpp",
+    "ostream": "cpp",
+    "scoped_allocator": "cpp",
+    "shared_mutex": "cpp",
+    "sstream": "cpp",
+    "stdexcept": "cpp",
+    "stop_token": "cpp",
+    "streambuf": "cpp",
+    "thread": "cpp",
+    "typeindex": "cpp",
+    "typeinfo": "cpp",
+    "variant": "cpp",
+    "netfwd": "cpp",
+    "*.def": "c"
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.trimFinalNewlines": false,
+  "files.insertFinalNewline": true,
+  "testMate.cpp.debug.configTemplate": {
+    "type": "cppdbg",
+    "program": "${exec}",
+    "args": "${argsArray}",
+    "cwd": "${cwd}",
+    "environment": "${envObjArray}",
+    "sourceFileMap": "${sourceFileMapObj}"
+  },
+  "doxdocgen.c.firstLine": "/** @brief ",
+  "doxdocgen.generic.briefTemplate": "",
+  "doxdocgen.generic.paramTemplate": " @param[in]{indent:12}{param}{indent:30}",
+  "doxdocgen.generic.returnTemplate": " @return{indent:30}",
+  "cortex-debug.variableUseNaturalFormat": true,
+  "editor.rulers": [120],
+
+    // Restructured Text
+    "esbonio.sphinx.confDir": "${workspaceFolder}\\spark-spark\\doc\\sphinx_doc\\source",
+    "restructuredtext.linter.disabledLinters": ["doc8", "rst-lint", "rstcheck"],
+    "python.terminal.activateEnvironment": false,
+    "git.ignoreLimitWarning": true,
+    "cmake.options.statusBarVisibility": "visible",
+    "terminal.integrated.ignoreProcessNames": [
+      "starship",
+      "oh-my-posh",
+      "bash"
+    ],
+
+    "cmake.options.advanced": {
+        "folder": {
+            "statusBarVisibility": "compact"
+        },
+        "configure": {
+            "projectStatusVisibility": "visible"
+        },
+        "configurePreset": {
+            "statusBarVisibility": "visible"
+        },
+        "kit": {
+            "statusBarVisibility": "compact"
+        },
+        "variant": {
+            "statusBarVisibility": "compact"
+        },
+        "build": {
+            "statusBarVisibility": "visible"
+        },
+        "buildPreset": {
+            "statusBarVisibility": "icon"
+        },
+        "buildTarget": {
+            "statusBarVisibility": "hidden"
+        },
+        "ctest": {
+            "statusBarVisibility": "compact"
+        },
+        "testPreset": {
+            "statusBarVisibility": "icon"
+        },
+        "launchTarget": {
+            "statusBarVisibility": "compact"
+        },
+        "debug": {
+            "statusBarVisibility": "visible"
+        },
+        "launch": {
+            "statusBarVisibility": "visible"
+        },
+        "workflow": {
+            "statusBarVisibility": "hidden"
+        },
+        "workflowPreset": {
+            "statusBarVisibility": "hidden"
+        },
+        "packagePreset": {
+            "statusBarVisibility": "hidden"
+        }
+    }
+}
