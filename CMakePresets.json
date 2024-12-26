@@ -34,43 +34,6 @@
             }
         },
         {
-            "name": "audio-bidirectional-quasar",
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "Audio bidirectional example for SR11xx with Quasar",
-            "cacheVariables": {
-                "APP": "Audio-Bidirectional",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "audio-unidirectional-quasar",
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "Audio unidirectional example for SR11xx with Quasar",
-            "cacheVariables": {
-                "APP": "Audio-Unidirectional",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "connection-priority-quasar",
-            "description": "Connection priority example for SR11xx with Quasar",
-            "hidden": false,
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "cacheVariables": {
-                "APP": "Connection-Priority",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
             "name": "datalink-quasar",
             "description": "Datalink example for SR11xx with Quasar",
             "hidden": false,
@@ -80,19 +43,6 @@
             ],
             "cacheVariables": {
                 "APP": "Datalink",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "fragmentation-quasar",
-            "description": "Fragmentation example for SR11xx with Quasar",
-            "hidden": false,
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "cacheVariables": {
-                "APP": "Fragmentation",
                 "TRANSCEIVER": "SR1100"
             }
         },
@@ -122,19 +72,6 @@
                 "TRANSCEIVER": "SR1100",
                 "TINY_USB_CFG": "TINY_USB_SINGLE_FS_RTOS",
                 "RTOS_ENABLED": "ON"
-            }
-        },
-        {
-            "name": "star-network-quasar",
-            "description": "Star Network example for SR11xx with Quasar",
-            "hidden": false,
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "cacheVariables": {
-                "APP": "Star-Network",
-                "TRANSCEIVER": "SR1100"
             }
         },
         {
