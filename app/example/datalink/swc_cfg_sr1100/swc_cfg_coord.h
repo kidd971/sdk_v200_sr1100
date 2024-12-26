@@ -14,8 +14,8 @@
 
 /* Output power configuration */
 #define TX_DATA_PULSE_COUNT 1
-#define TX_DATA_PULSE_WIDTH 7
-#define TX_DATA_PULSE_GAIN  3
+#define TX_DATA_PULSE_WIDTH 3 //7
+#define TX_DATA_PULSE_GAIN  5 //3
 
 /* Input power configuration */
 #define RX_ACK_PULSE_COUNT 1 /* Pulses configuration of received ACK frames */
@@ -25,7 +25,9 @@
 
 /* Schedule configuration */
 // clang-format off
-#define SCHEDULE     {250}
+//#define SCHEDULE     {250}
+#define SCHEDULE     {200}
+
 #define TX_TIMESLOTS {MAIN_TIMESLOT(0)}
 
 /* Channels */
