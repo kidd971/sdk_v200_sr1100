@@ -47,34 +47,6 @@
             }
         },
         {
-            "name": "hello-world-quasar",
-            "description": "Hello-World example for SR11xx with Quasar",
-            "hidden": false,
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "cacheVariables": {
-                "APP": "Hello-World",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "hello-world-rtos-quasar",
-            "description": "Hello-World RTOS example for SR11xx with Quasar",
-            "hidden": false,
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "cacheVariables": {
-                "APP": "Hello-World-RTOS",
-                "TRANSCEIVER": "SR1100",
-                "TINY_USB_CFG": "TINY_USB_SINGLE_FS_RTOS",
-                "RTOS_ENABLED": "ON"
-            }
-        },
-        {
             "name": "bsp-validator-tool-quasar",
             "description": "BSP Validator tool with Quasar",
             "hidden": false,

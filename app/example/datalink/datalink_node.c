@@ -45,6 +45,8 @@ static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
 static uint32_t channel_frequency[] = CHANNEL_FREQ;
 static int32_t rx_timeslots[] = RX_TIMESLOTS;
 
+//static int8_t rx_receive_buff[96] = {0};
+
 /* ** Application Specific ** */
 static uint32_t rx_count;
 static bool print_stats_now;
@@ -203,6 +205,7 @@ static void conn_rx_success_callback(void *conn)
         return;
     }
 
+    // check receive data , you can use your way to check it
     dataforge_seq_status_t seq_status = dataforge_validate_seq_num(payload, seq_num);
 
     seq_num = dataforge_extract_seq_num(payload);

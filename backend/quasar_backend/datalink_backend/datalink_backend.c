@@ -8,6 +8,10 @@
  */
 
 /* INCLUDES *******************************************************************/
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "datalink_facade.h"
 #include "quasar.h"
 #include "tinyusb_module_baremetal.h"
@@ -151,6 +155,20 @@ void facade_print_string(char *string)
         tud_cdc_write_str(string);
         tud_cdc_write_flush();
     }
+}
+
+void dbg_printf(const char *fmt, ...)
+{
+    char string[512];
+    uint16_t string_length = 0;
+    va_list va;
+
+    va_start(va, fmt);
+    string_length = vsnprintf(string, ARRAY_SIZE(string), fmt, va);
+    tud_cdc_n_write(0 , string, string_length);
+
+    facade_delay(5);
+    va_end(va);
 }
 
 void facade_notify_enter_pairing(void)

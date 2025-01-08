@@ -1,10 +1,5 @@
-if (APP STREQUAL "Hello-World")
-    add_subdirectory(hello_world)
-elseif (APP STREQUAL "Hello-World-RTOS")
-    add_subdirectory(hello_world_rtos)
-elseif (APP STREQUAL "Datalink")
+if (APP STREQUAL "Datalink")
     add_subdirectory(datalink)
 elseif (APP STREQUAL "All")
-    add_subdirectory(hello_world)
-    add_subdirectory(star_network)
+
 endif()
