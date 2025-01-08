@@ -98,6 +98,7 @@ int main(void)
                     reset_stats_now = false;
                 } else {
                     print_stats();
+                    facade_printf("General printf test\n");
                 }
                 print_stats_now = false;
             }

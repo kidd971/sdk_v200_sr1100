@@ -110,6 +110,13 @@ void facade_delay(uint32_t ms_delay);
  */
 void facade_print_string(char *string);
 
+
+/** @brief General printf function for debug .
+ *
+ *  @param[in] TBD.
+ */
+void facade_printf(const char *fmt, ...);
+
 /** @brief Enter pairing notification LED pattern.
  */
 void facade_notify_enter_pairing(void);

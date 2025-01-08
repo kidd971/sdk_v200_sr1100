@@ -157,7 +157,7 @@ void facade_print_string(char *string)
     }
 }
 
-void dbg_printf(const char *fmt, ...)
+void facade_printf(const char *fmt, ...)
 {
     char string[512];
     uint16_t string_length = 0;
