@@ -13,9 +13,15 @@
 #define NETWORK_ROLE SWC_ROLE_NODE
 
 /* Output power configuration */
+//3M
+// #define TX_ACK_PULSE_COUNT 1  //1
+// #define TX_ACK_PULSE_WIDTH 3  //7
+// #define TX_ACK_PULSE_GAIN  5  //3
+
+//5M
 #define TX_ACK_PULSE_COUNT 1
-#define TX_ACK_PULSE_WIDTH 3 //7
-#define TX_ACK_PULSE_GAIN  3 //1 , coord 1/3/5
+#define TX_ACK_PULSE_WIDTH 3
+#define TX_ACK_PULSE_GAIN  5
 
 /* Input power configuration */
 #define RX_DATA_PULSE_COUNT 1 /* Pulses configuration of received data frames */
@@ -25,16 +31,19 @@
 
 /* Schedule configuration */
 // clang-format off
-//#define SCHEDULE     {250}
-#define SCHEDULE     {200}
+//#define SCHEDULE     {250} // 200
+#define SCHEDULE     {230}  // FR 4347
 
 #define RX_TIMESLOTS {MAIN_TIMESLOT(0)}
 
 /* Channels */
-#define CHANNEL_FREQ     {164, 174, 184, 194}
-#define CHANNEL_SEQUENCE {0, 1, 2, 3}
-// clang-format on
+// #define CHANNEL_FREQ     {164, 174, 184, 194}
+// #define CHANNEL_SEQUENCE {0, 1, 2, 3}
+// 5 bands, spacing 10
+#define CHANNEL_FREQ     {162, 172, 182, 192, 202}
+#define CHANNEL_SEQUENCE {0, 1, 2, 3,4}
 
+// clang-format on
 /* CCA settings */
 #define SWC_CCA_RETRY_TIME 512
 #define SWC_CCA_THRESHOLD  25
