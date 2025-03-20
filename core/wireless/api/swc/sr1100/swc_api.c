@@ -184,6 +184,7 @@
 #define WPS_DEFAULT_CONNECTION_ID false
 #endif
 
+#if 0 //ori
 /*! Default CCA threshold for air traffic detection */
 #ifndef WPS_DEFAULT_CCA_THRESHOLD
 #define WPS_DEFAULT_CCA_THRESHOLD 65
@@ -195,6 +196,24 @@
 #endif
 
 #define DEFAULT_CCA_HP_RETRY_TIME 512 /* (512 * 48.8 ns -> 25 us) */
+
+
+#else
+/*! Default CCA threshold for air traffic detection */
+#ifndef WPS_DEFAULT_CCA_THRESHOLD
+#define WPS_DEFAULT_CCA_THRESHOLD 70
+#endif
+
+/*! Default CCA ON time */
+#ifndef WPS_DEFAULT_CCA_ON_TIME_PLL_CYCLES
+#define WPS_DEFAULT_CCA_ON_TIME_PLL_CYCLES 7 // 32 <<---todo : debug this!!
+
+#endif
+
+#define DEFAULT_CCA_HP_RETRY_TIME 141 /* (512 * 48.8 ns -> 25 us) */
+#endif
+
+
 #define DEFAULT_CCA_HP_TRY_COUNT  2
 #define DEFAULT_CCA_LP_RETRY_TIME CCAINTERV_MIN_VALUE
 #define DEFAULT_CCA_LP_TRY_COUNT  1
