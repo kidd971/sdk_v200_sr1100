@@ -1,8 +1,5 @@
 if (APP STREQUAL "Audio-Unidirectional")
     add_subdirectory(audio_unidirectional)
-elseif (APP STREQUAL "Audio-Bidirectional")
-    add_subdirectory(audio_bidirectional)
 elseif (APP STREQUAL "All")
     add_subdirectory(audio_unidirectional)
-    add_subdirectory(audio_bidirectional)
 endif()

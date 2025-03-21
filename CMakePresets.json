@@ -34,18 +34,6 @@
             }
         },
         {
-            "name": "audio-bidirectional-quasar",
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "Audio bidirectional example for SR11xx with Quasar",
-            "cacheVariables": {
-                "APP": "Audio-Bidirectional",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
             "name": "audio-unidirectional-quasar",
             "inherits": [
                 "base",
