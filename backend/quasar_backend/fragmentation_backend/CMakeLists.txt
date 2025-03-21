@@ -1,2 +1,0 @@
-target_link_libraries(fragmentation_backend PRIVATE hardware module_tinyusb_baremetal)
-target_sources(fragmentation_backend PRIVATE fragmentation_backend.c)
