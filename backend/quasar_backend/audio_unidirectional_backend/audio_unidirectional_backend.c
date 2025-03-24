@@ -82,8 +82,10 @@ void facade_audio_coord_init(void)
 
     /* Init codec and generate SCLK */
     max98091_codec_cfg_t cfg = {
-        .sampling_rate = MAX98091_AUDIO_48KHZ,
-        //.sampling_rate = MAX98091_AUDIO_96KHZ,
+        //.sampling_rate = MAX98091_AUDIO_24KHZ,
+        //.sampling_rate = MAX98091_AUDIO_48KHZ,
+        .sampling_rate = MAX98091_AUDIO_96KHZ,
+
         .word_size = MAX98091_AUDIO_24BITS,
         .record_enabled = true,
         .playback_enabled = false,
@@ -107,8 +109,9 @@ void facade_audio_node_init(void)
     quasar_audio_init(sai_config);
 
     max98091_codec_cfg_t cfg = {
-        .sampling_rate = MAX98091_AUDIO_48KHZ,
-        //.sampling_rate = MAX98091_AUDIO_96KHZ,
+        //.sampling_rate = MAX98091_AUDIO_24KHZ,
+        //.sampling_rate = MAX98091_AUDIO_48KHZ,
+        .sampling_rate = MAX98091_AUDIO_96KHZ,
         .word_size = MAX98091_AUDIO_24BITS,
         .record_enabled = false,
         .playback_enabled = true,

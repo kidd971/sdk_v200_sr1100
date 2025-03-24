@@ -33,9 +33,11 @@
 /* Number of audio channels.. */
 #define SAC_AUDIO_CHANNEL_COUNT 2
 /* The SWC consumes audio samples and sends them over the air. */
-#define SAC_CONSUMER_AUDIO_PAYLOAD_SIZE 78
+//#define SAC_CONSUMER_AUDIO_PAYLOAD_SIZE 78
+#define SAC_CONSUMER_AUDIO_PAYLOAD_SIZE 156
 /* The codec produces audio samples. */
-#define SAC_PRODUCER_AUDIO_PAYLOAD_SIZE 104
+//#define SAC_PRODUCER_AUDIO_PAYLOAD_SIZE 104
+#define SAC_PRODUCER_AUDIO_PAYLOAD_SIZE 208
 /* Size of the latency queue used for the Audio Core. */
 #define SAC_LATENCY_QUEUE_SIZE 11
 /* Total memory needed for the Wireless Core. */
@@ -166,6 +168,7 @@ static void status_handler_sac(sac_status_t sac_status);
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
 {
+    static u_int8_t count_reset_stat=0;
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
@@ -189,7 +192,18 @@ int main(void)
             if (print_stats_now) {
                 print_stats();
                 print_stats_now = false;
+                count_reset_stat++;
+
+                if(count_reset_stat>= 3){
+                    count_reset_stat = 0;
+                    swc_connection_reset_stats(tx_audio_conn);
+                    swc_connection_reset_stats(tx_data_conn);
+                    swc_connection_reset_stats(rx_data_conn);
+                }
+
             }
+
+
         };
     }
 
@@ -718,14 +732,18 @@ static void print_stats(void)
 static void data_callback(void)
 {
     static uint8_t counter;
+    //static uint8_t counter_cl;
+
     swc_error_t swc_err = SWC_ERR_NONE;
 
     /* Every second, the statistics are displayed. */
-    if (counter >= STATS_PRINT_PERIOD_MS / DATA_TX_PERIOD_MS) {
+    if (counter >= STATS_PRINT_PERIOD_MS*2 / DATA_TX_PERIOD_MS) {
         print_stats_now = true;
         counter = 0;
     }
     counter++;
+
+
 
     /* Send the state of the button to the Node. */
     wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);

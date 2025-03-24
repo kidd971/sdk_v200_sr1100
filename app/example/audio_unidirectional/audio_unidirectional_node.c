@@ -32,10 +32,14 @@
 /* CONSTANTS ******************************************************************/
 /* Total memory needed for the Audio Core. */
 #define SAC_MEM_POOL_SIZE 9000
+
+/* The codec produces audio samples. */
+//#define SAC_PRODUCER_AUDIO_PAYLOAD_SIZE 178
+#define SAC_PRODUCER_AUDIO_PAYLOAD_SIZE 156
+
 /* The SWC receives and produces audio samples. */
-#define SAC_PRODUCER_AUDIO_PAYLOAD_SIZE 78
-/* The codec consumes audio samples. */
-#define SAC_CONSUMER_AUDIO_PAYLOAD_SIZE 104
+//#define SAC_CONSUMER_AUDIO_PAYLOAD_SIZE 104
+#define SAC_CONSUMER_AUDIO_PAYLOAD_SIZE 208
 /* Size of the latency queue used for the Audio Core. */
 #define SAC_LATENCY_QUEUE_SIZE 11
 /* Number of audio channels. */
@@ -876,7 +880,7 @@ static void data_callback(void)
     static uint8_t counter;
 
     /* Every second, the statistics are displayed. */
-    if (counter >= STATS_PRINT_PERIOD_MS / DATA_TX_PERIOD_MS) {
+    if (counter >= STATS_PRINT_PERIOD_MS*2 / DATA_TX_PERIOD_MS) {
         counter = 0;
         print_stats_now = true;
     }
