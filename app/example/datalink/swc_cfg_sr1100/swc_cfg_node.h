@@ -31,7 +31,7 @@
 
 /* Schedule configuration */
 // clang-format off
-//#define SCHEDULE     {250} // 200
+//#define SCHEDULE     {333}//{250} // 200
 #define SCHEDULE     {230}  // FR 4347
 
 #define RX_TIMESLOTS {MAIN_TIMESLOT(0)}

@@ -206,11 +206,11 @@
 
 /*! Default CCA ON time */
 #ifndef WPS_DEFAULT_CCA_ON_TIME_PLL_CYCLES
-#define WPS_DEFAULT_CCA_ON_TIME_PLL_CYCLES 7 // 32 <<---todo : debug this!!
+#define WPS_DEFAULT_CCA_ON_TIME_PLL_CYCLES 32 // 32 <<---todo : debug this!!
 
 #endif
 
-#define DEFAULT_CCA_HP_RETRY_TIME 141 /* (512 * 48.8 ns -> 25 us) */
+#define DEFAULT_CCA_HP_RETRY_TIME 256 //141   /* (512 * 48.8 ns -> 25 us) */
 #endif
 
 

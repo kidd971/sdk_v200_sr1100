@@ -18,7 +18,7 @@
 
 /* CONSTANTS ******************************************************************/
 #define SWC_MEM_POOL_SIZE     6000
-#define MAX_PAYLOAD_SIZE_BYTE 150 //5M //96 3.8M //72 //64
+#define MAX_PAYLOAD_SIZE_BYTE 196 //240 // 224 //196   //150 //5M //96 3.8M //72 //64
 #define STATS_ARRAY_LENGTH    1024
 
 /* The device roles are used for the pairing discovery list. */
