@@ -24,7 +24,7 @@
 #define SWC_MEM_POOL_SIZE 6100
 #endif
 
-#define MAX_PAYLOAD_SIZE_BYTE 196 //240 // 240(5.7mbps) //196 //150 //5M //96 3.8M //72 //64
+#define MAX_PAYLOAD_SIZE_BYTE 252 //196 //150 //196 //240 // 240(5.7mbps) //196 //150 //5M //96 3.8M //72 //64
 #define STATS_ARRAY_LENGTH    500
 
 /* The timeout in second after which the pairing procedure will abort. */
