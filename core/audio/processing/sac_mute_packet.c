@@ -21,8 +21,8 @@ uint16_t sac_mute_packet_process(void *instance, sac_pipeline_t *pipeline, sac_h
     (void)pipeline;
     (void)header;
 
-    uint8_t i;
-    uint8_t zeros;
+    uint8_t i = 0;
+    uint8_t zeros = 0;
 
     *status = SAC_OK;
 

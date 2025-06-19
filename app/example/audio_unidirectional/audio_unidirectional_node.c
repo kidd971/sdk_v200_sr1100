@@ -16,9 +16,9 @@
 #include "pairing_api.h"
 #include "sac_api.h"
 #include "sac_cdc.h"
+#include "sac_endpoint_swc.h"
 #include "sac_fallback.h"
 #include "sac_fallback_gate.h"
-#include "sac_endpoint_swc.h"
 #include "sac_hal_facade.h"
 #include "sac_mute_on_underflow.h"
 #include "sac_packing.h"
@@ -48,8 +48,6 @@
 #define MAX_DATA_PAYLOAD_SIZE 16
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3000
-/* Period for audio processing timer in us. */
-#define AUDIO_PROCESS_PERIOD_US 100
 /* Period for data transmission timer in ms. */
 #define DATA_TX_PERIOD_MS 10
 /* Period for statistics print timer in ms. */
@@ -65,10 +63,10 @@ typedef enum device_pairing_state {
     DEVICE_PAIRED,
 } device_pairing_state_t;
 
-/** @brief Data used for sending and receiving link margin and button state.
+/** @brief Data used for transmitting and receiving link margin and button state.
  */
 typedef struct user_data {
-    /*! A boolean indicating the button's state, toggling with each press of SW2. */
+    /*! A boolean indicating the button's state. */
     bool button_state;
     /*! The link margin to monitor link quality. */
     uint8_t link_margin;
@@ -129,8 +127,6 @@ static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 /* Flag that allows display every second. */
 static volatile bool print_stats_now;
-/* Variable that stores the link margin and the button state to be sent to the Coordinator. */
-static user_data_t transmitted_user_data = {0};
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
 static void app_init(void);
@@ -154,7 +150,6 @@ static void app_audio_core_packing_fallback_interface_init(sac_processing_interf
 static void app_audio_core_mute_on_underflow_interface_init(sac_processing_interface_t *iface);
 
 /* **** Button actions **** */
-static void toggle_button_state(void);
 static void volume_up(void);
 static void volume_down(void);
 static void enter_pairing_mode(void);
@@ -179,9 +174,8 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
-    /* Timer that triggers the audio process every 100 us. */
-    facade_audio_process_timer_init(AUDIO_PROCESS_PERIOD_US);
-    facade_audio_process_set_timer_callback(audio_process_callback);
+    /* Audio process timer initialization. */
+    facade_audio_process_timer_init(audio_process_callback);
 
     /* Timer that updates statistics display every second and transmits button state to Node every 10 ms. */
     facade_data_timer_init(DATA_TX_PERIOD_MS);
@@ -200,10 +194,13 @@ int main(void)
                 print_stats();
                 print_stats_now = false;
             }
-        };
+        }
     }
 
     device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    enter_pairing_mode();
 
     while (1) {
         if (device_pairing_state == DEVICE_UNPAIRED) {
@@ -212,7 +209,7 @@ int main(void)
         } else if (device_pairing_state == DEVICE_PAIRED) {
             /* When the device is paired, normal operations are executed. */
             fallback_led_handler();
-            facade_button_handling(unpair_device, toggle_button_state, volume_up, volume_down);
+            facade_button_handling(unpair_device, NULL, volume_up, volume_down);
         }
 
         /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
@@ -277,6 +274,13 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
         return;
     }
 
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_module_init(node, SWC_RADIO_ID_2, true, swc_err);
+    if (*swc_err != SWC_ERR_NONE) {
+        return;
+    }
+#endif
+
     /* ** RX Audio Connection ** */
     swc_connection_cfg_t rx_audio_conn_cfg = {
         .name = "RX Audio Connection",
@@ -294,8 +298,8 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
 
     swc_connection_concurrency_cfg_t rx_audio_concurrency_cfg = {
         .enabled = true,
-        .try_count = 3,
-        .retry_time = 512, /* 25 us */
+        .try_count = SWC_CCA_AUDIO_FBK_TRY_COUNT, /* Use maximum CCA try count on this connection. */
+        .retry_time = SWC_CCA_RETRY_TIME,
         .fail_action = SWC_CCA_ABORT_TX,
     };
 
@@ -334,6 +338,18 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
         return;
     }
 
+    swc_connection_concurrency_cfg_t rx_data_concurrency_cfg = {
+        .enabled = true,
+        .try_count = SWC_CCA_DATA_TRY_COUNT,
+        .retry_time = SWC_CCA_RETRY_TIME,
+        .fail_action = SWC_CCA_ABORT_TX,
+    };
+
+    swc_connection_set_concurrency_cfg(rx_data_conn, &rx_data_concurrency_cfg, swc_err);
+    if (*swc_err != SWC_ERR_NONE) {
+        return;
+    }
+
     swc_channel_cfg_t rx_data_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
@@ -364,21 +380,6 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
         return;
     }
 
-    swc_connection_set_acknowledgement(tx_data_conn, false, swc_err);
-    if (*swc_err != SWC_ERR_NONE) {
-        return;
-    }
-
-    swc_connection_set_credit_flow_ctrl(tx_data_conn, node, false, swc_err);
-    if (*swc_err != SWC_ERR_NONE) {
-        return;
-    }
-
-    swc_connection_set_retransmission(tx_data_conn, node, false, 0, 0, swc_err);
-    if (*swc_err != SWC_ERR_NONE) {
-        return;
-    }
-
     swc_connection_set_tx_success_callback(tx_data_conn, conn_tx_data_success_callback, swc_err);
 
     swc_set_certification_mode(certification_mode > FACADE_CERTIF_NONE, swc_err);
@@ -405,6 +406,9 @@ static void conn_rx_audio_success_callback(void *conn)
     /* The SWC produces audio samples upon receiving them from the Coordinator. */
     sac_pipeline_produce(sac_pipeline, &sac_status);
     status_handler_sac(sac_status);
+
+    /* Trigger audio process. */
+    facade_audio_process_timer_trigger();
 }
 
 /** @brief Callback function when a data frame has been successfully received.
@@ -428,7 +432,7 @@ static void conn_rx_data_success_callback(void *conn)
         }
     }
 
-    /* Send the link margin and the button state for the fallback update status. */
+    /* Send the button state and the link margin for the fallback update status. */
     send_user_data();
 }
 
@@ -447,11 +451,15 @@ static void conn_tx_data_success_callback(void *conn)
 static void send_user_data(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
-    swc_fallback_info_t fallback_info;
+    swc_fallback_info_t fallback_info = {0};
+    user_data_t transmitted_user_data = {0};
 
+    /* Update the link margin. */
     fallback_info = swc_connection_get_fallback_info(rx_data_conn, &swc_err);
-    transmitted_user_data.link_margin = fallback_info.link_margin;
 
+    /* Send the button state and the link margin to the Coord. */
+    transmitted_user_data.link_margin = fallback_info.link_margin;
+    transmitted_user_data.button_state = facade_read_button_state();
     wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);
 }
 
@@ -461,8 +469,7 @@ static void enter_pairing_mode(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
-
-    pairing_event_t pairing_event;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
 
     facade_notify_enter_pairing();
 
@@ -566,14 +573,14 @@ static void app_audio_core_init(void)
 {
     sac_status_t sac_status = SAC_OK;
 
-    sac_endpoint_interface_t i2s_consumer_iface;
-    sac_endpoint_interface_t swc_producer_iface;
+    sac_endpoint_interface_t i2s_consumer_iface = {0};
+    sac_endpoint_interface_t swc_producer_iface = {0};
 
-    sac_processing_interface_t fallback_iface;
-    sac_processing_interface_t volume_iface;
-    sac_processing_interface_t packing_iface;
-    sac_processing_interface_t packing_fallback_iface;
-    sac_processing_interface_t mute_on_underflow_iface;
+    sac_processing_interface_t fallback_iface = {0};
+    sac_processing_interface_t volume_iface = {0};
+    sac_processing_interface_t packing_iface = {0};
+    sac_processing_interface_t packing_fallback_iface = {0};
+    sac_processing_interface_t mute_on_underflow_iface = {0};
 
     sac_facade_hal_init(&sac_hal);
     sac_endpoint_swc_init(&swc_producer_iface, NULL);
@@ -829,6 +836,8 @@ static void print_stats(void)
     const char *fallback_stats_str = "\n<<  Fallback Statistics  >>\n\r";
     const char *wireless_stats_str = "\n<<  Wireless Core Statistics  >>\n\r";
 
+    memset(stats_string, 0, sizeof(stats_string));
+
     /* ** Device Prelude ** */
     string_length = snprintf(stats_string, sizeof(stats_string), device_str);
 
@@ -883,17 +892,6 @@ static void data_callback(void)
     counter++;
 }
 
-/** @brief Toggles the button state request.
- */
-static void toggle_button_state(void)
-{
-    if (transmitted_user_data.button_state != false) {
-        transmitted_user_data.button_state = false;
-    } else {
-        transmitted_user_data.button_state = true;
-    }
-}
-
 /** @brief Send data with a specific connection.
  *
  *  @param[in] transmitted_data  Data to be sent over the air.
@@ -902,10 +900,10 @@ static void toggle_button_state(void)
  */
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err)
 {
-    uint8_t *buffer;
+    uint8_t *buffer = NULL;
 
     /* Get buffer from queue to hold data. */
-    swc_connection_allocate_payload_buffer(tx_data_conn, &buffer, MAX_DATA_PAYLOAD_SIZE, swc_err);
+    swc_connection_get_payload_buffer(tx_data_conn, &buffer, swc_err);
     if ((*swc_err != SWC_ERR_NONE) || (buffer == NULL)) {
         return;
     }
@@ -930,15 +928,11 @@ static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err)
 {
     uint8_t *payload = NULL;
-    uint16_t payload_size;
+    uint16_t payload_size = 0;
 
     /* Read received data. */
     payload_size = swc_connection_receive(rx_data_conn, &payload, swc_err);
-    if (*swc_err != SWC_ERR_NONE) {
-        return 0;
-    }
-
-    if (payload_size > size) {
+    if (*swc_err != SWC_ERR_NONE || payload_size > size) {
         return 0;
     }
 
@@ -973,25 +967,23 @@ static void status_handler_sac(sac_status_t sac_status)
 static void app_init(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
-    sac_status_t sac_status = SAC_OK;
 
     /* Initialize Wireless Core. */
     app_swc_core_init(&pairing_assigned_address, &swc_err);
     if (swc_err != SWC_ERR_NONE) {
         while (1) {};
     }
-    /* Initialize Audio Core. */
-    app_audio_core_init();
-    /* Initialize GPIOs and peripherals for audio operations. */
-    facade_audio_node_init();
     /* Connect the Wireless Core. */
     swc_connect(&swc_err);
     if (swc_err != SWC_ERR_NONE) {
         while (1) {};
     }
-    /* Start the audio pipeline. */
-    sac_pipeline_start(sac_pipeline, &sac_status);
-    status_handler_sac(sac_status);
+
+    /* Initialize Audio Core. */
+    app_audio_core_init();
+    /* Initialize GPIOs and peripherals for audio operations. */
+    facade_audio_node_init();
+
     /* Start timer used for audio process. */
     facade_audio_process_timer_start();
     /* Start data and statistics timer. */

@@ -103,10 +103,10 @@ typedef struct phy_cfg {
     radio_t *radio;
     /*! Local address */
     uint16_t local_address;
-    /*! Sync word configuration */
-    syncword_cfg_t syncword_cfg;
-    /*! Preamble length */
-    uint32_t preamble_len;
+    /*! SFD configuration */
+    sfd_cfg_t sfd_cfg;
+    /*! Preamble length register value. */
+    uint16_t preamble_len_reg_val;
     /*! Sleep level */
     sleep_lvl_t sleep_lvl;
     /*! CRC polynomial */
@@ -115,6 +115,8 @@ typedef struct phy_cfg {
     chip_rate_cfg_t chip_rate;
     /*! Radio RX gain */
     uint8_t rx_gain;
+    /*! Enable extraction of phase offset data for ISI Mitigation indicator. */
+    bool isi_indicator_enabled;
 } wps_phy_cfg_t;
 
 /** @brief Configure radio SPI transfer structure.
@@ -140,6 +142,14 @@ typedef struct __packed radio_cfg {
     uint8_t addr_phy_0_1;
     /*! Data value for PHY settings 0-1 */
     uint16_t phy_0_1;
+    /*! Register address for hard disable IO configs */
+    uint8_t addr_harddisables_ioconfig;
+    /*! Data value for hard disable IO configs */
+    uint16_t harddisables_ioconfig;
+    /*! Register address for preamble debug */
+    uint8_t addr_preamb_debug;
+    /*! Data value for preamble debug */
+    uint16_t preamb_debug;
     /*! Start address for burst write */
     uint8_t burst_write_start_addr;
     /*! CCA (Clear Channel Assessment) settings */
@@ -233,6 +243,15 @@ typedef struct __packed read_info {
     uint16_t rxtime;
 } read_info_t;
 
+/** @brief Read CIR Info SPI transfer structure.
+ */
+typedef struct __packed read_cir_info {
+    /*! Register address for CIR Info */
+    uint8_t addr_cir_info;
+    /*! Data value for CIR Info */
+    uint8_t data_cir_info[PHASE_OFFSET_BYTE_COUNT];
+} read_cir_info_t;
+
 /** @brief Wireless protocol stack PHY Layer SPI transfer structures.
  */
 typedef struct spi_transfers {
@@ -248,6 +267,10 @@ typedef struct spi_transfers {
     read_info_t read_info_out;
     /*! Information reading, in */
     read_info_t read_info_in;
+    /*! CIR Information reading, in */
+    read_cir_info_t read_cir_info_in;
+    /*! CIR Information reading, out */
+    read_cir_info_t read_cir_info_out;
     /*! SPI dummy buffer */
     uint8_t spi_dummy_buffer[MAX_FRAMESIZE];
 } spi_xfer_t;
@@ -260,31 +283,6 @@ typedef struct reg {
     /*! Register value */
     uint16_t val;
 } reg_t;
-
-/** @brief SR1100 PHY debugging registers.
- */
-typedef struct phy_debug_cfg {
-    /*! Enable/Disable debugging feature of the radio */
-    bool            enable;
-    /*! Flag to notify application when its safe to modify channel cfg */
-    bool            busy_channel_config;
-    /*! Phase offset enable flag */
-    bool            phase_offset_stats_enable;
-    /*! Preamble detection register 0x2C raw value */
-    uint16_t preamble_detection;
-    /*! Interleav flag in register 0x28 */
-    interleav_cfg_t interleav;
-    /*! Array of the pointers of each RF channel bundle. */
-    rf_channel_t    *rf_channel_bundle[MAX_NUMBER_OF_RF_CHANNEL_BUNDLE_PTR];
-    /*! Actual number of RF channel bundle pointer */
-    uint8_t         nb_rf_channel_bundle;
-    /*! Intermediate-frequency variable gain amplifier #4 gain setting, register 0x26 */
-    uint8_t         if_gain_4;
-                    /* Value for register 0x11*/
-    uint8_t         ant_lna_bias;
-    /*! Syncword detection register 0x2D raw value */
-    uint16_t syncword_detection;
-} phy_debug_cfg_t;
 
 /** @brief WPS PHY instance.
  */
@@ -331,9 +329,19 @@ struct wps_phy {
     uint8_t radio_actions;
     /*! Header size */
     uint8_t header_size;
+    /*! Number of byte that will be available in the RXbuffer for ISI mitigation indicator. */
+    uint8_t phase_offset_bytes_to_read;
+    /*! Wheter or not the Phase offset reading feature is enabled. */
+    uint8_t phase_offset_feature_enabled;
 
     /*! Syncing period in PLL cycles */
     uint16_t syncing_period_pll_cycles;
+
+    /*! Empty TX flag */
+    bool empty_tx;
+
+    /*! Sleep level per timeslot enable flag */
+    bool sleep_lvl_per_ts_enabled;
 
     /*! Wait for end of transmission of ack frame */
     bool wait_for_ack_tx;
@@ -344,8 +352,6 @@ struct wps_phy {
     xlayer_read_request_info_t read_request_info;
     /*! Current state machine state*/
     wps_phy_handle_t phy_handle;
-    /*! Debug configuration raw registers */
-    phy_debug_cfg_t debug_cfg;
     /*! SPI transfer structures */
     spi_xfer_t spi_xfer;
 
@@ -362,13 +368,13 @@ struct wps_phy {
 typedef struct wps_multi_cfg {
     /*! Radio timer frequency in Hz. */
     uint32_t timer_frequency_hz;
-    /*! Replying radio selection average sample count */
+    /*! Leading radio selection average sample count */
     uint16_t avg_sample_count;
-    /*! Replying radio selection mode */
+    /*! Leading radio selection mode */
     multi_radio_mode_t mode;
     /*! Radio TX wakeup mode. */
     multi_radio_tx_wakeup_mode_t tx_wakeup_mode;
-    /*! Replying radio selection RSSI threshold */
+    /*! Leading radio selection RSSI threshold */
     uint8_t rssi_threshold;
 } wps_multi_cfg_t;
 

@@ -337,16 +337,6 @@ bool swc_hal_radio_2_is_spi_busy(void);
 /** @} */
 
 /* Timer and Delay Management */
-/** @brief Initializes the free running timer.
- *
- *  Sets up the timer used for obtaining a tick count, required for features like Stop and Wait.
- *  The timer resolution should be set to a tick frequency between 100Hz and 1MHz,
- *
- *  @note Users not using the Stop and Wait feature should implement a pseudo-version of
- *  this function that returns UINT64_MAX, ensuring backend compatibility with the facade.
- */
-void swc_hal_free_running_timer_init(void);
-
 /** @brief Get the free running timer tick count.
  *
  *  This function is ack as a watchdog timer for the Stop and Wait feature,

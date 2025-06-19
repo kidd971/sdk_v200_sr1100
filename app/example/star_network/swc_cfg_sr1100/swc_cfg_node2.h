@@ -14,6 +14,11 @@
 /* The pairing device role is used for the coordinator's pairing discovery list. */
 #define PAIRING_DEVICE_ROLE 2
 
+/* The timeout in second after which the pairing procedure will abort. */
+#define PAIRING_TIMEOUT_IN_SECONDS 10
+/* The application code prevents unwanted devices from pairing with this application. */
+#define PAIRING_APP_CODE 0x0000000000000777
+
 /* Output power configuration */
 #define TX_DATA_PULSE_COUNT 1
 #define TX_DATA_PULSE_WIDTH 7
@@ -36,7 +41,7 @@
 #define TX_TO_COORD_TIMESLOTS   {MAIN_TIMESLOT(3)}
 
 /* Channels */
-#define CHANNEL_FREQ     {164, 174, 184, 194}
-#define CHANNEL_SEQUENCE {0, 1, 2, 3}
+#define CHANNEL_FREQ     {163, 171, 179, 187, 195}
+#define CHANNEL_SEQUENCE {0, 1, 2, 3, 4}
 
 #endif /* SWC_CFG_NODE2_H_ */

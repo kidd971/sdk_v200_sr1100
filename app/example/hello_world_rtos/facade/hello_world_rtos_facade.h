@@ -1,16 +1,13 @@
 /** @file  hello_world_rtos_facade.h
  *  @brief Facades for low-level platform-specific features required by the application example.
  *
- *  @note This header defines the interfaces for various hardware features used by
- *  the hello-world-rtos example. These facades abstract the underlying
- *  platform-specific implementations of features like SPI communication,
- *  IRQ handling, timer functions, and context switching mechanisms. The actual
- *  implementations are selected at compile time based on the target platform,
- *  allowing for flexibility and portability across different hardware.
+ *  @note This header defines the interfaces for various hardware features used by the hello-world-rtos example.
  *
- *  The facade is designed to be a compile-time dependency only, with no
- *  support for runtime polymorphism. This ensures tight integration with the
- *  build system and minimal overhead.
+ *  These facades abstract the underlying platform-specific implementations of features like SPI communication, IRQ
+ *  handling, timer functions, and context switching mechanisms. The actual implementations are selected at compile time
+ *  based on the target platform, allowing for flexibility and portability across different hardware. The facade is
+ *  designed to be a compile-time dependency only, with no support for runtime polymorphism. This ensures tight
+ *  integration with the build system and minimal overhead.
  *
  *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems

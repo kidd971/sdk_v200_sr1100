@@ -149,6 +149,19 @@
                 "APP": "BSP-validator",
                 "TRANSCEIVER": "SR1100"
             }
+        },
+        {
+            "name": "profiler-tool-quasar",
+            "description": "Profiler tool with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Profiler",
+                "TRANSCEIVER": "SR1100"
+            }
         }
     ]
 }

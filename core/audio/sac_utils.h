@@ -45,9 +45,20 @@ uint8_t sac_get_sample_size_from_format(sac_sample_format_t sample_format);
 uint16_t sac_get_nb_packets_in_x_ms(uint16_t ms, uint16_t audio_payload_size, uint8_t nb_channel,
                                     sac_sample_format_t sample_format, uint32_t sampling_rate);
 
+/** @brief Get the number of milliseconds in a given number of audio packets.
+ *
+ *  @param[in] nb_packet           The number of packets.
+ *  @param[in] audio_payload_size  The size of the audio payload in bytes.
+ *  @param[in] nb_channel          The number of audio channels.
+ *  @param[in] sample_format       The format of the samples in the audio payload.
+ *  @param[in] sampling_rate       The sampling rate of the samples in the audio payload in Hz.
+ *  @return Number of milliseconds, rounded down.
+ */
+uint16_t sac_get_ms_in_x_packets(uint16_t nb_packet, uint16_t audio_payload_size, uint8_t nb_channel,
+                                 sac_sample_format_t sample_format, uint32_t sampling_rate);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* SAC_UTILS_H_ */
-

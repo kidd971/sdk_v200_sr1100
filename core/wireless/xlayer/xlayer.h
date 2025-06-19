@@ -105,10 +105,10 @@ typedef struct xlayer_write_request_info {
 /** @brief xlayer read register request info structure.
  */
 typedef struct xlayer_read_request_info {
-    uint8_t target_register; /*! Target register to read. */
-    uint16_t *rx_buffer;     /*! RX buffer containing register value */
-    bool pending_request;    /*! Flag to notify that a request is pending */
-    bool *xfer_cmplt;        /*! Bool to notify that read register is complete */
+    uint8_t target_register;   /*! Target register to read. */
+    uint16_t *rx_buffer;       /*! RX buffer containing register value */
+    bool pending_request;      /*! Flag to notify that a request is pending */
+    volatile bool *xfer_cmplt; /*! Bool to notify that read register is complete */
 } xlayer_read_request_info_t;
 
 /** @brief Cross layer callback structure.
@@ -150,14 +150,16 @@ typedef struct xlayer_cfg_internal {
     uint8_t rx_constgain;
     /*! Clear Channel Assessment threshold */
     uint8_t cca_threshold;
-    /*! CCA on time (SR1120 only)*/
-    uint8_t cca_on_time;
+    /*! CCA on time (SR1120 only) */
+    uint16_t cca_on_time;
     /*! CCA retry time */
     uint16_t cca_retry_time;
     /*! CCA max try count */
     uint8_t cca_max_try_count;
     /*! Phase offset */
     uint8_t phase_offset[PHASE_OFFSET_BYTE_COUNT];
+    /*! Phase offset count */
+    uint8_t phase_offset_count;
     /*! CCA fail action */
     cca_fail_action_t cca_fail_action;
     /*! CCA try count */
@@ -179,9 +181,15 @@ typedef struct xlayer_cfg_internal {
     /*! Certification header usage flag */
     bool certification_header_en;
     /*! Max expected header size */
-    uint8_t expected_header_size;
+    uint8_t max_expected_header_size;
     /*! Max expected payload size */
-    uint8_t expected_payload_size;
+    uint8_t max_expected_payload_size;
+    /*! Chip rate */
+    chip_rate_cfg_t chip_rate;
+    /*! Max expected header size in auto-reply */
+    uint8_t max_expected_auto_header_size;
+    /*! Max expected payload size in auto-reply */
+    uint8_t max_expected_auto_payload_size;
     /*! WPS write request structure array */
     xlayer_write_request_info_t *write_request_buffer;
     /*! WPS read request structure array */

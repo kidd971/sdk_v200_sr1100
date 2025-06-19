@@ -36,6 +36,12 @@ typedef struct link_fallback {
  */
 void link_fallback_init(link_fallback_t *const link_fallback, const uint8_t *const threshold, uint8_t threshold_count);
 
+/** @brief Disable the link fallback module.
+ *
+ *  @param[in] link_fallback  Link fallback instance.
+ */
+void link_fallback_disable(link_fallback_t *const link_fallback);
+
 /** @brief Get the current fallback channel index based on the payload size.
  *
  *  @param[in]  link_fallback  Link fallback instance.

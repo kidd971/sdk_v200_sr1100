@@ -29,21 +29,25 @@ swc_statistics_t *swc_connection_update_stats(swc_connection_t *const conn)
 
     uint32_t tx_count = conn->stats.packet_sent_and_acked_count + conn->stats.packet_sent_and_not_acked_count;
 
-    conn->stats.tick_since_reset = conn->wps_conn_handle->get_tick() - conn->stats.tick_on_reset;
+    conn->stats.tick_since_reset = conn->wps_conn_handle->cfg.get_tick() - conn->stats.tick_on_reset;
+#if WPS_ENABLE_LINK_STATS
     conn->stats.bytes_sent = wps_stats_get_tx_byte_sent(conn->wps_conn_handle);
-    conn->stats.tx_data_rate_bps = ((uint64_t)conn->wps_conn_handle->tick_frequency_hz *
+    conn->stats.bytes_received = wps_stats_get_rx_byte_received(conn->wps_conn_handle);
+#endif
+    conn->stats.tx_data_rate_bps = ((uint64_t)conn->wps_conn_handle->cfg.tick_frequency_hz *
                                     (uint64_t)conn->stats.bytes_sent * 8) /
                                    conn->stats.tick_since_reset;
-    conn->stats.bytes_received = wps_stats_get_rx_byte_received(conn->wps_conn_handle);
-    conn->stats.rx_data_rate_bps = ((uint64_t)conn->wps_conn_handle->tick_frequency_hz *
+    conn->stats.rx_data_rate_bps = ((uint64_t)conn->wps_conn_handle->cfg.tick_frequency_hz *
                                     (uint64_t)conn->stats.bytes_received * 8) /
                                    conn->stats.tick_since_reset;
 
     if ((conn->stats.bytes_sent > INT32_MAX) || (conn->stats.bytes_received > INT32_MAX)) {
         /* Reset stats to avoid overflow. */
-        conn->stats.tick_on_reset = conn->wps_conn_handle->get_tick();
+        conn->stats.tick_on_reset = conn->wps_conn_handle->cfg.get_tick();
+#if WPS_ENABLE_LINK_STATS
         wps_stats_reset_tx_byte_sent(conn->wps_conn_handle);
         wps_stats_reset_rx_byte_received(conn->wps_conn_handle);
+#endif
     }
 
     /* tx_timeslot_occurrence value can be lower than tx_count value if after updating tx_timeslot_occurrence,
@@ -77,11 +81,23 @@ swc_statistics_t *swc_connection_update_stats(swc_connection_t *const conn)
     conn->stats.rx_timeslot_occurrence = conn->stats.packet_rejected_count +
                                          wps_stats_get_phy_received_frame_count(conn->wps_conn_handle) +
                                          wps_stats_get_phy_missing_frame_count(conn->wps_conn_handle);
+    /* Update RSSI and RNSI codes. */
+    conn->stats.rssi_avg_raw = wps_stats_get_phy_rssi_avg_raw(conn->wps_conn_handle);
+    conn->stats.rnsi_avg_raw = wps_stats_get_phy_rnsi_avg_raw(conn->wps_conn_handle);
+    /* Update RSSI, RNSI and Link Margin values represented in tenths of dB. */
+    conn->stats.rnsi_inst = wps_stats_get_inst_phy_rnsi_tenth_db(conn->wps_conn_handle);
+    conn->stats.rssi_inst = wps_stats_get_inst_phy_rssi_tenth_db(conn->wps_conn_handle);
     conn->stats.rssi_avg = wps_stats_get_phy_rssi_avg(conn->wps_conn_handle);
     conn->stats.rnsi_avg = wps_stats_get_phy_rnsi_avg(conn->wps_conn_handle);
     conn->stats.link_margin_avg = wps_stats_get_phy_margin_avg(conn->wps_conn_handle);
-    conn->stats.rssi_avg_raw = wps_stats_get_phy_rssi_avg_raw(conn->wps_conn_handle);
-    conn->stats.rnsi_avg_raw = wps_stats_get_phy_rnsi_avg_raw(conn->wps_conn_handle);
+
+    /* Update the block average of RSSI, RNSI and Link Margin values in tenths of dB. Block size is defined by
+     * RSSI_RNSI_BLOCK_AVG_MAX_COUNT.
+     */
+    conn->stats.rssi_block_avg_tenth_db = wps_stats_get_rssi_block_avg_tenth_db(conn->wps_conn_handle);
+    conn->stats.rnsi_block_avg_tenth_db = wps_stats_get_rnsi_block_avg_tenth_db(conn->wps_conn_handle);
+    conn->stats.link_margin_block_avg_tenth_db = wps_stats_get_link_margin_block_avg_tenth_db(conn->wps_conn_handle);
+
 #endif
 
 #if WPS_ENABLE_STATS_USED_TIMESLOTS
@@ -104,10 +120,9 @@ swc_statistics_t *swc_connection_update_stats(swc_connection_t *const conn)
     conn->stats.packet_duplicated_count = wps_stats_get_duplicated_frame_count(conn->wps_conn_handle);
 #if WPS_ENABLE_LINK_STATS
     conn->stats.packet_overrun_count = wps_stats_get_payload_overrun_count(conn->wps_conn_handle);
-#endif
-
     conn->stats.packet_ack_data_received_count = wps_stats_get_payload_received_count(conn->wps_conn_handle);
     conn->stats.packet_ack_data_send_count = wps_stats_get_payload_success_count(conn->wps_conn_handle);
+#endif
 
     return &conn->stats;
 }
@@ -213,6 +228,51 @@ swc_statistics_t *swc_connection_update_stats_per_channel(swc_connection_t *cons
 
     return &conn->stats_per_bands[channel_number];
 }
+
+swc_qos_indicators_t *swc_connection_update_qos_per_channel(swc_connection_t *const conn, const uint8_t channel_number)
+{
+    uint32_t tx_count = conn->wps_conn_handle->wps_chan_stats[channel_number].cca_pass +
+                        conn->wps_conn_handle->wps_chan_stats[channel_number].cca_tx_fail;
+    uint32_t received_count = conn->wps_conn_handle->wps_chan_stats[channel_number].rx_received;
+
+    /* CCA retry time and PHY rate factor should have been initialized during connection initialization. */
+    conn->qos_indicators_per_bands[channel_number].cca_tries = wps_stats_get_chan_phy_cca_fail(conn->wps_conn_handle,
+                                                                                               channel_number);
+    conn->qos_indicators_per_bands[channel_number].link_margin = wps_stats_get_chan_margin_avg(conn->wps_conn_handle,
+                                                                                               channel_number);
+    conn->qos_indicators_per_bands[channel_number].tx_tries = tx_count;
+
+    conn->qos_indicators_per_bands[channel_number].received_count = received_count;
+#if SR1100
+    uint8_t *phase_offset = conn->wps_conn_handle->channel_lqi[channel_number].inst_phase_offset;
+    uint32_t cir_sum = conn->wps_conn_handle->channel_lqi[channel_number].cir_sum;
+
+    for (uint8_t i = 0; i < PHASE_OFFSET_BYTE_COUNT; i++) {
+        conn->qos_indicators_per_bands[channel_number].phase_offset_data[i] = phase_offset[i];
+    }
+
+    if (received_count != 0) {
+        /* Connection is RX */
+        conn->qos_indicators_per_bands[channel_number].isi_indicator = cir_sum / received_count;
+        conn->qos_indicators_per_bands[channel_number].total_isi_indicator = cir_sum;
+    } else {
+        /* Connection is TX*/
+        if (tx_count != 0) {
+            conn->qos_indicators_per_bands[channel_number].isi_indicator = cir_sum / tx_count;
+            conn->qos_indicators_per_bands[channel_number].total_isi_indicator = cir_sum;
+        } else {
+            /* Prevent NaN*/
+            conn->qos_indicators_per_bands[channel_number].isi_indicator = 0;
+            conn->qos_indicators_per_bands[channel_number].total_isi_indicator = 0;
+        }
+    }
+#else
+    /* ISI indicator not supported by SR1020.*/
+    conn->qos_indicators_per_bands[channel_number].isi_indicator = 0;
+#endif
+    return &conn->qos_indicators_per_bands[channel_number];
+}
+
 #endif
 
 int swc_connection_format_stats(const swc_connection_t *const conn, const swc_node_t *const node, char *const buffer,
@@ -221,7 +281,7 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
     int string_length;
     const char *datarate_str = "Datarate";
 
-    if (conn->wps_conn_handle->source_address == node->wps_node_handle->cfg.local_address) {
+    if (conn->wps_conn_handle->cfg.source_address == node->wps_node_handle->cfg.local_address) {
         /* TX stats */
         const char *tx_timeslot_occurrence_str = "TX Timeslot Occurrence";
         const char *packet_sent_and_acked_str = "Packet Sent And ACK'd";
@@ -265,11 +325,7 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
         const char *packet_duplicated_count_str = "Packet Duplicated";
         const char *packet_rejected_count_str = "Packet Rejected";
         const char *packet_overrun_count_str = "Packet Overrun";
-        const char *rssi_str = "RSSI Average";
-        const char *rnsi_str = "RNSI Average";
-        const char *link_margin_str = "Link Margin Average";
-        const char *rssi_raw_str = "RSSI Average Raw";
-        const char *rnsi_raw_str = "RNSI Average Raw";
+        const char *link_margin_block_avg_str = "Link Margin Block Average";
 
         string_length =
             snprintf(buffer, size,
@@ -281,11 +337,7 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
                      "%s:\t\t%10lu\r\n"
                      "%s:\t\t%10lu\r\n"
                      "%s:\t\t\t%10lu\r\n"
-                     "%s:\t\t\t%10lu\r\n"
-                     "%s:\t\t\t%10lu\r\n"
-                     "%s:\t\t%10lu\r\n"
-                     "%s:\t\t%10lu\r\n"
-                     "%s:\t\t%10lu\r\n",
+                     "%s:\t%10lu\r\n",
                      conn->cfg.name, datarate_str, (double)conn->stats.rx_data_rate_bps / 1000,
                      rx_timeslot_occurrence_str, conn->stats.rx_timeslot_occurrence,
                      packet_successfully_received_count_str, conn->stats.packet_successfully_received_count,
@@ -294,9 +346,7 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
                      (double)conn->stats.no_packet_reception_count / conn->stats.rx_timeslot_occurrence * 100,
                      packet_duplicated_count_str, conn->stats.packet_duplicated_count, packet_rejected_count_str,
                      conn->stats.packet_rejected_count, packet_overrun_count_str, conn->stats.packet_overrun_count,
-                     rssi_str, conn->stats.rssi_avg, rnsi_str, conn->stats.rnsi_avg, link_margin_str,
-                     conn->stats.link_margin_avg, rssi_raw_str, conn->stats.rssi_avg_raw, rnsi_raw_str,
-                     conn->stats.rnsi_avg_raw);
+                     link_margin_block_avg_str, conn->stats.link_margin_block_avg_tenth_db);
     }
 
     return string_length;
@@ -305,6 +355,6 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
 void swc_connection_reset_stats(swc_connection_t *const conn)
 {
     memset(&conn->stats, 0, sizeof(swc_statistics_t));
-    conn->stats.tick_on_reset = conn->wps_conn_handle->get_tick();
+    conn->stats.tick_on_reset = conn->wps_conn_handle->cfg.get_tick();
     wps_stats_reset(conn->wps_conn_handle);
 }

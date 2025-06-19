@@ -145,7 +145,7 @@ void max98091_init(max98091_i2c_hal_t *i2c_hal, max98091_codec_cfg_t *codec_cfg)
 
 void max98091_reset_codec(max98091_i2c_hal_t *i2c_hal)
 {
-    max98091_reg_soft_reset_t soft_reset;
+    max98091_reg_soft_reset_t soft_reset = {0};
 
     soft_reset.bit.swreset = 1;
 
@@ -224,8 +224,7 @@ bool max98091_is_microphone_present(max98091_i2c_hal_t *i2c_hal)
 
 bool max98091_is_jack_present(max98091_i2c_hal_t *i2c_hal)
 {
-    if ((get_jack_status(i2c_hal) == MAX98091_JACK_HEADSET) ||
-        (get_jack_status(i2c_hal) == MAX98091_JACK_HEADPHONE)) {
+    if ((get_jack_status(i2c_hal) == MAX98091_JACK_HEADSET) || (get_jack_status(i2c_hal) == MAX98091_JACK_HEADPHONE)) {
         return true;
     } else {
         return false;
@@ -252,21 +251,21 @@ void max98091_disable_mic_trrs(max98091_i2c_hal_t *i2c_hal)
 
 void max98091_enable_output(max98091_i2c_hal_t *i2c_hal)
 {
-    reg_map.output_en.bit.dalen  = true,
-    reg_map.output_en.bit.daren  = true,
-    reg_map.output_en.bit.hplen  = true,
-    reg_map.output_en.bit.hpren  = true,
-    reg_map.output_en.bit.rcvlen = true,
-    reg_map.output_en.bit.rcvren = true,
-    reg_map.output_en.bit.splen  = false,
-    reg_map.output_en.bit.spren  = false,
+    reg_map.output_en.bit.dalen = true;
+    reg_map.output_en.bit.daren = true;
+    reg_map.output_en.bit.hplen = true;
+    reg_map.output_en.bit.hpren = true;
+    reg_map.output_en.bit.rcvlen = true;
+    reg_map.output_en.bit.rcvren = true;
+    reg_map.output_en.bit.splen = false;
+    reg_map.output_en.bit.spren = false;
 
     i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_OUTPUT_ENABLE, reg_map.output_en.reg);
 }
 
 void max98091_disable_output(max98091_i2c_hal_t *i2c_hal)
 {
-   i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_OUTPUT_ENABLE, 0x00);
+    i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_OUTPUT_ENABLE, 0x00);
 }
 
 void max98091_reset_codec_irq(max98091_i2c_hal_t *i2c_hal)
@@ -290,10 +289,10 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
     reg_map.qs_sys.reg = 0;         /* Disable quick setup... */
     reg_map.qs_sample_rate.reg = 0; /* ...configuration       */
 
-    reg_map.sys_clk.bit.psclk = 0b01;     /* fPCLK = fMCLK */
-    reg_map.clk_mode.bit.freq = 0;        /* Disable exact integer mode */
-    reg_map.clk_mode.bit.use_mi = 1;      /* Set Mi Manually */
-    reg_map.master_mode.bit.mas = 0b1;    /* Master mode */
+    reg_map.sys_clk.bit.psclk = 0b01;  /* fPCLK = fMCLK */
+    reg_map.clk_mode.bit.freq = 0;     /* Disable exact integer mode */
+    reg_map.clk_mode.bit.use_mi = 1;   /* Set Mi Manually */
+    reg_map.master_mode.bit.mas = 0b1; /* Master mode */
     if (codec_cfg->word_size == MAX98091_AUDIO_16BITS) {
         reg_map.master_mode.bit.bsel = 0b001; /* Bit clock freq is  32 x Fs (16 bits per frame) */
     } else {
@@ -302,10 +301,10 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
 
     if (codec_cfg->sampling_rate == MAX98091_AUDIO_96KHZ) {
         reg_map.filter_config.bit.dhf = 1; /* LRCLK is more than 48kHz. 4x FIR interpolation filter used */
-        reg_map.adc_ctrl.bit.osr128 = 0; /* 64 x Fs */
+        reg_map.adc_ctrl.bit.osr128 = 0;   /* 64 x Fs */
     } else {
         reg_map.filter_config.bit.dhf = 0; /* LRCLK is less than 48kHz. 8x FIR interpolation filter used */
-        reg_map.adc_ctrl.bit.osr128 = 1; /* 128 x Fs */
+        reg_map.adc_ctrl.bit.osr128 = 1;   /* 128 x Fs */
     }
 
     /* SEE README FOR INFO */
@@ -323,12 +322,12 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
     reg_map.interrupt_mask.reg = 0x04; /* Jack detection flag */
 
     /* DAI: RIGHT JUSTIFIED STANDARD */
-    reg_map.interface_format.bit.rj = 0b1; /*  right justified */
-    reg_map.interface_format.bit.wci = 0b0; /* left channel on lrclk high */
-    reg_map.interface_format.bit.bci = 0b0; /* Data is valid on rising edge of bclk */
-    reg_map.interface_format.bit.dly = 0b0; /* No delay */
+    reg_map.interface_format.bit.rj = 0b1;                           /*  right justified */
+    reg_map.interface_format.bit.wci = 0b0;                          /* left channel on lrclk high */
+    reg_map.interface_format.bit.bci = 0b0;                          /* Data is valid on rising edge of bclk */
+    reg_map.interface_format.bit.dly = 0b0;                          /* No delay */
     reg_map.interface_format.bit.ws = (codec_cfg->word_size & 0b11); /* Word size */
-    reg_map.tdm_ctrl.bit.tmd = 0b0; /* disable tdm */
+    reg_map.tdm_ctrl.bit.tmd = 0b0;                                  /* disable tdm */
 
     /* Set all gains to minimum values by default */
     reg_map.gain_set.hp_ctrl.bit.mixhplg = MAX98091_MIXER_GAIN_N12DB;
@@ -355,18 +354,18 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
 
         reg_map.line_in_config.bit.in3seen = 0b1; /* IN3 single ended on LINE A */
         reg_map.line_in_config.bit.in4seen = 0b1; /* IN4 single ended on LINE B */
-        reg_map.left_adc_mixer.reg = 0b00001000; /* Left ADC mix on LINE A */
+        reg_map.left_adc_mixer.reg = 0b00001000;  /* Left ADC mix on LINE A */
         reg_map.right_adc_mixer.reg = 0b00010000; /* Right ADC mix on LINE B */
 
-        reg_map.input_en.bit.adlen = 0b1; /* Enable left ADC */
-        reg_map.input_en.bit.adren = 0b1; /* Enable right ADC */
-        reg_map.input_en.bit.lineaen = 0b1; /* Enable LINE A */
-        reg_map.input_en.bit.lineben = 0b1; /* Enable LINE B */
-        reg_map.input_en.bit.mben = 0b1; /* Enable MIC1 bias */
+        reg_map.input_en.bit.adlen = 0b1;    /* Enable left ADC */
+        reg_map.input_en.bit.adren = 0b1;    /* Enable right ADC */
+        reg_map.input_en.bit.lineaen = 0b1;  /* Enable LINE A */
+        reg_map.input_en.bit.lineben = 0b1;  /* Enable LINE B */
+        reg_map.input_en.bit.mben = 0b1;     /* Enable MIC1 bias */
         reg_map.mic_bias_voltage.reg = 0b11; /* 00: 2.2V, 01: 2.4V, 10: 2.55V, 11: 2.8V */
 
         /* digital mic */
-        reg_map.dig_mic_en.bit.micclk = 2; /* fDMC = fPCLK/4 (3.072MHz) */
+        reg_map.dig_mic_en.bit.micclk = 2;        /* fDMC = fPCLK/4 (3.072MHz) */
         reg_map.dig_mic_config.bit.dmic_comp = 3; /* Based on table 17 in codec datasheet */
         reg_map.dig_mic_config.bit.dmic_freq = 0b00;
         if (mic_en) { /* Enable digital microphone */
@@ -376,25 +375,25 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
 
         /* input lvl */
         reg_map.line_in_lvl.reg = 0x3F; /* -6dB */
-        reg_map.in_mode.reg = 0x00; /* default */
+        reg_map.in_mode.reg = 0x00;     /* default */
         reg_map.mic1_in_lvl.reg = 0x54; /* MIC 1 enabled , 20 dB gain */
         reg_map.mic2_in_lvl.reg = 0x14; /* default */
     }
     if (codec_cfg->playback_enabled) {
         reg_map.io_config.bit.sdien = 0b1; /* enable serial data in */
 
-        reg_map.left_hp_mixer.bit.mixhpl = 0b100000; /* left adc to left hp */
-        reg_map.right_hp_mixer.bit.mixhpr = 0b100000; /* right adc to right hp */
+        reg_map.left_hp_mixer.bit.mixhpl = 0b100000;   /* left adc to left hp */
+        reg_map.right_hp_mixer.bit.mixhpr = 0b100000;  /* right adc to right hp */
         reg_map.gain_set.hp_ctrl.bit.mixhplsel = 0x00; /* dac only source */
         reg_map.gain_set.hp_ctrl.bit.mixhprsel = 0x00;
         reg_map.rcv_loutl_mixer.bit.mixrcvl = 1; /* left adc to left line out */
         reg_map.loutr_mixer.bit.linmod = 1; /* Line Output mode. Left and right channels are programmed independently */
         reg_map.loutr_mixer.bit.mixrcvr = 2; /* right adc to right line out */
 
-        reg_map.output_en.bit.dalen = 0b1; /* Enable left DAC */
-        reg_map.output_en.bit.daren = 0b1; /* Enable right DAC */
-        reg_map.output_en.bit.hplen = 0b1; /* Enable left Headphone */
-        reg_map.output_en.bit.hpren = 0b1; /* Enable right Headphone */
+        reg_map.output_en.bit.dalen = 0b1;  /* Enable left DAC */
+        reg_map.output_en.bit.daren = 0b1;  /* Enable right DAC */
+        reg_map.output_en.bit.hplen = 0b1;  /* Enable left Headphone */
+        reg_map.output_en.bit.hpren = 0b1;  /* Enable right Headphone */
         reg_map.output_en.bit.rcvlen = 0b1; /* Enable left line out */
         reg_map.output_en.bit.rcvren = 0b1; /* Enable right line out */
 
@@ -415,7 +414,7 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
     }
 
     /* dsp */
-    reg_map.left_rec_lvl.reg = 0x03; /*0db*/
+    reg_map.left_rec_lvl.reg = 0x03;  /*0db*/
     reg_map.right_rec_lvl.reg = 0x03; /*0db*/
     /* No playback filters */
     reg_map.dsp_filter_en.bit.eq3banden = 0;
@@ -428,27 +427,27 @@ static void init_reg_map_default(max98091_codec_cfg_t *codec_cfg)
     reg_map.filter_config.bit.ahpf = 0; /* Disable the Record Path DC-Blocking Filter */
     reg_map.filter_config.bit.dhpf = 0; /* Disable the Playback Path DC-Blocking Filter */
 
-    reg_map.drc_gain.bit.drcg = 0; /* PLAYBACK DRC Make-Up Gain : 0dB */
+    reg_map.drc_gain.bit.drcg = 0;         /* PLAYBACK DRC Make-Up Gain : 0dB */
     reg_map.drc_compressor.bit.drccmp = 0; /* PLAYBACK DRC Compression Ratio : 1:1 */
     reg_map.drc_compressor.bit.drcthc = 0; /* PLAYBACK DRC Compression Threshold : 0dB */
-    reg_map.drc_expander.bit.drcexp = 0; /* PLAYBACK DRC Expansion Ratio : 1:1 */
-    reg_map.drc_expander.bit.drcthe = 0; /* PLAYBACK DRC Expansion Threshold : 35dB */
-    reg_map.drc_timing.bit.drcatk = 0; /* PLAYBACK DRC Attack Time Configuration : 0.125ms */
-    reg_map.drc_timing.bit.drcen = 0; /* PLAYBACK DRC DISABLE */
-    reg_map.drc_timing.bit.drcrls = 0; /* PLAYBACK DRC Release Time Configuration : 8s */
+    reg_map.drc_expander.bit.drcexp = 0;   /* PLAYBACK DRC Expansion Ratio : 1:1 */
+    reg_map.drc_expander.bit.drcthe = 0;   /* PLAYBACK DRC Expansion Threshold : 35dB */
+    reg_map.drc_timing.bit.drcatk = 0;     /* PLAYBACK DRC Attack Time Configuration : 0.125ms */
+    reg_map.drc_timing.bit.drcen = 0;      /* PLAYBACK DRC DISABLE */
+    reg_map.drc_timing.bit.drcrls = 0;     /* PLAYBACK DRC Release Time Configuration : 8s */
 
     /*power and bias*/
     reg_map.bias_ctrl.bit.bias_mode = 0; /* BIAS derived from resistive division */
-    reg_map.dac_ctrl.bit.dachp = 0; /* DAC settings optimized for lowest power consumption */
-    reg_map.dac_ctrl.bit.perfmode = 0; /* High performance headphone playback mode */
-    reg_map.adc_ctrl.bit.adchp = 0; /* ADC is optimized for low power operation */
-    reg_map.adc_ctrl.bit.adcdither = 1; /* ADC Quantizer Dither Enabled */
+    reg_map.dac_ctrl.bit.dachp = 0;      /* DAC settings optimized for lowest power consumption */
+    reg_map.dac_ctrl.bit.perfmode = 0;   /* High performance headphone playback mode */
+    reg_map.adc_ctrl.bit.adchp = 0;      /* ADC is optimized for low power operation */
+    reg_map.adc_ctrl.bit.adcdither = 1;  /* ADC Quantizer Dither Enabled */
 
     /*MISC*/
     reg_map.lvl_ctrl.bit.not_vsen = 1;  /* Volume changes are smoothed by stepping through intermediate levels */
     reg_map.lvl_ctrl.bit.not_vs2en = 1; /* Each volume change waits until the previous */
-                                                /* volume step has been applied to the output. Allows volume smoothing */
-                                                /* to function with zero-crossing timeout */
+                                        /* volume step has been applied to the output. Allows volume smoothing */
+                                        /* to function with zero-crossing timeout */
     reg_map.lvl_ctrl.bit.not_zden = 0;  /* Volume changes made only at zero crossings or after approximately 100ms */
 
     /* Jack detection */
@@ -599,7 +598,7 @@ static void configure_analog_mixer(max98091_i2c_hal_t *i2c_hal)
  */
 static void configure_biquad(max98091_i2c_hal_t *i2c_hal)
 {
-   i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_REC_BIQUAD_LEVEL, reg_map.rec_biq_lvl.reg);
+    i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_REC_BIQUAD_LEVEL, reg_map.rec_biq_lvl.reg);
 }
 
 /** @brief Setup the max98091 codec record path sidetone configuration register.
@@ -630,7 +629,7 @@ static void configure_input(max98091_i2c_hal_t *i2c_hal)
  */
 static void configure_bias_voltage(max98091_i2c_hal_t *i2c_hal)
 {
-     i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_MIC_BIAS_VOLTAGE, reg_map.mic_bias_voltage.reg);
+    i2c_hal->write(i2c_hal->i2c_addr, MAX98091_REG_MIC_BIAS_VOLTAGE, reg_map.mic_bias_voltage.reg);
 }
 
 /** @brief Setup the max98091 codec volume control.

@@ -15,7 +15,7 @@
 /* PUBLIC FUNCTIONS ***********************************************************/
 void wps_callback_enqueue(circular_queue_t *queue, xlayer_callback_t *xlayer_callback)
 {
-    wps_callback_inst_t *callback;
+    wps_callback_inst_t *callback = NULL;
 
     CRITICAL_SECTION_ENTER();
 

@@ -39,7 +39,7 @@ void wps_mac_timeslots_find_received_timeslot_and_connection_auto(wps_mac_t *wps
  */
 static inline bool wps_mac_timeslots_is_current_timeslot_tx(wps_mac_t *wps_mac)
 {
-    return (wps_mac->main_connection->source_address == wps_mac->local_address);
+    return (wps_mac->main_connection->cfg.source_address == wps_mac->local_address);
 }
 
 /** @brief Output if auto-reply connection timeslot is TX.
@@ -50,7 +50,7 @@ static inline bool wps_mac_timeslots_is_current_timeslot_tx(wps_mac_t *wps_mac)
  */
 static inline bool wps_mac_timeslots_is_current_auto_reply_timeslot_tx(wps_mac_t *wps_mac)
 {
-    return (wps_mac->auto_connection->source_address == wps_mac->local_address);
+    return (wps_mac->auto_connection->cfg.source_address == wps_mac->local_address);
 }
 
 #ifdef __cplusplus

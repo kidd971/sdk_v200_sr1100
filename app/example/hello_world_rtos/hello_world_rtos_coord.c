@@ -28,19 +28,18 @@
 #define STATS_ARRAY_LENGTH               1000
 #define HELLO_WORLD_SEND_PERIOD_MS       1
 #define PRINT_STATS_PERIOD               (HELLO_WORLD_SEND_PERIOD_MS * 1000)
-#define UI_THREAD_STACK_SIZE             1024
+#define UI_THREAD_STACK_SIZE             2048
 #define SWC_THREAD_STACK_SIZE            2048
 
-/* The device roles are used for the pairing discovery list. */
-#define DEVICE_ROLE_COORDINATOR 0
-#define DEVICE_ROLE_NODE        1
-
-/* The discovery list includes the coordinator and the node. */
-#define PAIRING_DISCOVERY_LIST_SIZE 2
-/* The application code prevents unwanted devices from pairing with this application. */
-#define PAIRING_APP_CODE 0x0000000000000888
-/* The timeout in second after which the pairing procedure will abort. */
-#define PAIRING_TIMEOUT_IN_SECONDS 10
+/* TYPES **********************************************************************/
+/** @brief Enumeration representing device pairing states.
+ */
+typedef enum device_pairing_state {
+    /*! The device is unpaired with the Node. */
+    DEVICE_UNPAIRED,
+    /*! The device is paired with the Node. */
+    DEVICE_PAIRED,
+} device_pairing_state_t;
 
 /* PRIVATE GLOBALS ************************************************************/
 /* ** Wireless Core ** */
@@ -60,7 +59,7 @@ static uint32_t str_counter;
 static uint8_t *hello_world_buf;
 static char rx_payload[MAX_PAYLOAD_SIZE_BYTE];
 static bool reset_stats_now;
-static bool device_state_paired;
+static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 static pairing_discovery_list_t pairing_discovery_list[PAIRING_DISCOVERY_LIST_SIZE];
@@ -112,14 +111,15 @@ static void abort_pairing_procedure(void);
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
 {
-    str_counter     = 0;
+    str_counter = 0;
     hello_world_buf = NULL;
 
     facade_board_init();
 
     osKernelInitialize();
 
-    swc_process_sem = osSemaphoreNew(SEMAPHORE_SWC_PROCESS_COUNT, SEMAPHORE_SWC_PROCESS_INIT_COUNT, &swc_process_sem_attr);
+    swc_process_sem = osSemaphoreNew(SEMAPHORE_SWC_PROCESS_COUNT, SEMAPHORE_SWC_PROCESS_INIT_COUNT,
+                                     &swc_process_sem_attr);
 
     data_generation_id = osTimerNew(data_generation_callback, osTimerPeriodic, NULL, &data_generation_attr);
     print_stats_id = osTimerNew(print_stats_callback, osTimerPeriodic, NULL, &print_stats_attr);
@@ -191,7 +191,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     swc_channel_cfg_t tx_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
-        .tx_pulse_gain  = TX_DATA_PULSE_GAIN,
+        .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
     for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
@@ -228,7 +228,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
-        .tx_pulse_gain  = TX_ACK_PULSE_GAIN,
+        .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
     for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
@@ -253,14 +253,22 @@ static void user_input_thread(void *argument)
 {
     (void)argument;
 
+    device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    enter_pairing_mode();
+
     while (1) {
-        if (!device_state_paired) {
+        if (device_pairing_state == DEVICE_UNPAIRED) {
             /* When the device is not paired, the only action possible for the user is the pairing. */
             facade_button_handling(enter_pairing_mode, NULL, NULL, NULL);
-        } else {
+        } else if (device_pairing_state == DEVICE_PAIRED) {
             /* When the device is paired, normal operations are executed. */
             facade_button_handling(unpair_device, reset_stats, NULL, NULL);
         }
+
+        /* Yield thread to lower priority processes. */
+        osDelay(1);
     }
 }
 
@@ -285,15 +293,14 @@ static void swc_callback_thread(void *argument)
 static void data_generation_callback(void *argument)
 {
     (void)argument;
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
-    swc_connection_allocate_payload_buffer(tx_conn, &hello_world_buf, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
+    swc_connection_get_payload_buffer(tx_conn, &hello_world_buf, &swc_err);
     if (hello_world_buf != NULL) {
-        size_t tx_payload_size = snprintf((char *)hello_world_buf, MAX_PAYLOAD_SIZE_BYTE,
-                                 "Hello, World! %lu\n\r", str_counter++);
+        size_t tx_payload_size = snprintf((char *)hello_world_buf, MAX_PAYLOAD_SIZE_BYTE, "Hello, World! %lu\n\r",
+                                          str_counter++);
 
-        swc_connection_send(tx_conn, hello_world_buf, tx_payload_size + ENDING_NULL_CHARACTER_SIZE,
-                            &swc_err);
+        swc_connection_send(tx_conn, hello_world_buf, tx_payload_size + ENDING_NULL_CHARACTER_SIZE, &swc_err);
     }
 }
 
@@ -307,19 +314,24 @@ static void print_stats_callback(void *argument)
     static char stats_string[STATS_ARRAY_LENGTH];
     int string_length = 0;
 
-    /* Print received string and stats every 1000 transmissions */
+    memset(stats_string, 0, sizeof(stats_string));
+
+    /* Print received string and stats every PRINT_STATS_PERIOD ms. */
+    swc_connection_update_stats(tx_conn);
+    swc_connection_update_stats(rx_conn);
+
+    /* Put rx_payload at the start of the print. */
+    string_length = snprintf(stats_string, sizeof(stats_string), "\r\n%s", rx_payload);
+    string_length += swc_connection_format_stats(tx_conn, node, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length);
+    string_length += swc_connection_format_stats(rx_conn, node, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length);
+    facade_print_string(stats_string);
+
     if (reset_stats_now) {
         swc_connection_reset_stats(tx_conn);
         swc_connection_reset_stats(rx_conn);
         reset_stats_now = false;
-    } else {
-        facade_print_string(rx_payload);
-
-        swc_connection_update_stats(tx_conn);
-        string_length = swc_connection_format_stats(tx_conn, node, stats_string, sizeof(stats_string));
-        swc_connection_update_stats(rx_conn);
-        swc_connection_format_stats(rx_conn, node, stats_string + string_length, sizeof(stats_string) - string_length);
-        facade_print_string(stats_string);
     }
 }
 
@@ -348,7 +360,6 @@ static void conn_tx_success_callback(void *conn)
 static void conn_tx_fail_callback(void *conn)
 {
     (void)conn;
-
 }
 
 /** @brief Callback function when a frame has been successfully received.
@@ -359,7 +370,7 @@ static void conn_rx_success_callback(void *conn)
 {
     (void)conn;
 
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
     uint8_t *payload = NULL;
 
     /* Get new payload */
@@ -386,7 +397,7 @@ static void enter_pairing_mode(void)
     swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
 
-    pairing_event_t pairing_event;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
 
     facade_notify_enter_pairing();
 
@@ -429,7 +440,7 @@ static void enter_pairing_mode(void)
             while (1);
         }
 
-        device_state_paired = true;
+        device_pairing_state = DEVICE_PAIRED;
         if (osTimerStart(data_generation_id, HELLO_WORLD_SEND_PERIOD_MS) != osOK) {
             while (1) {};
         }
@@ -443,7 +454,7 @@ static void enter_pairing_mode(void)
     default:
         /* Indicate that the pairing process was unsuccessful. */
         facade_notify_not_paired();
-        device_state_paired = false;
+        device_pairing_state = DEVICE_UNPAIRED;
         break;
     }
 }
@@ -452,9 +463,9 @@ static void enter_pairing_mode(void)
  */
 static void unpair_device(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
-    device_state_paired = false;
+    device_pairing_state = DEVICE_UNPAIRED;
 
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
 
@@ -486,6 +497,9 @@ static void pairing_application_callback(void)
      *       a variable amount of time.
      */
     facade_button_handling(abort_pairing_procedure, NULL, NULL, NULL);
+
+    /* Yield thread to lower priority processes. */
+    osDelay(1);
 }
 
 /** @brief Abort the pairing procedure.

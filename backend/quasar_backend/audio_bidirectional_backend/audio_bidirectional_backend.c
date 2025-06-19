@@ -30,6 +30,14 @@
 #define LED_BLINK_CERTIFICATION_MODE_2                2
 #define LED_BLINK_CERTIFICATION_MODE_3                3
 
+/* TYPES **********************************************************************/
+/** @brief Structure tracking a button's state.
+ */
+typedef struct button_handle {
+    quasar_button_selection_t button_id;
+    bool active;
+} button_handle_t;
+
 /* PRIVATE GLOBALS ************************************************************/
 static max98091_i2c_hal_t codec_hal = {
     .i2c_addr = MAX98091A_I2C_ADDR,
@@ -39,6 +47,7 @@ static max98091_i2c_hal_t codec_hal = {
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void led1_blink(uint8_t blink_count);
+static void handle_button_state(button_handle_t *button_handle, void (*button_callback)(void));
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void facade_context_switch_trigger(void)
@@ -57,10 +66,16 @@ void facade_board_init(void)
         .clk_freq = QUASAR_CLK_160MHZ,
         .debug_enabled = false,
         .radio1_enabled = true,
-        .radio2_enabled = false,
         .adc_enabled = false,
         .quasar_vdd_selection = QUASAR_VDD_SELECTION_3V3,
     };
+
+    if (SWC_RADIO_COUNT == 1) {
+        quasar_cfg.radio2_enabled = false;
+    } else {
+        quasar_cfg.radio2_enabled = true;
+    }
+
     quasar_init(quasar_cfg);
 
     /* Initialize the Codec's I2C interface. */
@@ -168,54 +183,15 @@ facade_certification_mode_t facade_get_certification_mode(void)
 void facade_button_handling(void (*button1_callback)(void), void (*button2_callback)(void),
                             void (*button3_callback)(void), void (*button4_callback)(void))
 {
-    static bool btn1_active;
-    static bool btn2_active;
-    static bool btn3_active;
-    static bool btn4_active;
+    static button_handle_t btn1_handle = {QUASAR_BUTTON_USER_1, false};
+    static button_handle_t btn2_handle = {QUASAR_BUTTON_USER_2, false};
+    static button_handle_t btn3_handle = {QUASAR_BUTTON_USER_3, false};
+    static button_handle_t btn4_handle = {QUASAR_BUTTON_USER_4, false};
 
-    if (btn1_active) {
-        if (!quasar_button_read_state(QUASAR_BUTTON_USER_1)) {
-            btn1_active = false;
-        }
-    }
-    if (btn2_active) {
-        if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
-            btn2_active = false;
-        }
-    }
-    if (btn3_active) {
-        if (!quasar_button_read_state(QUASAR_BUTTON_USER_3)) {
-            btn3_active = false;
-        }
-    }
-    if (btn4_active) {
-        if (!quasar_button_read_state(QUASAR_BUTTON_USER_4)) {
-            btn4_active = false;
-        }
-    }
-    if (!btn1_active && !btn2_active && !btn3_active && !btn4_active) {
-        if (quasar_button_read_state(QUASAR_BUTTON_USER_1)) {
-            if (button1_callback != NULL) {
-                button1_callback();
-            }
-            btn1_active = true;
-        } else if (quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
-            if (button2_callback != NULL) {
-                button2_callback();
-            }
-            btn2_active = true;
-        } else if (quasar_button_read_state(QUASAR_BUTTON_USER_3)) {
-            if (button3_callback != NULL) {
-                button3_callback();
-            }
-            btn3_active = true;
-        } else if (quasar_button_read_state(QUASAR_BUTTON_USER_4)) {
-            if (button4_callback != NULL) {
-                button4_callback();
-            }
-            btn4_active = true;
-        }
-    }
+    handle_button_state(&btn1_handle, button1_callback);
+    handle_button_state(&btn2_handle, button2_callback);
+    handle_button_state(&btn3_handle, button3_callback);
+    handle_button_state(&btn4_handle, button4_callback);
 }
 
 void facade_tx_audio_conn_status(void)
@@ -245,35 +221,29 @@ void facade_fallback_status(bool on)
     }
 }
 
-void facade_audio_process_main_channel_timer_init(uint32_t period_us)
+void facade_audio_process_main_channel_timer_init(void (*callback)(void))
 {
     quasar_timer_config_t timer_config = {
         .timer_selection = TIMER_SELECTION_MAIN_CHANNEL_AUDIO_PROCESS,
-        .time_base = QUASAR_TIMER_TIME_BASE_MICROSECOND,
-        .time_period = period_us,
+        /* Initialize timer base value to 1 second. */
+        .time_base = QUASAR_TIMER_TIME_BASE_MILLISECOND,
+        .time_period = 1000,
         .irq_priority = IRQ_PRIORITY_TIMER_MAIN_CHANNEL_AUDIO_PROCESS,
     };
     quasar_timer_init(&timer_config);
-}
-
-void facade_audio_process_back_channel_timer_init(uint32_t period_us)
-{
-    quasar_timer_config_t timer_config = {
-        .timer_selection = TIMER_SELECTION_BACK_CHANNEL_AUDIO_PROCESS,
-        .time_base = QUASAR_TIMER_TIME_BASE_MICROSECOND,
-        .time_period = period_us,
-        .irq_priority = IRQ_PRIORITY_TIMER_BACK_CHANNEL_AUDIO_PROCESS,
-    };
-    quasar_timer_init(&timer_config);
-}
-
-void facade_audio_process_main_channel_set_timer_callback(void (*callback)(void))
-{
     quasar_it_set_timer16_callback(callback);
 }
 
-void facade_audio_process_back_channel_set_timer_callback(void (*callback)(void))
+void facade_audio_process_back_channel_timer_init(void (*callback)(void))
 {
+    quasar_timer_config_t timer_config = {
+        .timer_selection = TIMER_SELECTION_BACK_CHANNEL_AUDIO_PROCESS,
+        /* Initialize timer base value to 1 second. */
+        .time_base = QUASAR_TIMER_TIME_BASE_MILLISECOND,
+        .time_period = 1000,
+        .irq_priority = IRQ_PRIORITY_TIMER_BACK_CHANNEL_AUDIO_PROCESS,
+    };
+    quasar_timer_init(&timer_config);
     quasar_it_set_timer17_callback(callback);
 }
 
@@ -285,6 +255,16 @@ void facade_audio_process_main_channel_timer_start(void)
 void facade_audio_process_back_channel_timer_start(void)
 {
     quasar_timer_start(TIMER_SELECTION_BACK_CHANNEL_AUDIO_PROCESS);
+}
+
+void facade_audio_process_main_channel_timer_trigger(void)
+{
+    quasar_timer_generate_event(TIMER_SELECTION_MAIN_CHANNEL_AUDIO_PROCESS);
+}
+
+void facade_audio_process_back_channel_timer_trigger(void)
+{
+    quasar_timer_generate_event(TIMER_SELECTION_BACK_CHANNEL_AUDIO_PROCESS);
 }
 
 void facade_audio_process_main_channel_timer_stop(void)
@@ -392,6 +372,11 @@ uint32_t facade_get_tick_ms(void)
     return quasar_timer_free_running_ms_get_tick_count();
 }
 
+bool facade_read_button_state(void)
+{
+    return quasar_button_read_state(QUASAR_BUTTON_USER_2);
+}
+
 /* PRIVATE FUNCTIONS **********************************************************/
 /** @brief Blinks the LED 1 a specified number of times.
  *
@@ -403,5 +388,31 @@ static void led1_blink(uint8_t blink_count)
     for (int i = 0; i < blink_count * LED_BLINK_REPEAT; i++) {
         quasar_led_toggle(QUASAR_LED_USER_1);
         quasar_timer_delay_ms(DELAY_MS_LONG_PERIOD);
+    }
+}
+
+/** @brief Manages the state of a button, detecting presses and triggering a callback.
+ *
+ *  @param button_handle    Pointer to the button state structure.
+ *  @param button_callback  Function to call when a press is detected.
+ */
+static void handle_button_state(button_handle_t *button_handle, void (*button_callback)(void))
+{
+    if (!button_handle->active) {
+        /* If the button is not active and is pressed, activate it and call the callback. */
+        if (quasar_button_read_state(button_handle->button_id)) {
+            /* The button is pressed, activate the button. */
+            button_handle->active = true;
+            if (button_callback != NULL) {
+                /* Execute the callback. */
+                button_callback();
+            }
+        }
+    } else {
+        /* If the button is active (pressed), do nothing for now, it remains pressed. */
+        if (!quasar_button_read_state(button_handle->button_id)) {
+            /* The button is released, desactivate the button. */
+            button_handle->active = false;
+        }
     }
 }

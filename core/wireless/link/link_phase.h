@@ -40,10 +40,10 @@ typedef struct phase_info {
 /** @brief Phases value, last received preamble phase correlation data.
  */
 typedef struct phase_infos {
-   /*! Initiator's ranging data */
-   phase_info_t local_info;
-   /*! Responder's ranging data */
-   phase_info_t remote_info;
+    /*! Initiator's ranging data */
+    phase_info_t local_info;
+    /*! Responder's ranging data */
+    phase_info_t remote_info;
 } phase_infos_t;
 
 /** @brief Link phase structure.

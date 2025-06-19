@@ -165,7 +165,8 @@ static inline void sr_access_disable_radio_irq(radio_hal_t *radio_hal)
  *  @param[out] rx_buffer  Buffer containing the radio response.
  *  @param[in]  size       Size of the transfer.
  */
-static inline void sr_access_spi_transfer_non_blocking(radio_hal_t *radio_hal, uint8_t *tx_buffer, uint8_t *rx_buffer, uint16_t size)
+static inline void sr_access_spi_transfer_non_blocking(radio_hal_t *radio_hal, uint8_t *tx_buffer, uint8_t *rx_buffer,
+                                                       uint16_t size)
 {
     radio_hal->reset_cs();
     radio_hal->transfer_full_duplex_non_blocking(tx_buffer, rx_buffer, size);
@@ -178,7 +179,8 @@ static inline void sr_access_spi_transfer_non_blocking(radio_hal_t *radio_hal, u
  *  @param[out] rx_buffer  Buffer containing the radio response.
  *  @param[in]  size       Size of the transfer.
  */
-static inline void sr_access_spi_transfer_blocking(radio_hal_t *radio_hal, uint8_t *tx_buffer, uint8_t *rx_buffer, uint16_t size)
+static inline void sr_access_spi_transfer_blocking(radio_hal_t *radio_hal, uint8_t *tx_buffer, uint8_t *rx_buffer,
+                                                   uint16_t size)
 {
     radio_hal->reset_cs();
     radio_hal->transfer_full_duplex_blocking(tx_buffer, rx_buffer, size);

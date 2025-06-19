@@ -21,15 +21,15 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /*! The minimum number of input audio streams to be mixed. */
-#define MIN_NB_OF_INPUTS            2
+#define MIN_NB_OF_INPUTS 2
 /*! The maximum supported number of input audio streams to be mixed. */
-#define MAX_NB_OF_INPUTS            3
+#define MAX_NB_OF_INPUTS 3
 /*! The minimum number of bytes a payload can contain. */
 #define MIN_NB_OF_BYTES_PER_PAYLOAD 2
 /*! The maximum number of bytes a payload can contain. */
 #define MAX_NB_OF_BYTES_PER_PAYLOAD 122
 /*! Give a buffer to have at least 2 packets. */
-#define MAX_NB_OF_BYTES_PER_BUFFER  (MAX_NB_OF_BYTES_PER_PAYLOAD * 2)
+#define MAX_NB_OF_BYTES_PER_BUFFER (MAX_NB_OF_BYTES_PER_PAYLOAD * 2)
 
 /* TYPES **********************************************************************/
 /** @brief The SPARK Audio Core Mixer Module configurations.

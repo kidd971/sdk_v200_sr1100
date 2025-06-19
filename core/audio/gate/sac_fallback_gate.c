@@ -24,7 +24,7 @@ bool sac_fallback_gate_is_fallback_on(void *instance, sac_pipeline_t *pipeline, 
     (void)header;
     (void)size;
 
-    sac_fallback_instance_t *inst;
+    sac_fallback_instance_t *inst = NULL;
     bool return_error = false; /* If this gate fails, consider fallback OFF. */
 
     *status = SAC_OK;
@@ -47,7 +47,7 @@ bool sac_fallback_gate_is_fallback_off(void *instance, sac_pipeline_t *pipeline,
     (void)header;
     (void)size;
 
-    sac_fallback_instance_t *inst;
+    sac_fallback_instance_t *inst = NULL;
     bool return_error = true; /* If this gate fails, consider fallback OFF. */
 
     *status = SAC_OK;
@@ -71,7 +71,7 @@ bool sac_fallback_gate_is_fallback_off(void *instance, sac_pipeline_t *pipeline,
  */
 static sac_fallback_instance_t *get_fallback_instance(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_processing_t *current_process;
+    sac_processing_t *current_process = NULL;
 
     SAC_CHECK_STATUS(pipeline == NULL, status, SAC_ERR_NULL_PTR, return NULL);
     SAC_CHECK_STATUS(pipeline->process == NULL, status, SAC_ERR_NULL_PTR, return NULL);
@@ -79,7 +79,7 @@ static sac_fallback_instance_t *get_fallback_instance(sac_pipeline_t *pipeline, 
     /* Find the fallback processing stage in the chain. */
     current_process = pipeline->process;
     do {
-        if ((uint32_t)current_process->iface.process == (uint32_t)sac_fallback_process) {
+        if (current_process->iface.process == sac_fallback_process) {
             return current_process->instance;
         }
         current_process = current_process->next_process;

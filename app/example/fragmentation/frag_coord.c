@@ -17,22 +17,22 @@
 #include "swc_stats.h"
 
 /* CONSTANTS ******************************************************************/
-#define SWC_MEM_POOL_SIZE          14000
-#define MAX_PAYLOAD_SIZE_BYTE      500
-#define MAX_SWC_PAYLOAD_SIZE_BYTE  124
-#define STATS_ARRAY_LENGTH         2000
-#define SEQ_NUM_OFFSET             1
+#define SWC_MEM_POOL_SIZE         14000
+#define MAX_PAYLOAD_SIZE_BYTE     500
+#define MAX_SWC_PAYLOAD_SIZE_BYTE 124
+#define STATS_ARRAY_LENGTH        2000
+#define SEQ_NUM_OFFSET            1
+#define PRINT_INTERVAL_MS         1000
 
-/* The device roles are used for the pairing discovery list. */
-#define DEVICE_ROLE_COORDINATOR 0
-#define DEVICE_ROLE_NODE        1
-
-/* The discovery list includes the coordinator and the node. */
-#define PAIRING_DISCOVERY_LIST_SIZE 2
-/* The application code prevents unwanted devices from pairing with this application. */
-#define PAIRING_APP_CODE 0x0000000000000555
-/* The timeout in second after which the pairing procedure will abort. */
-#define PAIRING_TIMEOUT_IN_SECONDS 10
+/* TYPES **********************************************************************/
+/** @brief Enumeration representing device pairing states.
+ */
+typedef enum device_pairing_state {
+    /*! The device is unpaired with the Node. */
+    DEVICE_UNPAIRED,
+    /*! The device is paired with the Node. */
+    DEVICE_PAIRED,
+} device_pairing_state_t;
 
 /* PRIVATE GLOBALS ************************************************************/
 /* ** Wireless Core ** */
@@ -50,16 +50,14 @@ static int32_t tx_timeslots[] = TX_TIMESLOTS;
 /* ** Application Specific ** */
 static uint8_t tx_payload[MAX_PAYLOAD_SIZE_BYTE];
 static uint8_t rx_payload[MAX_PAYLOAD_SIZE_BYTE];
-static uint32_t tx_count;
 static uint8_t tx_payload_id;
 static uint32_t valid_payload_count;
 static uint32_t invalid_payload_count;
 static uint32_t valid_crc_count;
 static uint32_t invalid_crc_count;
-static bool print_stats_now;
 static bool reset_stats_now;
 
-static bool device_state_paired;
+static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 static pairing_discovery_list_t pairing_discovery_list[PAIRING_DISCOVERY_LIST_SIZE];
@@ -82,6 +80,8 @@ static void packet_generation_timer_interrupt_handler(void);
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
 {
+    uint32_t tick_start = 0;
+
     facade_board_init();
 
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
@@ -93,26 +93,22 @@ int main(void)
     /* Fill application payload of the first packet */
     generate_pseudo_data();
 
+    device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    enter_pairing_mode();
+
     while (1) {
-        if (!device_state_paired) {
+        if (device_pairing_state == DEVICE_UNPAIRED) {
             /* When the device is not paired, the only action possible for the user is the pairing. */
             facade_button_handling(enter_pairing_mode, NULL, NULL, NULL);
-        } else {
+        } else if (device_pairing_state == DEVICE_PAIRED) {
             /* When the device is paired, normal operations are executed. */
             facade_button_handling(unpair_device, reset_stats, NULL, NULL);
-            if (print_stats_now) {
-                if (reset_stats_now) {
-                    swc_connection_reset_stats(tx_conn);
-                    swc_connection_reset_stats(rx_conn);
-                    valid_payload_count = 0;
-                    invalid_payload_count = 0;
-                    valid_crc_count = 0;
-                    invalid_crc_count = 0;
-                    reset_stats_now = false;
-                } else {
-                    print_stats();
-                }
-                print_stats_now = false;
+            /* Print received string and stats every PRINT_INTERVAL_MS */
+            if ((facade_get_tick_ms() - tick_start) > PRINT_INTERVAL_MS) {
+                tick_start += PRINT_INTERVAL_MS;
+                print_stats();
             }
         }
     }
@@ -209,7 +205,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
      * channel to be added to it, since, again, it will reuse the main connection ones.
      */
     swc_connection_cfg_t rx_conn_cfg = {
-        .name = "RX Connection",
+        .name = "RX Auto-Reply Connection",
         .source_address = remote_address,
         .destination_address = local_address,
         .max_payload_size = MAX_SWC_PAYLOAD_SIZE_BYTE,
@@ -253,11 +249,6 @@ static void conn_tx_success_callback(void *conn)
     (void)conn;
 
     facade_tx_conn_status();
-
-    /* Print stats every time the required number of samples has been sent. */
-    if ((tx_count++ % 100) == 0) {
-        print_stats_now = true;
-    }
 }
 
 /** @brief Callback function when a frame has been successfully received.
@@ -267,8 +258,8 @@ static void conn_tx_success_callback(void *conn)
 static void conn_rx_success_callback(void *conn)
 {
     (void)conn;
-    swc_error_t err;
-    uint8_t current_rx_payload_id;
+    swc_error_t err = SWC_ERR_NONE;
+    uint8_t current_rx_payload_id = 0;
     static uint8_t previous_rx_payload_id;
 
     /* Get a new payload. */
@@ -297,8 +288,9 @@ static void conn_rx_success_callback(void *conn)
  */
 static void print_stats(void)
 {
-    char stats_string[STATS_ARRAY_LENGTH];
+    static char stats_string[STATS_ARRAY_LENGTH];
     int string_length = 0;
+
     const char *device_str = "\n\r<  COORDINATOR  >\n\r";
     const char *app_stats_str = "<<  Fragmentation App Statistics  >>\n\r";
     const char *valid_sequence_count_str = "Valid Payload Sequence Count:\t%10d\n\r";
@@ -307,26 +299,43 @@ static void print_stats(void)
     const char *invalid_crc_count_str = "Invalid Payload CRC Count:\t%10d\n\r";
     const char *wireless_stats_str = "<<  Wireless Core Statistics  >>\n\r";
 
+    memset(stats_string, 0, sizeof(stats_string));
+
     /* Device role */
     string_length = snprintf(stats_string, sizeof(stats_string), device_str);
 
     /* Application statistics */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, app_stats_str);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string), valid_sequence_count_str, valid_payload_count);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string), invalid_sequence_count_str, invalid_payload_count);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string), valid_sequence_count_str,
+                              valid_payload_count);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string), invalid_sequence_count_str,
+                              invalid_payload_count);
     string_length += snprintf(stats_string + string_length, sizeof(stats_string), valid_crc_count_str, valid_crc_count);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string), invalid_crc_count_str, invalid_crc_count);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string), invalid_crc_count_str,
+                              invalid_crc_count);
 
     /* Wireless statistics */
     /* TX */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
     swc_connection_update_stats(tx_conn);
-    string_length += swc_connection_format_stats(tx_conn, node, stats_string + string_length, sizeof(stats_string) - string_length);
+    string_length += swc_connection_format_stats(tx_conn, node, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length);
     /* RX */
     swc_connection_update_stats(rx_conn);
-    string_length += swc_connection_format_stats(rx_conn, node, stats_string + string_length, sizeof(stats_string) - string_length);
+    string_length += swc_connection_format_stats(rx_conn, node, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length);
 
     facade_print_string(stats_string);
+
+    if (reset_stats_now) {
+        swc_connection_reset_stats(tx_conn);
+        swc_connection_reset_stats(rx_conn);
+        valid_payload_count = 0;
+        invalid_payload_count = 0;
+        valid_crc_count = 0;
+        invalid_crc_count = 0;
+        reset_stats_now = false;
+    }
 }
 
 /** @brief Reset the TX and RX statistics.
@@ -345,7 +354,7 @@ static void enter_pairing_mode(void)
     swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
 
-    pairing_event_t pairing_event;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
 
     facade_notify_enter_pairing();
 
@@ -388,8 +397,9 @@ static void enter_pairing_mode(void)
             while (1);
         }
 
-        device_state_paired = true;
         facade_packet_generation_timer_start();
+
+        device_pairing_state = DEVICE_PAIRED;
 
         break;
     case PAIRING_EVENT_TIMEOUT:
@@ -398,7 +408,7 @@ static void enter_pairing_mode(void)
     default:
         /* Indicate that the pairing process was unsuccessful. */
         facade_notify_not_paired();
-        device_state_paired = false;
+        device_pairing_state = DEVICE_UNPAIRED;
         break;
     }
 }
@@ -407,9 +417,9 @@ static void enter_pairing_mode(void)
  */
 static void unpair_device(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
-    device_state_paired = false;
+    device_pairing_state = DEVICE_UNPAIRED;
 
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
 
@@ -459,7 +469,7 @@ static void generate_pseudo_data(void)
  */
 static void packet_generation_timer_interrupt_handler(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     swc_connection_send(tx_conn, (uint8_t *)tx_payload, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
 

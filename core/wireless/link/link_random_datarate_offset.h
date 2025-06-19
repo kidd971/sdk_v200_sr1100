@@ -32,15 +32,17 @@ extern "C" {
  */
 typedef struct link_rdo {
     /*! Current offset value, in PLL cycle. */
-    uint16_t offset;
+    uint8_t offset;
     /*! Offset rollover value. */
     uint16_t rollover_n;
-    /*! Number of timeslot between each offset increment. */
-    uint16_t increment_step;
-    /*! Offset value split for uint8_t transfer. */
-    uint8_t offset_u8[sizeof(uint16_t)];
+    /*! PLL cycles elapsed since last offset increment. */
+    uint32_t elapsed_time;
+    /*! PLL cycles before next offset increment. */
+    uint32_t target_time;
     /*! RDO enable flag. */
     bool enabled;
+    /*! Count up. */
+    bool count_up;
 } link_rdo_t;
 
 /* PUBLIC GLOBALS *************************************************************/
@@ -53,9 +55,9 @@ typedef struct link_rdo {
  *
  *  @param[in] link_rdo               RDO module instance.
  *  @param[in] target_rollover_value  Offset rollover value.
- *  @param[in] target_increment_step  Number of timeslot between each offset increment.
+ *  @param[in] step_ms                Time in milliseconds between each offset increment.
  */
-void link_rdo_init(link_rdo_t *link_rdo, uint16_t target_rollover_value, uint16_t target_increment_step);
+void link_rdo_init(link_rdo_t *link_rdo, uint16_t target_rollover_value, uint16_t step_ms);
 
 /** @brief Enable the RDO module.
  *
@@ -113,9 +115,10 @@ uint16_t link_rdo_get_offset(link_rdo_t *link_rdo);
  *        and reset to 0 when the rollover value
  *        is met.
  *
- *  @param[in] link_rdo  RDO module instance.
+ *  @param[in] link_rdo       RDO module instance.
+ *  @param[in] sleep_time_ms  Sleep time in microseconds.
  */
-void link_rdo_update_offset(link_rdo_t *link_rdo);
+void link_rdo_update_offset(link_rdo_t *link_rdo, uint32_t sleep_time_ms);
 
 #ifdef __cplusplus
 }

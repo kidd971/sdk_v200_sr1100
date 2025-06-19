@@ -43,6 +43,8 @@ typedef enum sr_phy_error {
     SR_SPECTRAL_ERROR_INVALID_SPACING,
     /*! Maximum number of pulse cfg is 3. */
     SR_SPECTRAL_ERROR_INVALID_PULSE_CFG,
+    /*! Pulse count should be between MIN_PULSE_COUNT to MAX_PULSE_COUNT. */
+    SR_SPECTRAL_ERROR_INVALID_PULSE_COUNT,
 
     /******************************************************************************/
     /*                                 Phy model error                            */

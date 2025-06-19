@@ -46,7 +46,7 @@ static void handle_wireless_error(void);
 void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
 {
     swc_error_t err = SWC_ERR_NONE;
-    uint16_t local_address;
+    uint16_t local_address = 0;
 
     local_network_role = network_role;
 
@@ -68,13 +68,13 @@ void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
     }
 
     swc_cfg_t core_cfg = {
-        .timeslot_sequence               = timeslot_us,
-        .timeslot_sequence_length        = SWC_ARRAY_SIZE(timeslot_us),
-        .channel_sequence                = channel_sequence,
-        .channel_sequence_length         = SWC_ARRAY_SIZE(channel_sequence),
-        .concurrency_mode                = SWC_CONCURRENCY_MODE_LOW_PERFORMANCE,
-        .memory_pool                     = app_pairing_cfg->memory_pool,
-        .memory_pool_size                = app_pairing_cfg->memory_pool_size,
+        .timeslot_sequence = timeslot_us,
+        .timeslot_sequence_length = SWC_ARRAY_SIZE(timeslot_us),
+        .channel_sequence = channel_sequence,
+        .channel_sequence_length = SWC_ARRAY_SIZE(channel_sequence),
+        .concurrency_mode = SWC_CONCURRENCY_MODE_LOW_PERFORMANCE,
+        .memory_pool = app_pairing_cfg->memory_pool,
+        .memory_pool_size = app_pairing_cfg->memory_pool_size,
     };
 
     swc_init(core_cfg, app_pairing_cfg->context_switch_callback, &err);
@@ -91,10 +91,10 @@ void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
     }
 
     swc_node_cfg_t node_cfg = {
-        .role                = network_role,
-        .pan_id              = PAIRING_PAN_ID,
+        .role = network_role,
+        .pan_id = PAIRING_PAN_ID,
         .coordinator_address = PAIRING_COORD_ADDRESS,
-        .local_address       = local_address,
+        .local_address = local_address,
     };
     node = swc_node_init(node_cfg, &err);
     if (err != SWC_ERR_NONE) {
@@ -118,13 +118,13 @@ void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
 
     /* Coordinator to node connection. */
     swc_connection_cfg_t coord_to_node_conn_cfg = {
-        .name                       = "Coord to Node Connection",
-        .source_address             = PAIRING_COORD_ADDRESS,
-        .destination_address        = PAIRING_NODE_ADDRESS,
-        .max_payload_size           = PAIRING_MAX_PAYLOAD_SIZE,
-        .queue_size                 = PAIRING_DATA_QUEUE_SIZE,
-        .timeslot_id                = coord_to_node_timeslots,
-        .timeslot_count             = SWC_ARRAY_SIZE(coord_to_node_timeslots),
+        .name = "Coord to Node Connection",
+        .source_address = PAIRING_COORD_ADDRESS,
+        .destination_address = PAIRING_NODE_ADDRESS,
+        .max_payload_size = PAIRING_MAX_PAYLOAD_SIZE,
+        .queue_size = PAIRING_DATA_QUEUE_SIZE,
+        .timeslot_id = coord_to_node_timeslots,
+        .timeslot_count = SWC_ARRAY_SIZE(coord_to_node_timeslots),
     };
     coord_to_node_conn = swc_connection_init(node, coord_to_node_conn_cfg, &err);
     if (err != SWC_ERR_NONE) {
@@ -139,13 +139,13 @@ void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
 
     /* Node to coordinator connection. */
     swc_connection_cfg_t node_to_coord_conn_cfg = {
-        .name                       = "Node to Coord Connection",
-        .source_address             = PAIRING_NODE_ADDRESS,
-        .destination_address        = PAIRING_COORD_ADDRESS,
-        .max_payload_size           = PAIRING_MAX_PAYLOAD_SIZE,
-        .queue_size                 = PAIRING_DATA_QUEUE_SIZE,
-        .timeslot_id                = node_to_coord_timeslots,
-        .timeslot_count             = SWC_ARRAY_SIZE(node_to_coord_timeslots),
+        .name = "Node to Coord Connection",
+        .source_address = PAIRING_NODE_ADDRESS,
+        .destination_address = PAIRING_COORD_ADDRESS,
+        .max_payload_size = PAIRING_MAX_PAYLOAD_SIZE,
+        .queue_size = PAIRING_DATA_QUEUE_SIZE,
+        .timeslot_id = node_to_coord_timeslots,
+        .timeslot_count = SWC_ARRAY_SIZE(node_to_coord_timeslots),
     };
     node_to_coord_conn = swc_connection_init(node, node_to_coord_conn_cfg, &err);
     if (err != SWC_ERR_NONE) {
@@ -161,14 +161,14 @@ void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
     swc_channel_cfg_t tx_channel_cfg = {
         .tx_pulse_count = PAIRING_TX_DATA_PULSE_COUNT,
         .tx_pulse_width = PAIRING_TX_DATA_PULSE_WIDTH,
-        .tx_pulse_gain  = PAIRING_TX_DATA_PULSE_GAIN,
+        .tx_pulse_gain = PAIRING_TX_DATA_PULSE_GAIN,
         .rx_pulse_count = PAIRING_RX_ACK_PULSE_COUNT,
     };
 
     swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = PAIRING_TX_ACK_PULSE_COUNT,
         .tx_pulse_width = PAIRING_TX_ACK_PULSE_WIDTH,
-        .tx_pulse_gain  = PAIRING_TX_ACK_PULSE_GAIN,
+        .tx_pulse_gain = PAIRING_TX_ACK_PULSE_GAIN,
         .rx_pulse_count = PAIRING_RX_DATA_PULSE_COUNT,
     };
 
@@ -239,7 +239,7 @@ void pairing_wireless_init(pairing_cfg_t *pairing_cfg, swc_role_t network_role)
 
 void pairing_wireless_connect(void)
 {
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
 
     swc_connect(&err);
     if (err != SWC_ERR_NONE) {
@@ -250,7 +250,7 @@ void pairing_wireless_connect(void)
 
 void pairing_wireless_disconnect(void)
 {
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
 
     swc_disconnect(&err);
     if (err != SWC_ERR_NONE) {
@@ -266,7 +266,7 @@ void pairing_wireless_free_memory(void)
 
 void pairing_wireless_send_message(uint8_t *payload_buffer, uint16_t size)
 {
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
 
     if (local_network_role == SWC_ROLE_COORDINATOR) {
         swc_connection_send(coord_to_node_conn, payload_buffer, size, &err);
@@ -353,7 +353,7 @@ static void conn_rx_success_callback(void *conn)
  */
 static void store_radio_serial_number(void)
 {
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
 
     local_radio_serial_number = swc_node_get_radio_serial_number(&err);
     if (err != SWC_ERR_NONE) {

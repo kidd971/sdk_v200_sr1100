@@ -8,8 +8,8 @@
  */
 
 /* INCLUDES *******************************************************************/
-#include <string.h>
 #include "sac_volume.h"
+#include <string.h>
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void volume_increase(sac_volume_instance_t *volume_ctrl);
@@ -101,25 +101,31 @@ uint16_t sac_volume_process(void *instance, sac_pipeline_t *pipeline, sac_header
 
     *status = SAC_OK;
 
-    if ((vol_inst->_internal.volume_threshold != SAC_VOLUME_MAX) || (vol_inst->_internal.volume_factor != SAC_VOLUME_MAX)) {
+    if ((vol_inst->_internal.volume_threshold != SAC_VOLUME_MAX) ||
+        (vol_inst->_internal.volume_factor != SAC_VOLUME_MAX)) {
         adjust_volume_factor(vol_inst);
 
         switch (vol_inst->sample_format.bit_depth) {
         case SAC_16BITS:
             if (vol_inst->sample_format.sample_encoding == SAC_SAMPLE_PACKED) {
-                apply_volume_factor_16bits((int16_t *)data_in, (size / (SAC_WORD_SIZE_BYTE / 2)), (int16_t *)data_out, vol_inst->_internal.volume_factor);
+                apply_volume_factor_16bits((int16_t *)data_in, (size / (SAC_WORD_SIZE_BYTE / 2)), (int16_t *)data_out,
+                                           vol_inst->_internal.volume_factor);
             } else {
-                apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out, vol_inst->_internal.volume_factor);
+                apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out,
+                                           vol_inst->_internal.volume_factor);
             }
             break;
         case SAC_20BITS:
-            apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out, vol_inst->_internal.volume_factor);
+            apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out,
+                                       vol_inst->_internal.volume_factor);
             break;
         case SAC_24BITS:
-            apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out, vol_inst->_internal.volume_factor);
+            apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out,
+                                       vol_inst->_internal.volume_factor);
             break;
         case SAC_32BITS:
-            apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out, vol_inst->_internal.volume_factor);
+            apply_volume_factor_32bits((int32_t *)data_in, (size / SAC_WORD_SIZE_BYTE), (int32_t *)data_out,
+                                       vol_inst->_internal.volume_factor);
             break;
         default:
             return 0;
@@ -206,10 +212,10 @@ static void adjust_volume_factor(sac_volume_instance_t *instance)
  *  @param[out] audio_samples_out  16bits samples pointer of data out.
  *  @param[in]  volume_factor      Volume factor to apply.
  */
-static void apply_volume_factor_16bits(int16_t *audio_samples_in, uint16_t samples_count,
-                                       int16_t *audio_samples_out, float volume_factor)
+static void apply_volume_factor_16bits(int16_t *audio_samples_in, uint16_t samples_count, int16_t *audio_samples_out,
+                                       float volume_factor)
 {
-    uint16_t count;
+    uint16_t count = 0;
 
     for (count = 0; count < samples_count; count++) {
         audio_samples_out[count] = audio_samples_in[count] * volume_factor;
@@ -223,10 +229,10 @@ static void apply_volume_factor_16bits(int16_t *audio_samples_in, uint16_t sampl
  *  @param[out] audio_samples_out  32bits samples pointer of data out.
  *  @param[in]  volume_factor      Volume factor to apply.
  */
-static void apply_volume_factor_32bits(int32_t *audio_samples_in, uint16_t samples_count,
-                                       int32_t *audio_samples_out, float volume_factor)
+static void apply_volume_factor_32bits(int32_t *audio_samples_in, uint16_t samples_count, int32_t *audio_samples_out,
+                                       float volume_factor)
 {
-    uint16_t count;
+    uint16_t count = 0;
 
     for (count = 0; count < samples_count; count++) {
         audio_samples_out[count] = audio_samples_in[count] * volume_factor;
@@ -240,11 +246,8 @@ static void apply_volume_factor_32bits(int32_t *audio_samples_in, uint16_t sampl
  */
 static void validate_sac_bit_depth(sac_bit_depth_t bit_depth, sac_status_t *status)
 {
-    if ((bit_depth != SAC_16BITS) &&
-        (bit_depth != SAC_18BITS) &&
-        (bit_depth != SAC_20BITS) &&
-        (bit_depth != SAC_24BITS) &&
-        (bit_depth != SAC_32BITS)) {
+    if ((bit_depth != SAC_16BITS) && (bit_depth != SAC_18BITS) && (bit_depth != SAC_20BITS) &&
+        (bit_depth != SAC_24BITS) && (bit_depth != SAC_32BITS)) {
         *status = SAC_ERR_BIT_DEPTH;
     }
 }

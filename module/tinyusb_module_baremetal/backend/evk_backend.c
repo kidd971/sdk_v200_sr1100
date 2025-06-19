@@ -12,7 +12,7 @@
 #include "tinyusb_module_baremetal_facade.h"
 
 /* CONSTANTS ******************************************************************/
-#define IRQ_PRIORITY_TMER_USB_TASK 15
+#define IRQ_PRIORITY_TMER_USB_TASK 10
 #define TIMER_SELECTION_USB_TASK   EVK_TIMER_SELECTION_TIMER1
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -38,7 +38,7 @@ void tusb_hal_timer_init(void)
         .timer_selection = TIMER_SELECTION_USB_TASK,
         .time_base = EVK_TIMER_TIME_BASE_MICROSECOND,
         .time_period = 500,
-        .irq_priority = IRQ_PRIORITY_TMER_USB_TASK
+        .irq_priority = IRQ_PRIORITY_TMER_USB_TASK,
     };
     evk_timer_init(timer_config);
 }

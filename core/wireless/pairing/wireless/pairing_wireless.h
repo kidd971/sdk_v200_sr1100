@@ -19,7 +19,7 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /*! The maximum payload size in bytes during a wireless transfer. */
-#define PAIRING_MAX_PAYLOAD_SIZE  16
+#define PAIRING_MAX_PAYLOAD_SIZE 16
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Initialize the pairing wireless configuration.

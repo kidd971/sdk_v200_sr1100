@@ -1,2 +1,3 @@
 set(CMAKE_C_COMPILER gcc CACHE STRING "C compiler")
 set(CMAKE_CXX_COMPILER g++ CACHE STRING "CXX compiler")
+set(CMAKE_ASM_COMPILER gcc CACHE STRING "ASM compiler")

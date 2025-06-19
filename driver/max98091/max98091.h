@@ -43,17 +43,17 @@ extern "C" {
 #define LP_12k_A1 0xFFF2FB /*-0.003179 */
 #define LP_12k_A2 0x03498A /* 0.205454 */
 
-#define LP_6k_B0 0x0196E4 /* 0.099339 */
-#define LP_6k_B1 0x032DC9 /* 0.198678 */
-#define LP_6k_B2 0x0196E4 /* 0.099339 */
-#define LP_6k_A1 0xF0832B /*-0.967977 */
-#define LP_6k_A2 0x05D867 /* 0.365333 */
+#define LP_6k_B0  0x0196E4 /* 0.099339 */
+#define LP_6k_B1  0x032DC9 /* 0.198678 */
+#define LP_6k_B2  0x0196E4 /* 0.099339 */
+#define LP_6k_A1  0xF0832B /*-0.967977 */
+#define LP_6k_A2  0x05D867 /* 0.365333 */
 
-#define LP_5k_B0 0x014F48 /* 0.081856 */
-#define LP_5k_B1 0x029E90 /* 0.163712 */
-#define LP_5k_B2 0x014F48 /* 0.081856 */
-#define LP_5k_A1 0xECA6D9 /*-1.209265 */
-#define LP_5k_A2 0x089647 /* 0.536689 */
+#define LP_5k_B0  0x014F48 /* 0.081856 */
+#define LP_5k_B1  0x029E90 /* 0.163712 */
+#define LP_5k_B2  0x014F48 /* 0.081856 */
+#define LP_5k_A1  0xECA6D9 /*-1.209265 */
+#define LP_5k_A2  0x089647 /* 0.536689 */
 
 /* f0=1302.2 Q=0.7 -42.9dB@12kHz */
 #define LP_1_3k_B0 0x001A79 /* 0.006464 */
@@ -62,11 +62,11 @@ extern "C" {
 #define LP_1_3k_A1 0xE3DD94 /*-1.758403 */
 #define LP_1_3k_A2 0x0C8C55 /* 0.784261 */
 
-#define LP_1k_B0 0x001080 /* 0.004029 */
-#define LP_1k_B1 0x002100 /* 0.008057 */
-#define LP_1k_B2 0x001080 /* 0.004029 */
-#define LP_1k_A1 0xE238AF /*-1.861161 */
-#define LP_1k_A2 0x0E0952 /* 0.877276 */
+#define LP_1k_B0   0x001080 /* 0.004029 */
+#define LP_1k_B1   0x002100 /* 0.008057 */
+#define LP_1k_B2   0x001080 /* 0.004029 */
+#define LP_1k_A1   0xE238AF /*-1.861161 */
+#define LP_1k_A2   0x0E0952 /* 0.877276 */
 
 /* TYPES **********************************************************************/
 /** @brief max98091 I2C Addresses.
@@ -86,7 +86,7 @@ typedef enum max98091_i2c_address {
 typedef struct max98091_i2c_hal {
     max98091_i2c_address_t i2c_addr;
     void (*write)(uint8_t dev_address, uint8_t mem_addr, uint8_t data); /* Blocking I2C write function */
-    void (*read)(uint8_t dev_address, uint8_t mem_addr, uint8_t *data);  /* Blocking I2C read function */
+    void (*read)(uint8_t dev_address, uint8_t mem_addr, uint8_t *data); /* Blocking I2C read function */
 } max98091_i2c_hal_t;
 
 /** @brief max98091 driver supported sampling rates.

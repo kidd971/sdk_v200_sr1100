@@ -1,6 +1,6 @@
 add_library(hardware "")
 
-set(BSP_PATH ${CMAKE_CURRENT_LIST_DIR}/src CACHE INTERNAL "Path to bsp source files for use by this CMakeLists.")
+set(BSP_PATH ${CMAKE_CURRENT_LIST_DIR} CACHE INTERNAL "Path to bsp source files for use by this CMakeLists.")
 set(STM32U5_HAL_CONF_PATH ${BSP_PATH} CACHE INTERNAL "Path to stm32u5xx_hal_conf.h for use by stm32u5xx_hal_driver lib")
 set(STM32U5_LINKER_SCRIPT_PATH ${BSP_PATH}/GCC/STM32U5A5AJHXQ_FLASH.ld CACHE INTERNAL "Path to CMAKE_EXE_LINKER_FLAG use by gcc-arm-flags.cmake")
 set(STM32U5_MCU_MODEL STM32U5A5xx CACHE INTERNAL "STM32U5 MCU model definition use by stm32u5xx_hal_driver lib")
@@ -32,6 +32,7 @@ target_sources(hardware
         ${BSP_PATH}/quasar_led.c
         ${BSP_PATH}/quasar_memory.c
         ${BSP_PATH}/quasar_power.c
+        ${BSP_PATH}/quasar_profiler.c
         ${BSP_PATH}/quasar_pwm.c
         ${BSP_PATH}/quasar_radio.c
         ${BSP_PATH}/quasar_rgb.c

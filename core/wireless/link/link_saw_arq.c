@@ -11,16 +11,23 @@
 #include "link_saw_arq.h"
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-void link_saw_arq_init(saw_arq_t *saw_arq, uint16_t ttl_tick, uint16_t ttl_retries,
-                       bool init_board_seq, bool enable)
+void link_saw_arq_init(saw_arq_t *saw_arq, uint16_t ttl_tick, uint16_t ttl_retries, uint8_t init_board_seq, bool enable)
 {
-    saw_arq->ttl_tick        = ttl_tick;
-    saw_arq->ttl_retries     = ttl_retries;
-    saw_arq->seq_num         = init_board_seq;
-    saw_arq->duplicate       = false;
+    saw_arq->ttl_tick = ttl_tick;
+    saw_arq->ttl_retries = ttl_retries;
+    saw_arq->default_seq_num = init_board_seq;
+    saw_arq->seq_num = init_board_seq;
+    saw_arq->duplicate = false;
     saw_arq->duplicate_count = 0;
-    saw_arq->retry_count     = 0;
-    saw_arq->enable          = enable;
+    saw_arq->retry_count = 0;
+    saw_arq->enable = enable;
+}
+
+void link_saw_arq_reset(saw_arq_t *saw_arq)
+{
+    if (saw_arq->enable) {
+        saw_arq->seq_num = saw_arq->default_seq_num;
+    }
 }
 
 bool link_saw_arq_is_frame_timeout(saw_arq_t *saw_arq, uint64_t time_stamp, uint16_t retry_count, uint64_t current_time)

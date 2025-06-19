@@ -200,7 +200,7 @@ static inline uint8_t link_scheduler_get_next_timeslot_index(scheduler_t *schedu
 
 /** @brief Get sleep the amount of time to sleep in PLL cycles.
  *
- *  @param[in]   scheduler  Scheduler object.
+ *  @param[in]  scheduler  Scheduler object.
  *  @return time to sleep in PLL cycles.
  */
 static inline uint32_t link_scheduler_get_sleep_time(scheduler_t *scheduler)

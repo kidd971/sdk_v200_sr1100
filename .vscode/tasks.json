@@ -69,6 +69,12 @@
                 "Reload Window"
             ],
             "problemMatcher": []
+        },
+        {
+            "label": "[DFU/STM32] Flash binary",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/script/dfu-util.py ${command:cmake.selectLaunchTarget}",
+            "problemMatcher": []
         }
     ]
 }

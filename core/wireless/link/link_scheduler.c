@@ -31,8 +31,8 @@ void link_scheduler_reset(scheduler_t *scheduler)
     memset(scheduler->schedule.timeslot, 0, scheduler->schedule.size * sizeof(timeslot_t));
     scheduler->schedule.size = 0;
     scheduler->current_time_slot_num = 0;
-    scheduler->sleep_cycles          = 0;
-    scheduler->tx_disabled           = false;
+    scheduler->sleep_cycles = 0;
+    scheduler->tx_disabled = false;
 }
 
 uint8_t link_scheduler_increment_time_slot(scheduler_t *scheduler)
@@ -70,7 +70,7 @@ static inline bool time_slot_is_empty(scheduler_t *scheduler, timeslot_t *time_s
         return true;
     }
 
-    if ((scheduler->tx_disabled) && (time_slot->connection_main[0]->source_address == scheduler->local_addr)) {
+    if ((scheduler->tx_disabled) && (time_slot->connection_main[0]->cfg.source_address == scheduler->local_addr)) {
         return true;
     }
 

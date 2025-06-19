@@ -9,12 +9,13 @@
  */
 
 /* INCLUDES *******************************************************************/
+#include "dataforge.h"
 #include <stdbool.h>
 #include <string.h>
-#include "dataforge.h"
 
 /* MACRO **********************************************************************/
-#define EXTRACT_BYTE(x, n) (((x) >> (8 * (n))) & 0x00ff) /*!< Extract the nth (0 = 1st, 1 = 2nd,..) byte from an int */
+/*!< Extract the nth (0 = 1st, 1 = 2nd,..) byte from an int */
+#define EXTRACT_BYTE(x, n) (((x) >> (8 * (n))) & 0x00ff)
 
 /* CONSTANTS ******************************************************************/
 #define CRC_TYPE          0xBAAD
@@ -39,17 +40,15 @@ void dataforge_generate_pseudo(uint8_t *data, size_t size, uint8_t seq_num)
     data[SEQ_NUM_INDEX] = seq_num;
 
     if (size > CRC_SIZE) {
-        serialize_uint32_to_uint8_array(
-            get_crc(CRC_TYPE, data, size - CRC_SIZE), &data[size - CRC_SIZE]);
+        serialize_uint32_to_uint8_array(get_crc(CRC_TYPE, data, size - CRC_SIZE), &data[size - CRC_SIZE]);
     }
     k++;
 }
 
 bool dataforge_validate_pseudo_crc(uint8_t *data, size_t size)
 {
-    uint32_t crc    = get_crc(0xBAAD, data, size - CRC_SIZE);
-    uint32_t crc_in = data[size - 1] | (data[size - 2] << 8) |
-                              (data[size - 3] << 16) | (data[size - 4] << 24);
+    uint32_t crc = get_crc(0xBAAD, data, size - CRC_SIZE);
+    uint32_t crc_in = data[size - 1] | (data[size - 2] << 8) | (data[size - 3] << 16) | (data[size - 4] << 24);
     return crc_in == crc;
 }
 
@@ -135,22 +134,8 @@ static void serialize_uint32_to_uint8_array(uint32_t in_data, uint8_t *out_data)
 static uint32_t get_crc(uint32_t crc, const void *buffer, size_t size)
 {
     static const uint32_t rtable[16] = {
-        0x00000000,
-        0x1db71064,
-        0x3b6e20c8,
-        0x26d930ac,
-        0x76dc4190,
-        0x6b6b51f4,
-        0x4db26158,
-        0x5005713c,
-        0xedb88320,
-        0xf00f9344,
-        0xd6d6a3e8,
-        0xcb61b38c,
-        0x9b64c2b0,
-        0x86d3d2d4,
-        0xa00ae278,
-        0xbdbdf21c,
+        0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+        0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c, 0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c,
     };
 
     const uint8_t *data = buffer;

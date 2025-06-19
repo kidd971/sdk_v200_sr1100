@@ -63,8 +63,7 @@ void wps_phy_end_process(wps_phy_t *wps_phy)
                           wps_phy->config->rssi_raw);
 }
 
-void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
-                            reg_write_cfg_t cfg)
+void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg)
 {
     phy_write_register(wps_phy, starting_reg, data, cfg);
 }
@@ -74,15 +73,9 @@ void wps_phy_clear_write_register(wps_phy_t *wps_phy)
     phy_clear_write_register(wps_phy);
 }
 
-void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer,
-                           bool *xfer_cmplt)
+void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt)
 {
     phy_read_register(wps_phy, target_register, rx_buffer, xfer_cmplt);
-}
-
-void wps_phy_enable_debug_feature(wps_phy_t *wps_phy, phy_debug_cfg_t *phy_debug)
-{
-    phy_enable_debug_feature(wps_phy, phy_debug);
 }
 
 /* PRIVATE FUNCTION DEFINITIONS ***********************************************/

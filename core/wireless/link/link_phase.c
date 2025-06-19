@@ -57,7 +57,7 @@ uint8_t link_phase_get_metrics_array(link_phase_t *link_phase, phase_infos_t **p
 bool link_phase_done(link_phase_t *link_phase)
 {
     link_phase->was_phase_read = true;
-    link_phase->current_sample_count  = 0;
+    link_phase->current_sample_count = 0;
 
     return link_phase->was_phase_read;
 }

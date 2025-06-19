@@ -8,15 +8,15 @@
  */
 
 /* INCLUDES *******************************************************************/
+#include "uwb_log.h"
 #include <stdarg.h>
 #include <stdbool.h>
 #include <string.h>
-#include "uwb_log.h"
 
 /* TYPES **********************************************************************/
 typedef struct log_header {
     uint32_t ts;
-    uint8_t  level;
+    uint8_t level;
 } log_header_t;
 
 /* PRIVATE GLOBALS ************************************************************/
@@ -61,9 +61,9 @@ void uwb_log_init(uwb_log_t *log, log_config_t config)
 void uwb_vlog(uwb_log_t *log, log_error_t *err, log_level_t level, const char *fmt, va_list args)
 {
     char log_buf[MAX_LOG_SIZE];
-    circ_buff_error_t cb_err;
+    circ_buff_error_t cb_err = CIRC_BUFF_ERR_NONE;
     size_t str_size = 0;
-    uint32_t ts;
+    uint32_t ts = 0;
 
     *err = LOG_ERR_NONE;
 
@@ -131,11 +131,11 @@ void uwb_vlog(uwb_log_t *log, log_error_t *err, log_level_t level, const char *f
  */
 void uwb_log(uwb_log_t *log, log_error_t *err, log_level_t level, const char *fmt, ...)
 {
-        va_list  args;
+    va_list args = {0};
 
-        va_start(args, fmt);
-        uwb_vlog(log, err, level, fmt, args);
-        va_end(args);
+    va_start(args, fmt);
+    uwb_vlog(log, err, level, fmt, args);
+    va_end(args);
 }
 
 /** @brief Output log when deferred mode is enabled
@@ -149,10 +149,10 @@ void uwb_log(uwb_log_t *log, log_error_t *err, log_level_t level, const char *fm
  */
 bool uwb_log_dump(uwb_log_t *log, log_error_t *err)
 {
-    log_header_t log_header;
+    log_header_t log_header = {0};
     size_t str_size = 0;
-    circ_buff_error_t cb_err;
-    char log_buf[MAX_LOG_SIZE];
+    circ_buff_error_t cb_err = CIRC_BUFF_ERR_NONE;
+    char log_buf[MAX_LOG_SIZE] = {0};
 
     *err = LOG_ERR_NONE;
 

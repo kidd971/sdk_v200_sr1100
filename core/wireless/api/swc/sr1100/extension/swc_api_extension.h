@@ -36,22 +36,24 @@ typedef enum swc_ext_error {
     SWC_EXT_ERR_TX_PULSE_GAIN,
     /*! The configured RX pulse count is invalid. */
     SWC_EXT_ERR_RX_PULSE_COUNT,
-    /*! The syncword index is out of range. */
-    SWC_EXT_ERR_SYNCWORD_INDEX_OUT_OF_RANGE,
-    /*! The syncword length is invalid. */
-    SWC_EXT_ERR_SYNCWORD_LENGTH_INVALID,
+    /*! The SFD index is out of range. */
+    SWC_EXT_ERR_SFD_INDEX_OUT_OF_RANGE,
+    /*! The SFD length is invalid. */
+    SWC_EXT_ERR_SFD_LENGTH_INVALID,
     /*! The preamble length is out of range. */
     SWC_EXT_ERR_PREAMBLE_LENGTH_OUT_OF_RANGE,
     /*! The crc value is out of range. */
     SWC_EXT_ERR_CRC_VALUE_OUT_OF_RANGE,
-    /*! The sync word bit cost is out of range. */
-    SWC_EXT_ERR_SYNC_WORD_BIT_COST_OUT_OF_RANGE,
-    /*! The sync word tolerance is out of range. */
-    SWC_EXT_ERR_SYNC_WORD_TOLERANCE_OUT_OF_RANGE,
-    /*! The CCA Treshold is out of range. */
-    SWC_EXT_ERR_CCA_TRESHOLD_OUT_OF_RANGE,
-    /*! The RDO increment steps is bigger than the total number of pll steps. */
-    SWC_EXT_ERR_RDO_INC_STEP_INVALID,
+    /*! The SFD bit cost is out of range. */
+    SWC_EXT_ERR_SFD_BIT_COST_OUT_OF_RANGE,
+    /*! The SFD tolerance is out of range. */
+    SWC_EXT_ERR_SFD_TOLERANCE_OUT_OF_RANGE,
+    /*! The CCA threshold is out of range. */
+    SWC_EXT_ERR_CCA_THRESHOLD_OUT_OF_RANGE,
+    /*! The CCA retry time is out of range. */
+    SWC_EXT_ERR_CCA_RETRY_TIME_OUT_OF_RANGE,
+    /*! The CCA on time is out of range. */
+    SWC_EXT_ERR_CCA_ON_TIME_OUT_OF_RANGE,
     /*! The DDCM max timeslot value is out of range. */
     SWC_EXT_ERR_DDCM_MAX_TIMESLOT_OFFSET_OUT_OF_RANGE,
     /*! The DDCM sync loss value is out of range. */
@@ -88,54 +90,50 @@ typedef enum swc_ext_warning {
 } swc_ext_warning_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-/** @brief Set the sync word index of the SPARK Wireless node.
+/** @brief Set the SFD index of the SPARK Wireless node.
  *
- *  @param[in] node          SPARK Wireless Core node structure.
- *  @param[in] syncword_idx  Sync word index.
- *  @param[out] err          SWC API extension error.
- *  @param[out] warn         SWC API extension warning.
+ *  @param[in]  node     SPARK Wireless Core node structure.
+ *  @param[in]  sfd_idx  SFD index.
+ *  @param[out] err      SWC API extension error.
+ *  @param[out] warn     SWC API extension warning.
  */
-void swc_ext_set_syncword(const swc_node_t *const node, uint32_t sync_word_idx, swc_ext_error_t *err,
-                          swc_ext_warning_t *warn);
+void swc_ext_set_sfd(const swc_node_t *const node, uint32_t sfd_idx, swc_ext_error_t *err, swc_ext_warning_t *warn);
 
-/** @brief Set the sync word length of the SPARK Wireless node.
+/** @brief Set the SFD length of the SPARK Wireless node.
  *
- *  @param[in] node             SPARK Wireless Core node structure.
- *  @param[in] syncword_length  Sync word length.
- *  @param[out] err             SWC API extension error.
- *  @param[out] warn            SWC API extension warning.
+ *  @param[in]  node        SPARK Wireless Core node structure.
+ *  @param[in]  sfd_length  SFD length.
+ *  @param[out] err         SWC API extension error.
+ *  @param[out] warn        SWC API extension warning.
  */
-void swc_ext_set_syncword_length(const swc_node_t *const node, syncword_length_t syncword_length, swc_ext_error_t *err,
-                                 swc_ext_warning_t *warn);
+void swc_ext_set_sfd_length(const swc_node_t *const node, sfd_length_t sfd_length, swc_ext_error_t *err,
+                            swc_ext_warning_t *warn);
 
 /** @brief Set the preamble length of the SPARK Wireless node.
  *
- *  @param[in] node          SPARK Wireless Core node structure.
- *  @param[in] preamble_len  Preamble length.
- *  @param[out] err          SWC API extension error.
- *  @param[out] warn         SWC API extension warning.
+ *  @param[in]  node          SPARK Wireless Core node structure.
+ *  @param[in]  preamble_len  Preamble length, register value.
+ *  @param[out] err           SWC API extension error.
+ *  @param[out] warn          SWC API extension warning.
  */
-void swc_ext_set_preamble_length(const swc_node_t *const node, uint32_t preamble_length, swc_ext_error_t *err,
+void swc_ext_set_preamble_length(const swc_node_t *const node, uint32_t preamble_length_reg, swc_ext_error_t *err,
                                  swc_ext_warning_t *warn);
 
 /** @brief Set the CRC of the SPARK Wireless node.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
- *  @param[in] crc    CRC value.
- *  @param[out] err   SWC API extension error.
- *  @param[out] warn  SWC API extension warning.
+ *  @param[in]  node SPARK Wireless Core node structure.
+ *  @param[in]  crc  CRC value.
+ *  @param[out] err  SWC API extension error.
+ *  @param[out] warn SWC API extension warning.
  */
 void swc_ext_set_crc(const swc_node_t *const node, uint32_t crc, swc_ext_error_t *err, swc_ext_warning_t *warn);
 
 /** @brief Enable SPARK Wireless Core random data rate offset.
  *
- *  @param[in] total_number_of_pll_steps  Total number of PLL steps.
- *  @param[in] increment_steps            Number of increment step between each iteration.
- *  @param[out] err                       SWC API extension error.
- *  @param[out] warn                      SWC API extension warning.
+ *  @param[out] err   SWC API extension error.
+ *  @param[out] warn  SWC API extension warning.
  */
-void swc_ext_enable_rdo(uint32_t total_number_of_pll_steps, uint32_t increment_steps, swc_ext_error_t *err,
-                        swc_ext_warning_t *warn);
+void swc_ext_enable_rdo(swc_ext_error_t *err, swc_ext_warning_t *warn);
 
 /** @brief Disable SPARK Wireless Core random data rate offset.
  *
@@ -146,7 +144,7 @@ void swc_ext_disable_rdo(swc_ext_error_t *err, swc_ext_warning_t *warn);
 
 /** @brief Enable SPARK Wireless Core transmission jitter.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
+ *  @param[in]  node  SPARK Wireless Core node structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -154,7 +152,7 @@ void swc_ext_enable_tx_jitter(const swc_node_t *const node, swc_ext_error_t *err
 
 /** @brief Disable SPARK Wireless Core transmission jitter.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
+ *  @param[in]  node  SPARK Wireless Core node structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -162,17 +160,17 @@ void swc_ext_disable_tx_jitter(const swc_node_t *const node, swc_ext_error_t *er
 
 /** @brief Set and enable SPARK Wireless Core reception gain for a connection.
  *
- *  @param[in] conn     SPARK Wireless Core connection structure.
- *  @param[in] rx_gain  Reception amplifier gain.
- *  @param[out] err     SWC API extension error.
- *  @param[out] warn    SWC API extension warning.
+ *  @param[in]  conn     SPARK Wireless Core connection structure.
+ *  @param[in]  rx_gain  Reception amplifier gain.
+ *  @param[out] err      SWC API extension error.
+ *  @param[out] warn     SWC API extension warning.
  */
 void swc_ext_connection_disable_gain_loop(const swc_connection_t *const conn, uint8_t rx_gain, swc_ext_error_t *err,
                                           swc_ext_warning_t *warn);
 
 /** @brief Disable SPARK Wireless Core reception fixed gain for a connection, thus enabling gain loop.
  *
- *  @param[in] conn   SPARK Wireless Core connection structure.
+ *  @param[in]  conn  SPARK Wireless Core connection structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -181,7 +179,7 @@ void swc_ext_connection_enable_gain_loop(const swc_connection_t *const conn, swc
 
 /** @brief Disable PLL SPARK Wireless Core node.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
+ *  @param[in]  node  SPARK Wireless Core node structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -189,7 +187,7 @@ void swc_ext_pll_disable(const swc_node_t *const node, swc_ext_error_t *err, swc
 
 /** @brief Enable PLL SPARK Wireless Core node.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
+ *  @param[in]  node  SPARK Wireless Core node structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -197,7 +195,7 @@ void swc_ext_pll_enable(const swc_node_t *const node, swc_ext_error_t *err, swc_
 
 /** @brief Enable XTAL clock SPARK Wireless Core node.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
+ *  @param[in]  node  SPARK Wireless Core node structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -205,7 +203,7 @@ void swc_ext_xtal_enable(swc_node_t *node, swc_ext_error_t *err, swc_ext_warning
 
 /** @brief Disable XTAL clock SPARK Wireless Core node.
  *
- *  @param[in] node   SPARK Wireless Core node structure.
+ *  @param[in]  node  SPARK Wireless Core node structure.
  *  @param[out] err   SWC API extension error.
  *  @param[out] warn  SWC API extension warning.
  */
@@ -213,13 +211,13 @@ void swc_ext_xtal_disable(const swc_node_t *const node, swc_ext_error_t *err, sw
 
 /** @brief Set a channel configuration on a connection.
  *
- *  @param[in] node          SPARK Wireless Core node structure.
- *  @param[in] conn          SPARK Wireless Core connection structure to apply new channel.
- *  @param[in] new_channel   New channel configuration structure.
- *  @param[in] chan_idx      Channel Index.
- *  @param[out] err          SWC API extension error.
- *  @param[out] warn         SWC API extension warning.
- *  @param[in] fallback_idx  Configure the fallback channel if true.
+ *  @param[in]  node          SPARK Wireless Core node structure.
+ *  @param[in]  conn          SPARK Wireless Core connection structure to apply new channel.
+ *  @param[in]  new_channel   New channel configuration structure.
+ *  @param[in]  chan_idx      Channel Index.
+ *  @param[out] err           SWC API extension error.
+ *  @param[out] warn          SWC API extension warning.
+ *  @param[in]  fallback_idx  Configure the fallback channel if true.
  */
 void swc_ext_set_connection_channel(const swc_node_t *const node, const swc_connection_t *const conn,
                                     channel_cfg_t new_channel, uint8_t chan_idx, uint8_t fallback_idx,
@@ -227,28 +225,28 @@ void swc_ext_set_connection_channel(const swc_node_t *const node, const swc_conn
 
 /** @brief Set the number of most significant bit of the address to use for network id purposes.
  *
- *  @param[in] msbits_count  Most significant bits count.
- *  @param[out] err          SWC API extension error.
- *  @param[out] warn         SWC API extension warning.
+ *  @param[in]  msbits_count  Most significant bits count.
+ *  @param[out] err           SWC API extension error.
+ *  @param[out] warn          SWC API extension warning.
  */
 void swc_ext_set_network_msbit_count(uint8_t msbits_count, swc_ext_error_t *err, swc_ext_warning_t *warn);
 
 /** @brief Set the chip rate of the SPARK Wireless Core node.
  *
- *  @param[in] node       SPARK Wireless Core node structure.
- *  @param[in] chip_rate  Chip rate value.
- *  @param[out] err       SWC API extension error.
- *  @param[out] warn      SWC API extension warning.
+ *  @param[in]  node       SPARK Wireless Core node structure.
+ *  @param[in]  chip_rate  Chip rate value.
+ *  @param[out] err        SWC API extension error.
+ *  @param[out] warn       SWC API extension warning.
 
  */
 void swc_ext_set_chip_rate(swc_node_t *node, chip_rate_cfg_t chip_rate, swc_ext_error_t *err, swc_ext_warning_t *warn);
 
 /** @brief Return integgain value based on radio chip rate, modulation and pulse_count
  *
- *  @param[in] chip_rate    Radio PHY Rate.
- *  @param[in] pulse_count  Channel pulse count.
- *  @param[out] err         SWC API extension error.
- *  @param[out] warn        SWC API extension warning.
+ *  @param[in]  chip_rate    Radio PHY Rate.
+ *  @param[in]  pulse_count  Channel pulse count.
+ *  @param[out] err          SWC API extension error.
+ *  @param[out] warn         SWC API extension warning.
  *  @return Channel integgain.
  */
 uint8_t swc_ext_get_integgain(chip_rate_cfg_t chip_rate, uint8_t pulse_count, swc_ext_error_t *err,
@@ -256,10 +254,10 @@ uint8_t swc_ext_get_integgain(chip_rate_cfg_t chip_rate, uint8_t pulse_count, sw
 
 /** @brief Enable Distributed De-syncronization Concurrency Mechanism.
  *
- *  @param[in] max_timeslot_offset         Maximum offset to apply every timeslot in pll cycles.
- *  @param[in] sync_loss_max_duration_pll  Maximum sync lost pll cycles before applying unsync tx offset.
- *  @param[out] err                        SWC API extension error.
- *  @param[out] warn                       SWC API extension warning.
+ *  @param[in]  max_timeslot_offset         Maximum offset to apply every timeslot in pll cycles.
+ *  @param[in]  sync_loss_max_duration_pll  Maximum sync lost pll cycles before applying unsync tx offset.
+ *  @param[out] err                         SWC API extension error.
+ *  @param[out] warn                        SWC API extension warning.
  */
 void swc_ext_enable_ddcm(uint16_t max_timeslot_offset, uint32_t sync_loss_max_duration_pll, swc_ext_error_t *err,
                          swc_ext_warning_t *warn);
@@ -275,20 +273,20 @@ void swc_ext_disable_ddcm(swc_ext_error_t *err, swc_ext_warning_t *warn);
  *
  *  @note Fallback can have multiple layer.
  *
- *  @param[in] conn             Connection to apply fallback on.
- *  @param[in] threshold        Threshold array for each fallback layer.
- *  @param[in] threshold_count  Number of Threshold fallback layer.
- *  @param[out] err             SWC API extension error.
- *  @param[out] warn            SWC API extension warning.
+ *  @param[in]  conn             Connection to apply fallback on.
+ *  @param[in]  threshold        Threshold array for each fallback layer.
+ *  @param[in]  threshold_count  Number of Threshold fallback layer.
+ *  @param[out] err              SWC API extension error.
+ *  @param[out] warn             SWC API extension warning.
  */
 void swc_ext_enable_fallback(const swc_connection_t *const conn, const uint8_t *const threshold,
                              uint8_t threshold_count, swc_ext_error_t *err, swc_ext_warning_t *warn);
 
 /** @brief Disable fallback mechanism.
  *
- *  @param[in] conn             Connection to apply fallback on.
- *  @param[out] err             SWC API extension error.
- *  @param[out] warn            SWC API extension warning.
+ *  @param[in]  conn  Connection to apply fallback on.
+ *  @param[out] err   SWC API extension error.
+ *  @param[out] warn  SWC API extension warning.
  */
 void swc_ext_disable_fallback(const swc_connection_t *const conn, swc_ext_error_t *err, swc_ext_warning_t *warn);
 
@@ -299,15 +297,35 @@ void swc_ext_disable_fallback(const swc_connection_t *const conn, swc_ext_error_
  *  @param[in] err            SWC API extension error.
  *  @param[in] warn           SWC API extension warning.
  */
-void swc_ext_set_cca_treshold(const swc_connection_t *const conn, const uint8_t cca_threshold, swc_ext_error_t *err,
-                              swc_ext_warning_t *warn);
+void swc_ext_set_cca_threshold(const swc_connection_t *const conn, const uint8_t cca_threshold, swc_ext_error_t *err,
+                               swc_ext_warning_t *warn);
+
+/** @brief Set CCA retry time.
+ *
+ *  @param[in] conn            Connection to apply CCA on time.
+ *  @param[in] cca_retry_time  CCA retry time.
+ *  @param[in] err             SWC API extension error.
+ *  @param[in] warn            SWC API extension warning.
+ */
+void swc_ext_set_cca_retry_time(const swc_connection_t *const conn, const uint16_t cca_retry_time, swc_ext_error_t *err,
+                                swc_ext_warning_t *warn);
+
+/** @brief Set CCA on time.
+ *
+ *  @param[in] conn           Connection to apply CCA on time.
+ *  @param[in] cca_on_time    CCA on time.
+ *  @param[in] err            SWC API extension error.
+ *  @param[in] warn           SWC API extension warning.
+ */
+void swc_ext_set_cca_on_time(const swc_connection_t *const conn, const uint8_t cca_on_time, swc_ext_error_t *err,
+                             swc_ext_warning_t *warn);
 
 /** @brief Set fallback CCA try count.
  *
- *  @param[in] conn             Connection to apply fallback on.
- *  @param[in] fbk_try_count    CCA fallback try count.
- *  @param[out] err             SWC API extension error.
- *  @param[out] warn            SWC API extension warning.
+ *  @param[in]  conn           Connection to apply fallback on.
+ *  @param[in]  fbk_try_count  CCA fallback try count.
+ *  @param[out] err            SWC API extension error.
+ *  @param[out] warn           SWC API extension warning.
  */
 void swc_ext_set_fallback_cca_try_count(const swc_connection_t *const conn, const uint8_t *const fbk_try_count,
                                         swc_ext_error_t *err, swc_ext_warning_t *warn);
@@ -325,7 +343,7 @@ void swc_ext_set_fallback_cca_try_count(const swc_connection_t *const conn, cons
  *  @param[out] xfer_cmplt       Bool to notify app that transfer is complete.
  *  @param[out] err              SWC API extension error.
  */
-void swc_ext_request_register_read(uint8_t target_register, uint16_t *const rx_buffer, bool *const xfer_cmplt,
+void swc_ext_request_register_read(uint8_t target_register, uint16_t *const rx_buffer, volatile bool *xfer_cmplt,
                                    swc_ext_error_t *err);
 
 /** @brief Request a write register on the WPS.
@@ -337,10 +355,10 @@ void swc_ext_request_register_read(uint8_t target_register, uint16_t *const rx_b
  *        If cfg is WRITE_PERIODIC, the register will be
  *        writen every time slot with the value.
  *
- *  @param[in] target_register  Starting radio register.
- *  @param[in] data             Byte to send.
- *  @param[in] cfg              Write config.
- *  @param[out] err             SWC API extension error.
+ *  @param[in]  target_register  Starting radio register.
+ *  @param[in]  data             Byte to send.
+ *  @param[in]  cfg              Write config.
+ *  @param[out] err              SWC API extension error.
  */
 void swc_ext_request_register_write(uint8_t target_register, uint16_t data, reg_write_cfg_t cfg, swc_ext_error_t *err);
 
@@ -352,15 +370,23 @@ void swc_ext_request_register_write(uint8_t target_register, uint16_t data, reg_
  */
 void swc_ext_clear_register_write(swc_ext_error_t *err);
 
-/** @brief Return calibration variable of target radio.
+/** @brief Return 20.48 MHz calibration variable of target radio.
  *
  *  @param[in]  radio_num  Radio number.
  *  @param[out] err        SWC API extension error.
  *  @return  Calibration variable structure.
  */
-calib_vars_t *swc_ext_get_calib_vars(uint8_t radio_num, swc_ext_error_t *err);
+calib_vars_t *swc_ext_get_calib_vars_20_48(uint8_t radio_num, swc_ext_error_t *err);
 
-/** @brief Return the radio channel structure for a given connection.
+/** @brief Return 40.96 MHz calibration variable of target radio.
+ *
+ *  @param[in]  radio_num  Radio number.
+ *  @param[out] err        SWC API extension error.
+ *  @return  Calibration variable structure.
+ */
+calib_vars_t *swc_ext_get_calib_vars_40_96(uint8_t radio_num, swc_ext_error_t *err);
+
+/** @brief Return the 20.48 MHz radio channel structure for a given connection.
  *
  *  @param[in]  connection    Connection to get the channel info.
  *  @param[in]  channel_num   Channel number.
@@ -369,8 +395,20 @@ calib_vars_t *swc_ext_get_calib_vars(uint8_t radio_num, swc_ext_error_t *err);
  *  @param[out] err           SWC API extension error.
  *  @return  Channel info structure.
  */
-rf_channel_t *swc_ext_connection_get_channel_info(const swc_connection_t *const connection, uint8_t channel_num,
-                                                  uint8_t fallback_idx, uint8_t radio_num, swc_ext_error_t *err);
+rf_channel_t *swc_ext_connection_get_channel_info_20_48(const swc_connection_t *const connection, uint8_t channel_num,
+                                                        uint8_t fallback_idx, uint8_t radio_num, swc_ext_error_t *err);
+
+/** @brief Return the 40.96 MHz radio channel structure for a given connection.
+ *
+ *  @param[in]  connection    Connection to get the channel info.
+ *  @param[in]  channel_num   Channel number.
+ *  @param[in]  fallback_idx  Fallback index number.
+ *  @param[in]  radio_num     Radio number.
+ *  @param[out] err           SWC API extension error.
+ *  @return  Channel info structure.
+ */
+rf_channel_t *swc_ext_connection_get_channel_info_40_96(const swc_connection_t *const connection, uint8_t channel_num,
+                                                        uint8_t fallback_idx, uint8_t radio_num, swc_ext_error_t *err);
 
 /** @brief Return number of configured channel.
  *

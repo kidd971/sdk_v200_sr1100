@@ -11,11 +11,11 @@
 #include "wps_utils.h"
 
 /* TYPES **********************************************************************/
-#define IOOK_FLIP_SYMBOL      4
-#define IOOK_FLIP_SYMBOL      4
-#define TWO_BIT_PPM_MODIFIER  2
-#define OTHER_MOD_MODIFIER    1
-#define SIZE_SYMBOL           8
+#define IOOK_FLIP_SYMBOL     4
+#define IOOK_FLIP_SYMBOL     4
+#define TWO_BIT_PPM_MODIFIER 2
+#define OTHER_MOD_MODIFIER   1
+#define SIZE_SYMBOL          8
 
 #if SR1100
 #define FEC_TRAIL_SYMBOL      4
@@ -34,19 +34,19 @@ const uint8_t fec_multiplier[] = {3, 4, 5, 6};
 int wps_utils_gcd(int number1, int number2)
 {
     int latest_remainder = number2; /* Remainder k - 1 */
-    int predecesor       = number1; /* Remainder k - 2 */
+    int predecesor = number1;       /* Remainder k - 2 */
     int temp_remainder;
 
     while (latest_remainder) {
-        temp_remainder   = latest_remainder;
+        temp_remainder = latest_remainder;
         latest_remainder = predecesor % temp_remainder;
-        predecesor       = temp_remainder;
+        predecesor = temp_remainder;
     }
 
     return predecesor;
 }
 
-uint32_t wps_utils_get_delayed_wakeup_event(uint32_t preamble_bits, uint32_t syncword_bits, bool iook, uint8_t fec,
+uint32_t wps_utils_get_delayed_wakeup_event(uint32_t preamble_bits, uint32_t sfd_bits, bool iook, uint8_t fec,
                                             bool mod_2bitppm, uint8_t chip_repet, uint8_t isi_mitig,
                                             uint8_t address_bits, uint32_t total_frame_size, uint32_t crc_bits,
                                             uint32_t cca_delay_pll, uint32_t cca_retry, bool ack,
@@ -59,11 +59,11 @@ uint32_t wps_utils_get_delayed_wakeup_event(uint32_t preamble_bits, uint32_t syn
     uint32_t ack_frame_symbol = (address_bits + SIZE_SYMBOL + (ack_payload_size * 8) + crc_bits + FEC_TRAIL_SYMBOL);
     uint32_t modulation_modifier = ((mod_2bitppm) ? TWO_BIT_PPM_MODIFIER : OTHER_MOD_MODIFIER);
     uint8_t isi_mitig_multiplier = (isi_mitig < 2) ? 0 : isi_mitig - 1;
-    uint32_t main_frame_clock_cycle = preamble_bits + syncword_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) +
+    uint32_t main_frame_clock_cycle = preamble_bits + sfd_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) +
                                       (main_frame_symbol * modulation_modifier * fec_multiplier[fec] * chip_repet) /
                                           FEC_DIVIDER +
                                       ((main_frame_symbol)*isi_mitig_multiplier);
-    uint32_t ack_frame_clock_cycle = preamble_bits + syncword_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) +
+    uint32_t ack_frame_clock_cycle = preamble_bits + sfd_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) +
                                      (ack_frame_symbol * modulation_modifier * fec_multiplier[fec] * chip_repet) /
                                          FEC_DIVIDER +
                                      ((ack_frame_symbol)*isi_mitig_multiplier);
@@ -85,11 +85,11 @@ uint32_t wps_utils_get_delayed_wakeup_event(uint32_t preamble_bits, uint32_t syn
                                 fec_multiplier[fec] * ((mod_2bitppm) ? TWO_BIT_PPM_MODIFIER : OTHER_MOD_MODIFIER) /
                                 FEC_DIVIDER;
     if (ack) {
-        return (preamble_bits + syncword_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) + main_frame_symbol) +
+        return (preamble_bits + sfd_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) + main_frame_symbol) +
                (cca_delay_pll * (cca_retry - 1)) + ACK_TURNAROUND_SYMBOL +
-               (preamble_bits + syncword_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) + ack_frame_symbol);
+               (preamble_bits + sfd_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) + ack_frame_symbol);
     } else {
-        return (preamble_bits + syncword_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) + main_frame_symbol) +
+        return (preamble_bits + sfd_bits + ((iook) ? IOOK_FLIP_SYMBOL : 0) + main_frame_symbol) +
                (cca_delay_pll * (cca_retry - 1));
     }
 #endif

@@ -14,16 +14,23 @@
 #include "wps_phy.h"
 
 /* CONSTANTS ******************************************************************/
-#define HDR_SIZE_SIZE                 1
-#define FAST_SYNC_TIMER_VALUE         32000
-#define MAX_SLP_TIME_VAL_16           0xFFFF
-#define MAX_SLP_TIME_VAL_8            0xFF
-#define MAX_RX_TIMEOUT_VALUE          0x1FFF
-#define FAST_SYNC_IDLE_SLEEP_VAL      0xFFFF
-#define FAST_SYNC_IDLE_TIMEOUT_VAL    (0xFFFF - 8)
-#define DISABLE_CCA_THRES             0
-#define CCA_RETRYHDR_MASK             0x0F
-#define RX_SAVED_BYTE_COUNT           2 /* Saved fields are SAVESIZE and RETRYHDR */
+#define HDR_SIZE_SIZE              1
+#define FAST_SYNC_TIMER_VALUE      32000
+#define MAX_SLP_TIME_VAL_16        0xFFFF
+#define MAX_SLP_TIME_VAL_8         0xFF
+#define MAX_RX_TIMEOUT_VALUE       0x1FFF
+#define FAST_SYNC_IDLE_SLEEP_VAL   0xFFFF
+#define FAST_SYNC_IDLE_TIMEOUT_VAL (0xFFFF - 8)
+#define DISABLE_CCA_THRES          0
+#define CCA_RETRYHDR_MASK          0x0F
+/*! Saved fields are SAVESIZE and RETRYHDR */
+#define RX_SAVED_BYTE_COUNT 2
+/*! Extra delay to mitigate ASIC bug causing false CCA triggers */
+#define EXTRA_BIAS_DELAY                  1
+#define SET_PHASE_OFFSET_BYTES(isi_mitig) ((isi_mitig == 3) ? (16) : (4 * (isi_mitig + 2)))
+/*! Timeout in milliseconds to wait for the interrupt trigger by the dummy TX done during init. */
+#define INIT_DUMMY_TX_TIMEOUT_MS 10
+#define MS_TO_S_FACTOR           1000
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void prepare_phy(wps_phy_t *phy);
@@ -42,6 +49,8 @@ static void process_event_tx(wps_phy_t *phy);
 static void process_event_rx(wps_phy_t *phy);
 static void handle_good_frame(wps_phy_t *phy);
 static void handle_good_auto_reply(wps_phy_t *phy);
+static void read_cir_indicator(wps_phy_t *phy);
+static void read_cir_indicator_auto(wps_phy_t *phy);
 static void get_frame_header(wps_phy_t *phy);
 static void get_auto_reply_header(wps_phy_t *phy);
 static void get_payload(wps_phy_t *phy);
@@ -54,8 +63,7 @@ static void prepare_syncing(wps_phy_t *phy);
 static void transfer_register(wps_phy_t *phy);
 static void overwrite_registers(wps_phy_t *phy);
 static void overwrite_queue_get_next(circular_queue_t *queue, void **it);
-static void overwrite_queue_add_transfer(circular_queue_t *queue, void *it, uint8_t starting_reg,
-                                         uint16_t data);
+static void overwrite_queue_add_transfer(circular_queue_t *queue, void *it, uint8_t starting_reg, uint16_t data);
 #endif
 static bool main_is_tx(wps_phy_t *phy);
 static bool auto_is_tx(wps_phy_t *phy);
@@ -75,25 +83,28 @@ static void set_events_for_empty_tx(wps_phy_t *phy);
 static void enqueue_states(wps_phy_t *wps_phy, wps_phy_state_t *state);
 static void init_transfer_structures(wps_phy_t *wps_phy);
 static void fast_sync_config_non_stop_rx(wps_phy_t *phy);
+static void handle_dummy_tx_events(wps_phy_t *wps_phy);
 
 /* TYPES **********************************************************************/
-static wps_phy_state_t prepare_phy_states[]             = {prepare_phy, end};
-static wps_phy_state_t set_config_states[]              = {set_config, close_spi, end};
-static wps_phy_state_t set_header_states[]              = {close_spi, set_header, end};
-static wps_phy_state_t set_payload_states[]             = {set_payload, end};
+static wps_phy_state_t prepare_phy_states[] = {prepare_phy, end};
+static wps_phy_state_t set_config_states[] = {set_config, close_spi, end};
+static wps_phy_state_t set_header_states[] = {close_spi, set_header, end};
+static wps_phy_state_t set_payload_states[] = {set_payload, end};
 static wps_phy_state_t set_header_with_payload_states[] = {close_spi, set_header_and_payload, end};
-static wps_phy_state_t wait_radio_states_tx[]           = {close_spi, enable_radio_irq, read_events,
-                                                           close_spi, process_event_tx, end};
-static wps_phy_state_t wait_radio_states_rx[]           = {close_spi, enable_radio_irq, read_events,
-                                                           close_spi, process_event_rx, end};
-static wps_phy_state_t get_frame_header_states[]        = {close_spi, get_frame_header, end};
-static wps_phy_state_t get_auto_reply_header_states[]   = {close_spi, get_auto_reply_header, end};
-static wps_phy_state_t get_payload_states[]             = {get_payload, end};
-static wps_phy_state_t new_frame_states[]               = {close_spi, end};
-static wps_phy_state_t syncing_states[] = {read_events_syncing, close_spi, process_event_rx, end};
+static wps_phy_state_t wait_radio_states_tx[] = {close_spi, enable_radio_irq, read_events,
+                                                 close_spi, process_event_tx, end};
+static wps_phy_state_t wait_radio_states_rx[] = {close_spi, enable_radio_irq, read_events,
+                                                 close_spi, process_event_rx, end};
+static wps_phy_state_t handle_good_frame_states[] = {close_spi, handle_good_frame, end};
+static wps_phy_state_t handle_good_frame_auto_states[] = {close_spi, handle_good_auto_reply, end};
+static wps_phy_state_t get_frame_header_states[] = {close_spi, get_frame_header, end};
+static wps_phy_state_t get_auto_reply_header_states[] = {close_spi, get_auto_reply_header, end};
+static wps_phy_state_t get_payload_states[] = {get_payload, end};
+static wps_phy_state_t new_frame_states[] = {close_spi, end};
+static wps_phy_state_t syncing_states[] = {prepare_syncing, read_events_syncing, close_spi, process_event_rx, end};
 static wps_phy_state_t wait_to_send_auto_reply[] = {check_radio_irq, end};
 #if WPS_RADIO_COUNT == 1
-static wps_phy_state_t transfer_register_states[]  = {transfer_register, end};
+static wps_phy_state_t transfer_register_states[] = {transfer_register, end};
 static wps_phy_state_t overwrite_register_states[] = {overwrite_registers, end};
 #endif
 static wps_phy_state_t end_states[] = {none};
@@ -101,14 +112,6 @@ static wps_phy_state_t end_states[] = {none};
 /* PUBLIC FUNCTIONS ***********************************************************/
 void phy_init(wps_phy_t *wps_phy, wps_phy_cfg_t *cfg)
 {
-    if (wps_phy->debug_cfg.enable == false) {
-        wps_phy->debug_cfg.interleav                 = 0;
-        wps_phy->debug_cfg.preamble_detection        = SET_PREATRKBW(2) | SET_PREADETBW(2) |
-                                                SET_PREAMBTHR(12);
-        wps_phy->debug_cfg.syncword_detection = SET_SOFTSWTHR(10) | SET_SWBITTOL(2) | GAINCTBW_0b1;
-        wps_phy->debug_cfg.phase_offset_stats_enable = false;
-    }
-
     wps_phy->state_step = 0;
     wps_phy->radio = cfg->radio;
     wps_phy->local_address = cfg->local_address;
@@ -119,22 +122,25 @@ void phy_init(wps_phy_t *wps_phy, wps_phy_cfg_t *cfg)
     memset(&wps_phy->read_request_info, 0, sizeof(xlayer_request_info_t));
 
     circular_queue_init(&wps_phy->next_states, wps_phy->next_state_pool, PHY_STATE_Q_SIZE, sizeof(wps_phy_state_t **));
-    circular_queue_init(&wps_phy->overwrite_regs_queue, wps_phy->overwrite_regs_pool,
-                        PHY_OVERWRITE_REG_Q_SIZE, sizeof(reg_t));
+    circular_queue_init(&wps_phy->overwrite_regs_queue, wps_phy->overwrite_regs_pool, PHY_OVERWRITE_REG_Q_SIZE,
+                        sizeof(reg_t));
 
     init_transfer_structures(wps_phy);
 
-    /* Disable IRQ during INIT */
+    /* Ensure that IRQ and NVIC radio IRQ are disabled to prevent timing issue. */
     sr_access_write_reg16(wps_phy->radio->radio_id, REG16_IRQ, 0x0000);
+    sr_access_disable_radio_irq(wps_phy->radio->radio_id);
 
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_SYNCWORD_15_0, cfg->syncword_cfg.syncword);
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_SYNCWORD_31_16, cfg->syncword_cfg.syncword >> 16);
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_SFD_15_0, cfg->sfd_cfg.sfd);
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_SFD_31_16, cfg->sfd_cfg.sfd >> 16);
 
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_CRC_15_1, SET_CRC_POLY_15_1(cfg->crc_polynomial));
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_CRC_30_16, SET_CRC_POLY_15_1(cfg->crc_polynomial >> 15));
+    /*! Write CRC 15 down to 1. */
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_CRC_15_1, cfg->crc_polynomial);
+    /*! Write CRC 30 down to 16. */
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_CRC_30_16, cfg->crc_polynomial >> 16);
 
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_PREAMB_SWLEN,
-                          cfg->syncword_cfg.syncword_length | SET_PREAMBLEN(cfg->preamble_len));
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_PREAMB_SFDLEN,
+                          cfg->sfd_cfg.sfd_length | SET_PREAMBLEN(cfg->preamble_len_reg_val));
 
     sr_access_write_reg16(wps_phy->radio->radio_id, REG16_RX_TX_SIZEREG,
                           SET_TXPKTSIZE(MAX_FRAMESIZE) | SET_RXPKTSIZE(MAX_FRAMESIZE));
@@ -145,8 +151,6 @@ void phy_init(wps_phy_t *wps_phy, wps_phy_cfg_t *cfg)
                           cfg->sleep_lvl | SLPTIMEO_0b1 | SLPTXEND_0b1 | SLPRXEND_0b1);
 
     sr_access_write_reg8(wps_phy->radio->radio_id, REG8_ACTIONS, FLUSHTX_0b1 | FLUSHRX_0b1);
-
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_IRQ, RXENDE_0b1 | TIMEOUTE_0b1 | TXENDE_0b1);
 
     sr_access_write_reg16(wps_phy->radio->radio_id, REG16_PRELUDE, REG16_PRELUDE_OPT);
 
@@ -159,37 +163,52 @@ void phy_init(wps_phy_t *wps_phy, wps_phy_cfg_t *cfg)
      *     on a timeout event, enabling this prevents double timeout IRQ problems and
      *     also optimize the system for power correctly.
      */
-    if (wps_phy->debug_cfg.phase_offset_stats_enable) {
+    if (cfg->isi_indicator_enabled) {
+        wps_phy->phase_offset_feature_enabled = true;
         sr_access_write_reg16(wps_phy->radio->radio_id, REG16_FRAMECFG_SAVETOBUF,
                               DEFAULT_PACKET_CONFIGURATION | SAVEPHS_0b1 | SAVECRC_0b1);
     } else {
+        wps_phy->phase_offset_feature_enabled = false;
+        wps_phy->phase_offset_bytes_to_read = 0;
         sr_access_write_reg16(wps_phy->radio->radio_id, REG16_FRAMECFG_SAVETOBUF,
                               DEFAULT_PACKET_CONFIGURATION | SAVECRC_0b1);
     }
 
     sr_access_write_reg16(wps_phy->radio->radio_id, REG16_RF_GAIN_MANUGAIN, SET_PKTRFGAIN(cfg->rx_gain));
 
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_PREAMB_DEBUG, wps_phy->spi_xfer.radio_cfg_out.preamb_debug);
+
     /* #4: The TXOVRFLI interrupt can trigger if the TX FIFO is being written when the transmitter wakes up. */
     sr_access_write_reg16(wps_phy->radio->radio_id, REG16_IRQTIME, DISABUFI_0b1);
 
-    sr_access_read_reg16(wps_phy->radio->radio_id, REG16_IRQ);
+    /* #3: Handle events of the dummy transmission. */
+    handle_dummy_tx_events(wps_phy);
 }
 
 void phy_connect(wps_phy_t *wps_phy)
 {
     sr_access_write_reg8(wps_phy->radio->radio_id, REG8_ACTIONS, FLUSHTX_0b1 | FLUSHRX_0b1 | INITIMER_0b1 | SLEEP_0b1);
 
-    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_TIMELIMIT_BIASDELAY, SET_TIMEOUT(TIMEOUT_VAL2RAW(0xFFFF)));
+    sr_access_write_reg16(wps_phy->radio->radio_id, REG16_TIMELIMIT_BIASDELAY,
+                          SET_TIMEOUT(TIMEOUT_VAL2RAW(0xFFFF)) | ALTRPLTO_0b1 | SET_BIASDELAY(EXTRA_BIAS_DELAY));
 
     sr_access_read_reg16(wps_phy->radio->radio_id, REG16_IRQ);
 
     sr_access_enable_radio_irq(wps_phy->radio->radio_id);
     sr_access_enable_dma_irq(wps_phy->radio->radio_id);
 
-    wps_phy->state_step    = 0;
+    wps_phy->state_step = 0;
     wps_phy->current_state = prepare_phy_states;
     circular_queue_init(&wps_phy->next_states, wps_phy->next_state_pool, PHY_STATE_Q_SIZE, sizeof(wps_phy_state_t **));
     wps_phy->signal_main = PHY_SIGNAL_CONNECT;
+
+    /* Clear event and pending IRQ if IRQ PIN is active when connecting. */
+    if (sr_access_read_irq_pin(wps_phy->radio->radio_id)) {
+        sr_access_read_reg16(wps_phy->radio->radio_id, REG16_IRQ);
+        /* Toggle the radio IRQ enable in NVIC to make sure that any pending and active IRQ are cleared. */
+        sr_access_disable_radio_irq(wps_phy->radio->radio_id);
+        sr_access_enable_radio_irq(wps_phy->radio->radio_id);
+    }
 }
 
 void phy_connect_single(wps_phy_t *wps_phy)
@@ -247,7 +266,7 @@ void phy_abort_radio_events(wps_phy_t *wps_phy)
 
 void phy_disconnect(wps_phy_t *wps_phy)
 {
-    uint8_t pwr_status;
+    uint8_t pwr_status = 0;
 
     /* NOTE: There may be an issue when disconnecting while doing CCA tries.
      *       This has been patched on 1020, but we're not sure if the problem exists on 1120.
@@ -292,7 +311,7 @@ phy_output_signal_t phy_get_auto_signal(wps_phy_t *wps_phy)
 
 void phy_set_main_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer, xlayer_cfg_internal_t *xlayer_cfg)
 {
-    wps_phy->config      = xlayer_cfg;
+    wps_phy->config = xlayer_cfg;
     wps_phy->xlayer_main = xlayer;
 }
 
@@ -301,16 +320,15 @@ void phy_set_auto_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer)
     wps_phy->xlayer_auto = xlayer;
 }
 
-void phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
-                        reg_write_cfg_t cfg)
+void phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg)
 {
 #if WPS_RADIO_COUNT == 1
     circular_queue_t *queue = &wps_phy->overwrite_regs_queue;
-    void *dequeue_ptr       = circular_queue_front_raw(queue);
+    void *dequeue_ptr = circular_queue_front_raw(queue);
 
     if (cfg == WRITE_ONCE) {
         wps_phy->write_request_info.target_register = starting_reg;
-        wps_phy->write_request_info.data            = data;
+        wps_phy->write_request_info.data = data;
         wps_phy->write_request_info.pending_request = true;
         enqueue_states(wps_phy, transfer_register_states);
     } else if (cfg == WRITE_PERIODIC) {
@@ -326,16 +344,15 @@ void phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
 
 void phy_clear_write_register(wps_phy_t *wps_phy)
 {
-    circular_queue_init(&wps_phy->overwrite_regs_queue, wps_phy->overwrite_regs_pool,
-                        PHY_OVERWRITE_REG_Q_SIZE, sizeof(reg_t));
+    circular_queue_init(&wps_phy->overwrite_regs_queue, wps_phy->overwrite_regs_pool, PHY_OVERWRITE_REG_Q_SIZE,
+                        sizeof(reg_t));
 }
 
-void phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer,
-                       bool *xfer_cmplt)
+void phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt)
 {
 #if WPS_RADIO_COUNT == 1
-    wps_phy->read_request_info.rx_buffer       = rx_buffer;
-    wps_phy->read_request_info.xfer_cmplt      = xfer_cmplt;
+    wps_phy->read_request_info.rx_buffer = rx_buffer;
+    wps_phy->read_request_info.xfer_cmplt = xfer_cmplt;
     wps_phy->read_request_info.target_register = target_register;
     wps_phy->read_request_info.pending_request = true;
     enqueue_states(wps_phy, transfer_register_states);
@@ -345,12 +362,6 @@ void phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx
     (void)rx_buffer;
     (void)xfer_cmplt;
 #endif
-}
-
-void phy_enable_debug_feature(wps_phy_t *phy, phy_debug_cfg_t *phy_debug)
-{
-    (void)phy;
-    (void)phy_debug;
 }
 
 void phy_enqueue_prepare(wps_phy_t *phy)
@@ -396,17 +407,24 @@ static void transfer_register(wps_phy_t *phy)
         sr_access_close(phy->radio->radio_id);
         phy->write_request_info.pending_request = false;
     } else if (phy->read_request_info.pending_request) {
-        /* Read register request */
-        tx_buffer[0] = phy->read_request_info.target_register;
-        while (sr_access_is_spi_busy(phy->radio->radio_id)) {};
-        sr_access_close(phy->radio->radio_id);
-        sr_access_open(phy->radio->radio_id);
-        if (REG_IS_16_BITS(tx_buffer[0] & ~REG_WRITE)) {
-            sr_access_spi_transfer_blocking(phy->radio->radio_id, tx_buffer, rx_buffer, 3);
+        if (phy->read_request_info.target_register == REG8_FIFOS) {
+            /* Do not read register REG8_FIFO to ensure FIFO pointer is valid during normal operation */
+            rx_buffer[0] = 0;
+            rx_buffer[1] = 0;
+            rx_buffer[2] = 0;
         } else {
-            sr_access_spi_transfer_blocking(phy->radio->radio_id, tx_buffer, rx_buffer, 2);
+            /* Read register request */
+            tx_buffer[0] = phy->read_request_info.target_register;
+            while (sr_access_is_spi_busy(phy->radio->radio_id)) {};
+            sr_access_close(phy->radio->radio_id);
+            sr_access_open(phy->radio->radio_id);
+            if (REG_IS_16_BITS(tx_buffer[0] & ~REG_WRITE)) {
+                sr_access_spi_transfer_blocking(phy->radio->radio_id, tx_buffer, rx_buffer, 3);
+            } else {
+                sr_access_spi_transfer_blocking(phy->radio->radio_id, tx_buffer, rx_buffer, 2);
+            }
+            sr_access_close(phy->radio->radio_id);
         }
-        sr_access_close(phy->radio->radio_id);
         *phy->read_request_info.rx_buffer = rx_buffer[1] | (rx_buffer[2] << 8);
         /* Thread safety */
         do {
@@ -424,8 +442,8 @@ static void transfer_register(wps_phy_t *phy)
 static void overwrite_registers(wps_phy_t *phy)
 {
     circular_queue_t *queue = &phy->overwrite_regs_queue;
-    void *dequeue_ptr       = circular_queue_front_raw(queue);
-    uint8_t tx_buffer[3];
+    void *dequeue_ptr = circular_queue_front_raw(queue);
+    uint8_t tx_buffer[3] = {0};
 
     sr_access_close(phy->radio->radio_id);
     for (uint8_t i = 0; i < circular_queue_size(queue); i++) {
@@ -467,8 +485,7 @@ void overwrite_queue_get_next(circular_queue_t *queue, void **it)
  *  @param[in] queue  Cross layer queue instance.
  *  @param[in] it     Element to increment.
  */
-static void overwrite_queue_add_transfer(circular_queue_t *queue, void *it, uint8_t starting_reg,
-                                         uint16_t data)
+static void overwrite_queue_add_transfer(circular_queue_t *queue, void *it, uint8_t starting_reg, uint16_t data)
 {
     reg_t *reg = (reg_t *)it;
 
@@ -483,7 +500,7 @@ static void overwrite_queue_add_transfer(circular_queue_t *queue, void *it, uint
     reg = (reg_t *)circular_queue_get_free_slot_raw(queue);
 
     reg->addr = REG_WRITE | starting_reg;
-    reg->val  = data;
+    reg->val = data;
 
     circular_queue_enqueue(queue);
 }
@@ -496,9 +513,9 @@ static void overwrite_queue_add_transfer(circular_queue_t *queue, void *it, uint
  */
 static void enqueue_states(wps_phy_t *wps_phy, wps_phy_state_t *state)
 {
-    wps_phy_state_t **enqueue_states;
+    wps_phy_state_t **enqueue_states = NULL;
 
-    enqueue_states  = (wps_phy_state_t **)circular_queue_get_free_slot_raw(&wps_phy->next_states);
+    enqueue_states = (wps_phy_state_t **)circular_queue_get_free_slot_raw(&wps_phy->next_states);
     *enqueue_states = state;
     circular_queue_enqueue_raw(&wps_phy->next_states);
 }
@@ -510,8 +527,8 @@ static void enqueue_states(wps_phy_t *wps_phy, wps_phy_state_t *state)
  *  @param[in] user_payload   Denotes if payload is provided from user space or from xlayer queue
  * buffer
  */
-static void enqueue_tx_prepare_frame_states(wps_phy_t *wps_phy, uint8_t header_size,
-                                            uint8_t payload_size, bool user_payload)
+static void enqueue_tx_prepare_frame_states(wps_phy_t *wps_phy, uint8_t header_size, uint8_t payload_size,
+                                            bool user_payload)
 {
     /*
      * When the payload comes from user space memory, separate states are used for setting
@@ -551,7 +568,6 @@ static void prepare_phy(wps_phy_t *phy)
 {
     if (phy->input_signal == PHY_SIGNAL_SYNCING) {
         enqueue_states(phy, syncing_states);
-        prepare_syncing(phy);
     } else {
         enqueue_states(phy, set_config_states);
 #if WPS_RADIO_COUNT == 1
@@ -570,14 +586,12 @@ static void prepare_phy(wps_phy_t *phy)
  */
 static void prepare_radio_tx(wps_phy_t *phy)
 {
-    uint8_t header_size;
-    uint8_t rx_packet_size;
-    uint8_t tx_payload_size;
-    uint16_t cca_action = (phy->config->cca_fail_action == CCA_FAIL_ACTION_TX) ? TXANYWAY_0b1 :
-                                                                                 TXANYWAY_0b0;
+    uint8_t header_size = 0;
+    uint8_t rx_packet_size = 0;
+    uint8_t tx_payload_size = 0;
+    uint16_t cca_action = (phy->config->cca_fail_action == CCA_FAIL_ACTION_TX) ? TXANYWAY_0b1 : TXANYWAY_0b0;
 
-    tx_payload_size = phy->xlayer_main->frame.payload_end_it -
-                      phy->xlayer_main->frame.payload_begin_it;
+    tx_payload_size = phy->xlayer_main->frame.payload_end_it - phy->xlayer_main->frame.payload_begin_it;
     header_size = phy->xlayer_main->frame.header_end_it - phy->xlayer_main->frame.header_begin_it;
 
 #if WPS_RADIO_COUNT == 1
@@ -585,7 +599,7 @@ static void prepare_radio_tx(wps_phy_t *phy)
                                                     SLPRXEND_0b1 | AUTOWAKE_0b1;
 #else
     if (wps_phy_multi_get_tx_wakeup_mode() == MULTI_TX_WAKEUP_MODE_AUTO) {
-        /* Replying radio will autowake. */
+        /* Leading radio will autowake. */
         phy->spi_xfer.radio_cfg_out.timercfg_sleepcfg = phy->config->next_sleep_level | SLPTIMEO_0b1 | SLPTXEND_0b1 |
                                                         SLPRXEND_0b1 | AUTOWAKE_0b1;
     } else {
@@ -634,7 +648,7 @@ static void prepare_radio_tx(wps_phy_t *phy)
         }
     } else {
         phy->spi_xfer.radio_cfg_out.actions = FLUSHTX_0b1 | FLUSHRX_0b1 | STARTTX_0b1;
-        if (phy->config->cca_threshold == 0xFF) {
+        if (phy->config->cca_threshold == WPS_DISABLE_CCA_THRESHOLD) {
             phy->spi_xfer.radio_cfg_out.cca_thres_gain = SET_CCATHRES(DISABLE_CCA_THRES);
         } else {
             phy->spi_xfer.radio_cfg_out.cca_thres_gain = SET_CCATHRES(phy->config->cca_threshold);
@@ -645,21 +659,30 @@ static void prepare_radio_tx(wps_phy_t *phy)
     if ((header_size + tx_payload_size) == 0) {
         phy->spi_xfer.radio_cfg_out.rx_tx_size |= SET_TXPKTSIZE(0);
     } else {
-        phy->spi_xfer.radio_cfg_out.rx_tx_size |= SET_TXPKTSIZE(header_size + tx_payload_size +
-                                                                HDR_SIZE_SIZE);
+        phy->spi_xfer.radio_cfg_out.rx_tx_size |= SET_TXPKTSIZE(header_size + tx_payload_size + HDR_SIZE_SIZE);
     }
     phy->spi_xfer.radio_cfg_out.frameproc_phasedata = 0;
-    phy->spi_xfer.radio_cfg_out.timelimit_biasdelay = SET_TIMEOUT(MAX_RX_TIMEOUT_VALUE);
-
+    phy->spi_xfer.radio_cfg_out.timelimit_biasdelay = SET_TIMEOUT(TIMEOUT_VAL2RAW(phy->config->rx_timeout)) |
+                                                      ALTRPLTO_0b1 | SET_BIASDELAY(EXTRA_BIAS_DELAY);
     phy->spi_xfer.radio_cfg_out.cca_settings = SET_CCAINTERV(CCAINTERV_VAL2RAW(phy->config->cca_retry_time)) |
-                                               SET_MAXRETRY(phy->config->cca_max_try_count) |
-                                               SET_CCAONTIME(phy->config->cca_on_time) | IGNORPKT_0b1 | cca_action;
+                                               SET_MAXRETRY((phy->config->cca_fail_action == CCA_FAIL_ACTION_ABORT_TX) ?
+                                                                phy->config->cca_max_try_count - 1 :
+                                                                phy->config->cca_max_try_count) |
+                                               SET_CCAONTIME(CCA_ON_TIME_PLL_TO_REG(phy->config->cca_on_time)) |
+                                               IGNORPKT_0b1 | cca_action;
 
     phy->spi_xfer.radio_cfg_out.tx_address = SET_TXADDRESS(phy->xlayer_main->frame.destination_address);
     phy->spi_xfer.radio_cfg_out.rx_address = SET_RXADDRESS(phy->xlayer_main->frame.source_address);
 
-    enqueue_tx_prepare_frame_states(phy, header_size, tx_payload_size,
-                                    phy->xlayer_main->frame.user_payload);
+    float chip_rate_ratio = PLL_RATIO(phy->config->chip_rate) / (float)PLL_RATIO(CHIP_RATE_20_48_MHZ);
+    uint16_t retry_time = phy->config->cca_retry_time * chip_rate_ratio;
+    uint16_t on_time = phy->config->cca_on_time * chip_rate_ratio;
+
+    phy->spi_xfer.radio_cfg_out.cca_settings =
+        (phy->spi_xfer.radio_cfg_out.cca_settings & ~(BITS_CCAINTERV | BITS_CCAONTIME)) |
+        SET_CCAINTERV(CCAINTERV_VAL2RAW(retry_time)) | SET_CCAONTIME(CCA_ON_TIME_PLL_TO_REG(on_time));
+
+    enqueue_tx_prepare_frame_states(phy, header_size, tx_payload_size, phy->xlayer_main->frame.user_payload);
     enqueue_states(phy, wait_radio_states_tx);
 }
 
@@ -670,10 +693,10 @@ static void prepare_radio_tx(wps_phy_t *phy)
  */
 static void prepare_radio_rx(wps_phy_t *phy)
 {
-    uint8_t payload_size;
-    uint8_t header_size;
-    uint8_t tx_packet_size;
-    uint16_t tx_address;
+    uint8_t payload_size = 0;
+    uint8_t header_size = 0;
+    uint8_t tx_packet_size = 0;
+    uint16_t tx_address = 0;
 
 #if WPS_RADIO_COUNT == 1
     phy->spi_xfer.radio_cfg_out.timercfg_sleepcfg = phy->config->next_sleep_level | SLPTIMEO_0b1 | SLPTXEND_0b1 |
@@ -685,45 +708,39 @@ static void prepare_radio_rx(wps_phy_t *phy)
 
     if (phy->xlayer_auto != NULL) {
         /* Autoreply mode */
-        payload_size = phy->xlayer_auto->frame.payload_end_it -
-                       phy->xlayer_auto->frame.payload_begin_it;
-        header_size = phy->xlayer_auto->frame.header_end_it -
-                      phy->xlayer_auto->frame.header_begin_it;
-        tx_packet_size = (header_size + payload_size == 0) ?
-                             0 :
-                             (header_size + payload_size + HDR_SIZE_SIZE);
-        tx_address     = phy->xlayer_auto->frame.destination_address;
+        payload_size = phy->xlayer_auto->frame.payload_end_it - phy->xlayer_auto->frame.payload_begin_it;
+        header_size = phy->xlayer_auto->frame.header_end_it - phy->xlayer_auto->frame.header_begin_it;
+        tx_packet_size = (header_size + payload_size == 0) ? 0 : (header_size + payload_size + HDR_SIZE_SIZE);
+        tx_address = phy->xlayer_auto->frame.destination_address;
         phy->spi_xfer.radio_cfg_out.frameproc_phasedata = RX_MODE | RPLYTXEN_0b1;
-        phy->spi_xfer.radio_cfg_out.phy_0_1             = EXPECRP0_0b1 | RPLYADD0_0b0;
-        phy->spi_xfer.radio_cfg_out.rx_tx_size          = SET_TXPKTSIZE(tx_packet_size);
+        phy->spi_xfer.radio_cfg_out.phy_0_1 = EXPECRP0_0b1 | RPLYADD0_0b0;
+        phy->spi_xfer.radio_cfg_out.rx_tx_size = SET_TXPKTSIZE(tx_packet_size);
         set_events_for_rx_with_ack(phy);
-        enqueue_tx_prepare_frame_states(phy, header_size, payload_size,
-                                        phy->xlayer_auto->frame.user_payload);
+        enqueue_tx_prepare_frame_states(phy, header_size, payload_size, phy->xlayer_auto->frame.user_payload);
         enqueue_states(phy, wait_radio_states_rx);
     } else if (phy->config->expect_ack) {
         /* Ack mode */
-        tx_address                                      = phy->xlayer_main->frame.source_address;
+        tx_address = phy->xlayer_main->frame.source_address;
         phy->spi_xfer.radio_cfg_out.frameproc_phasedata = RX_MODE | RPLYTXEN_0b1;
-        phy->spi_xfer.radio_cfg_out.phy_0_1             = EXPECRP0_0b1 | RPLYADD0_0b0;
-        phy->spi_xfer.radio_cfg_out.rx_tx_size          = SET_TXPKTSIZE(0);
+        phy->spi_xfer.radio_cfg_out.phy_0_1 = EXPECRP0_0b1 | RPLYADD0_0b0;
+        phy->spi_xfer.radio_cfg_out.rx_tx_size = SET_TXPKTSIZE(0);
         set_events_for_rx_with_ack(phy);
         enqueue_rx_prepare_frame_states(phy);
     } else {
         /* Nack mode */
-        tx_address                                      = phy->xlayer_main->frame.source_address;
-        phy->spi_xfer.radio_cfg_out.phy_0_1             = 0;
+        tx_address = phy->xlayer_main->frame.source_address;
+        phy->spi_xfer.radio_cfg_out.phy_0_1 = 0;
         phy->spi_xfer.radio_cfg_out.frameproc_phasedata = RX_MODE;
         set_events_for_rx_without_ack(phy);
         enqueue_rx_prepare_frame_states(phy);
     }
 
     phy->spi_xfer.radio_cfg_out.tx_address = SET_TXADDRESS(tx_address);
-    phy->spi_xfer.radio_cfg_out.rx_tx_size |= SET_RXPKTSIZE(
-        phy->xlayer_main->frame.payload_memory_size + phy->xlayer_main->frame.header_memory_size +
-        HDR_SIZE_SIZE);
+    phy->spi_xfer.radio_cfg_out.rx_tx_size |= SET_RXPKTSIZE(phy->xlayer_main->frame.payload_memory_size +
+                                                            phy->xlayer_main->frame.header_memory_size + HDR_SIZE_SIZE);
 
-    phy->spi_xfer.radio_cfg_out.timelimit_biasdelay = SET_TIMEOUT(
-        TIMEOUT_VAL2RAW(phy->config->rx_timeout));
+    phy->spi_xfer.radio_cfg_out.timelimit_biasdelay = SET_TIMEOUT(TIMEOUT_VAL2RAW(phy->config->rx_timeout) |
+                                                                  ALTRPLTO_0b1 | SET_BIASDELAY(EXTRA_BIAS_DELAY));
 
     /* Disable CCA */
     phy->spi_xfer.radio_cfg_out.cca_thres_gain = SET_CCATHRES(DISABLE_CCA_THRES);
@@ -737,12 +754,13 @@ static void prepare_radio_rx(wps_phy_t *phy)
  */
 static void prepare_radio(wps_phy_t *phy)
 {
-    phy->signal_auto   = PHY_SIGNAL_NONE;
+    phy->signal_auto = PHY_SIGNAL_NONE;
     phy->radio_actions = 0;
-
     sr_reg_pattern_t *pattern = &phy->config->channel->reg_pattern;
+    uint8_t integ_gain = sr_get_integ_gain(phy->config->channel->pulse_count, phy->config->chip_rate);
 
-    phy->spi_xfer.radio_cfg_out.if_bb_gain_lna = pattern->if_baseband_gain_lna;
+    phy->spi_xfer.radio_cfg_out.if_bb_gain_lna = (pattern->if_baseband_gain_lna & ~BITS_INTEGGAIN) |
+                                                 SET_INTEGGAIN(integ_gain);
     phy->spi_xfer.radio_cfg_out.rxbandfre_cfg1freq = pattern->rxbandfre_cfg1freq;
     phy->spi_xfer.radio_cfg_out.cfg2freq_cfg3freq = pattern->cfg2freq_cfg3freq;
     phy->spi_xfer.radio_cfg_out.cfg_widths_txpwr_randpulse = pattern->cfg_widths_txpwr_randpulse;
@@ -755,16 +773,24 @@ static void prepare_radio(wps_phy_t *phy)
     }
 
     phy->spi_xfer.radio_cfg_out.slpperiod_15_0 = SET_SLPPERIOD_15_0(phy->config->sleep_time);
-    phy->spi_xfer.radio_cfg_out.slpperiod_pwrupdlay =
-        SET_SLPPERIOD_23_16(phy->config->sleep_time >> 16) |
-        SET_PWRUPDLAY(PWRUPDELAY_VAL2RAW(phy->config->power_up_delay));
+    phy->spi_xfer.radio_cfg_out.slpperiod_pwrupdlay = SET_SLPPERIOD_23_16(phy->config->sleep_time >> 16) |
+                                                      SET_PWRUPDLAY(PWRUPDELAY_VAL2RAW(phy->config->power_up_delay));
 
     phy->spi_xfer.radio_cfg_out.rf_gain_manu = MANUGAIN_DEFAULT | SET_PKTRFGAIN(0);
     phy->spi_xfer.radio_cfg_out.actions |= SLEEP_0b1;
 
     phy->spi_xfer.radio_cfg_out.phy_0_1 |= phy->config->fec | phy->config->modulation | phy->config->chip_repet |
                                            SET_ISIMITIG0(phy->config->isi_mitig);
+    if (phy->phase_offset_feature_enabled) {
+        phy->phase_offset_bytes_to_read = SET_PHASE_OFFSET_BYTES(phy->config->isi_mitig);
+        phy->config->phase_offset_count = phy->phase_offset_bytes_to_read;
+    }
 
+    phy->spi_xfer.radio_cfg_out.harddisables_ioconfig =
+        (phy->spi_xfer.radio_cfg_out.harddisables_ioconfig & ~BITS_CHIP_RATE) | phy->config->chip_rate;
+
+    phy->spi_xfer.radio_cfg_out.preamb_debug = (phy->spi_xfer.radio_cfg_out.preamb_debug & ~BIT_SUMRXADC) |
+                                               SUMRXADC(phy->config->chip_rate);
 #if WPS_RADIO_COUNT == 2
     /* Deactivate autowake before setting radio to sleep. */
     phy->spi_xfer.read_events_out.addr_timercfg_sleepcfg = REG_WRITE | REG16_TIMERCFG_SLEEPCFG;
@@ -779,27 +805,32 @@ static void prepare_radio(wps_phy_t *phy)
  */
 static void set_config(wps_phy_t *phy)
 {
-    uint8_t pwr_state;
+    uint8_t pwr_state = 0;
 
-    /* Changing sleep level while PROC_ON is 1 causes issues for some sleep level transitions.
-     * We need to wait until PROC_ON is 0 before changing sleep level.
-     * It is also recommended to change the sleep level before the sleep period.
-     */
-    if (((phy->config->sleep_level != SLEEP_IDLE) && (phy->config->next_sleep_level == SLEEP_IDLE)) ||
-        ((phy->config->sleep_level == SLEEP_SHALLOW) && (phy->config->next_sleep_level == SLEEP_DEEP)) ||
-        ((phy->config->sleep_level == SLEEP_DEEP) && (phy->config->next_sleep_level == SLEEP_SHALLOW))) {
-        pwr_state = sr_access_read_reg8(phy->radio->radio_id, REG8_POWER_STATE);
-        while (GET_PROC_ON(pwr_state)) {
-            pwr_state = sr_access_read_reg8(phy->radio->radio_id, REG8_POWER_STATE);
+    if (phy->sleep_lvl_per_ts_enabled) {
+        /* Changing sleep level while PROC_ON is 1 causes issues for some sleep level transitions.
+         * We need to wait until PROC_ON is 0 before changing sleep level.
+         * It is also recommended to change the sleep level before the sleep period.
+         */
+        if (GET_SLPDEPTH_WAKEONCE(sr_access_read_reg16(phy->radio->radio_id, REG16_TIMERCFG_SLEEPCFG)) !=
+            GET_SLPDEPTH_WAKEONCE(SLEEP_IDLE)) {
+            if (((phy->config->sleep_level != SLEEP_IDLE) && (phy->config->next_sleep_level == SLEEP_IDLE)) ||
+                ((phy->config->sleep_level == SLEEP_SHALLOW) && (phy->config->next_sleep_level == SLEEP_DEEP)) ||
+                ((phy->config->sleep_level == SLEEP_DEEP) && (phy->config->next_sleep_level == SLEEP_SHALLOW))) {
+                do {
+                    pwr_state = sr_access_read_reg8(phy->radio->radio_id, REG8_POWER_STATE);
+                } while (GET_PROC_ON(pwr_state));
+            }
         }
-    }
 
-    /* When switching from chip clock to XTAL clock timer, reset XTAL clock timer on wake up*/
-    if ((phy->config->sleep_level == SLEEP_IDLE) && (phy->config->next_sleep_level != SLEEP_IDLE)) {
-        phy->spi_xfer.radio_cfg_out.timercfg_sleepcfg |= SYNWAKUP_0b1;
-    }
+        /* When switching from chip clock to XTAL clock timer, reset XTAL clock timer on wake up*/
+        if ((phy->config->sleep_level == SLEEP_IDLE) && (phy->config->next_sleep_level != SLEEP_IDLE)) {
+            phy->spi_xfer.radio_cfg_out.timercfg_sleepcfg |= SYNWAKUP_0b1;
+        }
 
-    sr_access_write_reg16(phy->radio->radio_id, REG16_TIMERCFG_SLEEPCFG, phy->spi_xfer.radio_cfg_out.timercfg_sleepcfg);
+        sr_access_write_reg16(phy->radio->radio_id, REG16_TIMERCFG_SLEEPCFG,
+                              phy->spi_xfer.radio_cfg_out.timercfg_sleepcfg);
+    }
 
     phy->signal_main = PHY_SIGNAL_PREPARE_DONE;
     sr_access_spi_transfer_non_blocking(phy->radio->radio_id, (uint8_t *)&phy->spi_xfer.radio_cfg_out,
@@ -813,7 +844,7 @@ static void set_config(wps_phy_t *phy)
 static void set_header(wps_phy_t *phy)
 {
     xlayer_frame_t *frame = main_is_tx(phy) ? &phy->xlayer_main->frame : &phy->xlayer_auto->frame;
-    uint8_t hdr_len       = frame->header_end_it - frame->header_begin_it;
+    uint8_t hdr_len = frame->header_end_it - frame->header_begin_it;
 
     sr_access_disable_radio_irq(phy->radio->radio_id);
 
@@ -865,7 +896,7 @@ static void set_header_and_payload(wps_phy_t *phy)
     phy->signal_main = PHY_SIGNAL_YIELD;
 
     uint8_t *spi_tx_fifo = frame->header_begin_it - XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
-    uint8_t header_size  = frame->header_end_it - frame->header_begin_it;
+    uint8_t header_size = frame->header_end_it - frame->header_begin_it;
     uint8_t payload_size = frame->payload_end_it - frame->payload_begin_it;
 
     /* Set register TXFIFO as burst mode to send whole frame */
@@ -892,12 +923,7 @@ static void enable_radio_irq(wps_phy_t *phy)
 
     /* If we missed the rising edge, do a context switch */
     if (sr_access_read_irq_pin(phy->radio->radio_id)) {
-        if (rx_lost(&phy->spi_xfer.read_events_in) && GET_RX_EN(phy->spi_xfer.read_events_in.pwr_status)) {
-            /* #2: When a rx timeout occured and the RXEN bit of the transceiver was set, clear any pending IRQs. */
-            sr_access_read_reg16(phy->radio->radio_id, REG16_IRQ);
-        } else {
-            sr_access_radio_context_switch(phy->radio->radio_id);
-        }
+        sr_access_radio_context_switch(phy->radio->radio_id);
     }
 }
 
@@ -942,6 +968,7 @@ static void read_events_syncing(wps_phy_t *phy)
         return;
     }
 
+    sr_access_write_reg8(phy->radio->radio_id, REG8_ACTIONS, SLEEP_0b1);
     sr_access_write_reg16(phy->radio->radio_id, REG16_TIMERCFG_SLEEPCFG,
                           SLPDEPTH_WAKEONCE_0b01 | SLPTIMEO_0b1 | SLPTXEND_0b1 | SLPRXEND_0b1 | AUTOWAKE_0b1);
 
@@ -973,7 +1000,11 @@ static void process_event_tx(wps_phy_t *phy)
         if (phy->xlayer_auto != NULL) {
             phy->xlayer_auto->frame.frame_outcome = FRAME_RECEIVED;
         }
-        handle_good_auto_reply(phy);
+        if (phy->phase_offset_feature_enabled) {
+            read_cir_indicator_auto(phy);
+        } else {
+            handle_good_auto_reply(phy);
+        }
     } else if (rx_lost(&phy->spi_xfer.read_events_in)) {
         phy->xlayer_main->frame.frame_outcome = FRAME_SENT_ACK_LOST;
         if (phy->xlayer_auto != NULL) {
@@ -989,19 +1020,29 @@ static void process_event_tx(wps_phy_t *phy)
         }
         phy->signal_main = PHY_SIGNAL_FRAME_SENT_NACK;
         phy->signal_auto = PHY_SIGNAL_FRAME_MISSED;
+        phy->spi_xfer.read_info_in.rssi_rnsi = sr_access_read_reg16(phy->radio->radio_id, REG16_RSSI_RNSI);
+        phy->config->rssi_raw = GET_RSSI(phy->spi_xfer.read_info_in.rssi_rnsi);
+        phy->config->rnsi_raw = GET_RNSI(phy->spi_xfer.read_info_in.rssi_rnsi);
         enqueue_states(phy, prepare_phy_states);
         /* Handle TX */
     } else if (tx_complete(&phy->spi_xfer.read_events_in)) {
-        phy->signal_main                      = PHY_SIGNAL_FRAME_SENT_NACK;
-        phy->signal_auto                      = PHY_SIGNAL_FRAME_MISSED;
-        phy->xlayer_main->frame.frame_outcome = FRAME_SENT_ACK_LOST;
+        if (!phy->empty_tx) {
+            phy->signal_main = PHY_SIGNAL_FRAME_SENT_NACK;
+            phy->signal_auto = PHY_SIGNAL_FRAME_MISSED;
+            phy->xlayer_main->frame.frame_outcome = FRAME_SENT_ACK_LOST;
+        } else {
+            phy->signal_main = PHY_SIGNAL_FRAME_SENT_NACK;
+            phy->signal_auto = PHY_SIGNAL_FRAME_MISSED;
+            phy->xlayer_main->frame.frame_outcome = FRAME_WAIT;
+            phy->empty_tx = false;
+        }
         if (phy->xlayer_auto != NULL) {
             phy->xlayer_auto->frame.frame_outcome = FRAME_LOST;
         }
         enqueue_states(phy, prepare_phy_states);
     } else if (GET_WAKEUPI(phy->spi_xfer.read_events_in.irq)) {
-        phy->signal_main                      = PHY_SIGNAL_FRAME_SENT_NACK;
-        phy->signal_auto                      = PHY_SIGNAL_FRAME_MISSED;
+        phy->signal_main = PHY_SIGNAL_FRAME_SENT_NACK;
+        phy->signal_auto = PHY_SIGNAL_FRAME_MISSED;
         phy->xlayer_main->frame.frame_outcome = FRAME_WAIT;
         if (phy->xlayer_auto != NULL) {
             phy->xlayer_auto->frame.frame_outcome = FRAME_LOST;
@@ -1027,7 +1068,11 @@ static void process_event_rx(wps_phy_t *phy)
             phy->xlayer_auto->frame.frame_outcome = FRAME_SENT_ACK;
         }
         phy->xlayer_main->frame.frame_outcome = FRAME_RECEIVED;
-        handle_good_frame(phy);
+        if (phy->phase_offset_feature_enabled) {
+            read_cir_indicator(phy);
+        } else {
+            handle_good_frame(phy);
+        }
     } else if (rx_lost(&phy->spi_xfer.read_events_in)) {
         /* #2: When a timeout occurs, check if the RXEN bit of the transceiver is set and if so, clear
          *     any pending IRQs and disable the transceiver interrupts to ensure proper operation.
@@ -1035,15 +1080,16 @@ static void process_event_rx(wps_phy_t *phy)
          */
         if (GET_RX_EN(phy->spi_xfer.read_events_in.pwr_status)) {
             sr_access_disable_radio_irq(phy->radio->radio_id);
-            /* Wait for RX to turn off. */
-            while (GET_RX_EN(sr_access_read_reg8(phy->radio->radio_id, REG8_POWER_STATE))) {};
+            /* Wait for RX frame reception to finish. */
+            while (GET_INFRAME(sr_access_read_reg8(phy->radio->radio_id, REG8_POWER_STATE))) {};
+            /* Clear any pending IRQs. */
+            sr_access_read_reg16(phy->radio->radio_id, REG16_IRQ);
         }
         if (phy->xlayer_auto != NULL) {
             phy->xlayer_auto->frame.frame_outcome = FRAME_SENT_ACK_LOST;
         }
         phy->xlayer_main->frame.frame_outcome = FRAME_LOST;
-        phy->signal_auto = (phy->xlayer_auto != NULL) ? PHY_SIGNAL_FRAME_NOT_SENT :
-                                                        PHY_SIGNAL_FRAME_SENT_NACK;
+        phy->signal_auto = (phy->xlayer_auto != NULL) ? PHY_SIGNAL_FRAME_NOT_SENT : PHY_SIGNAL_FRAME_SENT_NACK;
         phy->signal_main = PHY_SIGNAL_FRAME_MISSED;
         enqueue_states(phy, prepare_phy_states);
     } else if (rx_rejected(&phy->spi_xfer.read_events_in)) {
@@ -1051,9 +1097,11 @@ static void process_event_rx(wps_phy_t *phy)
             phy->xlayer_auto->frame.frame_outcome = FRAME_SENT_ACK_REJECTED;
         }
         phy->xlayer_main->frame.frame_outcome = FRAME_REJECTED;
-        phy->signal_auto = (phy->xlayer_auto != NULL) ? PHY_SIGNAL_FRAME_NOT_SENT :
-                                                        PHY_SIGNAL_FRAME_SENT_NACK;
+        phy->signal_auto = (phy->xlayer_auto != NULL) ? PHY_SIGNAL_FRAME_NOT_SENT : PHY_SIGNAL_FRAME_SENT_NACK;
         phy->signal_main = PHY_SIGNAL_FRAME_MISSED;
+        phy->spi_xfer.read_info_in.rssi_rnsi = sr_access_read_reg16(phy->radio->radio_id, REG16_RSSI_RNSI);
+        phy->config->rssi_raw = GET_RSSI(phy->spi_xfer.read_info_in.rssi_rnsi);
+        phy->config->rnsi_raw = GET_RNSI(phy->spi_xfer.read_info_in.rssi_rnsi);
         enqueue_states(phy, prepare_phy_states);
     }
 }
@@ -1084,6 +1132,11 @@ static void handle_good_frame(wps_phy_t *phy)
             phy->signal_auto = PHY_SIGNAL_FRAME_SENT_NACK;
         }
     }
+    if (phy->phase_offset_feature_enabled) {
+        memcpy(phy->config->phase_offset, phy->spi_xfer.read_cir_info_in.data_cir_info,
+               phy->phase_offset_bytes_to_read);
+    }
+
     phy->config->rx_cca_retry_count = sr_access_read_reg8(phy->radio->radio_id, REG8_FIFOS) & CCA_RETRYHDR_MASK;
 
     sr_access_spi_transfer_non_blocking(phy->radio->radio_id, (uint8_t *)&phy->spi_xfer.read_info_out,
@@ -1102,10 +1155,44 @@ static void handle_good_auto_reply(wps_phy_t *phy)
     uint8_t transfer_size = sizeof(read_info_t);
 
     phy->signal_main = PHY_SIGNAL_YIELD;
-
+    if (phy->phase_offset_feature_enabled) {
+        memcpy(phy->config->phase_offset, phy->spi_xfer.read_cir_info_in.data_cir_info,
+               phy->phase_offset_bytes_to_read);
+    }
     sr_access_spi_transfer_non_blocking(phy->radio->radio_id, (uint8_t *)&phy->spi_xfer.read_info_out,
                                         (uint8_t *)&phy->spi_xfer.read_info_in, transfer_size);
     enqueue_states(phy, get_auto_reply_header_states);
+}
+
+/** @brief Read Channel-Impulse Response Indicator from the RX FIFOS.
+ *
+ *  @param[in] phy  The WPS PHY Object.
+ */
+static void read_cir_indicator(wps_phy_t *phy)
+{
+    phy->signal_main = PHY_SIGNAL_YIELD;
+
+    memset(phy->spi_xfer.read_cir_info_in.data_cir_info, 0, PHASE_OFFSET_BYTE_COUNT);
+
+    sr_access_spi_transfer_non_blocking(phy->radio->radio_id, (uint8_t *)&phy->spi_xfer.read_cir_info_out,
+                                        (uint8_t *)&phy->spi_xfer.read_cir_info_in,
+                                        phy->phase_offset_bytes_to_read + EMPTY_BYTE);
+    enqueue_states(phy, handle_good_frame_states);
+}
+
+/** @brief Read Channel-Impulse Response Indicator from the RX FIFOS when receiving an auto-reply.
+ *
+ *  @param[in] phy  The WPS PHY Object.
+ */
+static void read_cir_indicator_auto(wps_phy_t *phy)
+{
+    phy->signal_main = PHY_SIGNAL_YIELD;
+
+    memset(phy->spi_xfer.read_cir_info_in.data_cir_info, 0, PHASE_OFFSET_BYTE_COUNT);
+    sr_access_spi_transfer_non_blocking(phy->radio->radio_id, (uint8_t *)&phy->spi_xfer.read_cir_info_out,
+                                        (uint8_t *)&phy->spi_xfer.read_cir_info_in,
+                                        phy->phase_offset_bytes_to_read + EMPTY_BYTE);
+    enqueue_states(phy, handle_good_frame_auto_states);
 }
 
 /** @brief Handle a Clear Channel Assessment (CCA) fail.
@@ -1114,8 +1201,12 @@ static void handle_good_auto_reply(wps_phy_t *phy)
  */
 static void handle_cca_fail(wps_phy_t *phy)
 {
-    phy->signal_main                      = PHY_SIGNAL_FRAME_SENT_NACK;
-    phy->xlayer_main->frame.frame_outcome = FRAME_WAIT;
+    phy->signal_main = PHY_SIGNAL_FRAME_SENT_NACK;
+    phy->signal_auto = PHY_SIGNAL_FRAME_MISSED;
+    phy->xlayer_main->frame.frame_outcome = FRAME_SENT_ACK_LOST;
+    if (phy->xlayer_auto != NULL) {
+        phy->xlayer_auto->frame.frame_outcome = FRAME_LOST;
+    }
     enqueue_states(phy, prepare_phy_states);
 }
 
@@ -1130,39 +1221,36 @@ static void get_frame_header(wps_phy_t *phy)
         return;
     }
 
-    uint8_t expected_frame_size = phy->config->expected_header_size +
-                                  phy->config->expected_payload_size + HDR_SIZE_SIZE;
+    uint8_t max_expected_frame_size = phy->config->max_expected_header_size + phy->config->max_expected_payload_size +
+                                      HDR_SIZE_SIZE;
 
     phy->config->rx_wait_time = GET_RXSYNTIME(phy->spi_xfer.read_info_in.rxtime);
-
-    if (phy->debug_cfg.phase_offset_stats_enable) {
-        phy->config->phase_offset[0] = GET_PHASEDATA(
-            phy->spi_xfer.read_info_in.frameproc_phasedata);
-    }
     phy->config->rssi_raw = GET_RSSI(phy->spi_xfer.read_info_in.rssi_rnsi);
     phy->config->rnsi_raw = GET_RNSI(phy->spi_xfer.read_info_in.rssi_rnsi);
 
     if (phy->spi_xfer.read_info_in.data_frame_size == 0 ||
-        (phy->spi_xfer.read_info_in.data_frame_size > expected_frame_size)) {
+        (phy->spi_xfer.read_info_in.data_frame_size > max_expected_frame_size)) {
+        /* Data frame size is invalid. */
         phy->xlayer_main->frame.payload_end_it = phy->xlayer_main->frame.header_begin_it;
-        phy->signal_auto                       = PHY_SIGNAL_FRAME_SENT_NACK;
-        phy->signal_main                       = PHY_SIGNAL_FRAME_MISSED;
+        phy->signal_auto = PHY_SIGNAL_FRAME_SENT_NACK;
+        phy->signal_main = PHY_SIGNAL_FRAME_MISSED;
         enqueue_states(phy, prepare_phy_states);
     } else {
         phy->spi_xfer.read_info_in.data_frame_size -= HDR_SIZE_SIZE;
         phy->header_size = phy->spi_xfer.read_info_in.data_header_size;
 
-        if (phy->header_size > phy->config->expected_header_size) {
+        if (phy->header_size > phy->config->max_expected_header_size) {
+            /* Header size is invalid. */
             phy->xlayer_main->frame.payload_end_it = phy->xlayer_main->frame.header_begin_it;
-            phy->signal_auto                       = PHY_SIGNAL_FRAME_SENT_NACK;
-            phy->signal_main                       = PHY_SIGNAL_FRAME_MISSED;
+            phy->signal_auto = PHY_SIGNAL_FRAME_SENT_NACK;
+            phy->signal_main = PHY_SIGNAL_FRAME_MISSED;
             enqueue_states(phy, prepare_phy_states);
         } else {
             phy->signal_main = PHY_SIGNAL_YIELD;
 
             phy->xlayer_main->frame.header_begin_it = phy->xlayer_main->frame.header_memory;
-            phy->xlayer_main->frame.payload_end_it   = phy->xlayer_main->frame.header_memory +
-                                                     phy->header_size + EMPTY_BYTE;
+            phy->xlayer_main->frame.payload_end_it = phy->xlayer_main->frame.header_memory + phy->header_size +
+                                                     EMPTY_BYTE;
 
             phy->spi_xfer.spi_dummy_buffer[0] = REG_READ_BURST | REG8_FIFOS;
             sr_access_spi_transfer_non_blocking(phy->radio->radio_id, phy->spi_xfer.spi_dummy_buffer,
@@ -1187,27 +1275,41 @@ static void get_auto_reply_header(wps_phy_t *phy)
         return;
     }
 
+    uint8_t max_expected_auto_frame_size = phy->config->max_expected_auto_header_size +
+                                           phy->config->max_expected_auto_payload_size + HDR_SIZE_SIZE;
+
     phy->config->rssi_raw = GET_RSSI(phy->spi_xfer.read_info_in.rssi_rnsi);
     phy->config->rnsi_raw = GET_RNSI(phy->spi_xfer.read_info_in.rssi_rnsi);
 
-    if (phy->spi_xfer.read_info_in.data_frame_size == 0) {
+    if ((phy->spi_xfer.read_info_in.data_frame_size == 0) ||
+        (phy->spi_xfer.read_info_in.data_frame_size > max_expected_auto_frame_size)) {
+        /* Data frame size is invalid. */
         phy->signal_main = PHY_SIGNAL_FRAME_SENT_ACK;
         phy->signal_auto = PHY_SIGNAL_FRAME_MISSED;
         enqueue_states(phy, prepare_phy_states);
     } else {
         phy->spi_xfer.read_info_in.data_frame_size -= HDR_SIZE_SIZE;
         phy->header_size = phy->spi_xfer.read_info_in.data_header_size;
-        phy->signal_main = PHY_SIGNAL_YIELD;
 
-        phy->xlayer_auto->frame.header_begin_it = phy->xlayer_auto->frame.header_memory;
-        phy->xlayer_auto->frame.payload_end_it   = phy->xlayer_auto->frame.header_memory +
-                                                 phy->header_size + EMPTY_BYTE;
+        if (phy->header_size > phy->config->max_expected_header_size) {
+            /* Header size is invalid. */
+            phy->xlayer_main->frame.payload_end_it = phy->xlayer_main->frame.header_begin_it;
+            phy->signal_auto = PHY_SIGNAL_FRAME_SENT_NACK;
+            phy->signal_main = PHY_SIGNAL_FRAME_MISSED;
+            enqueue_states(phy, prepare_phy_states);
+        } else {
+            phy->signal_main = PHY_SIGNAL_YIELD;
 
-        phy->spi_xfer.spi_dummy_buffer[0] = REG_READ_BURST | REG8_FIFOS;
-        sr_access_spi_transfer_non_blocking(phy->radio->radio_id, phy->spi_xfer.spi_dummy_buffer,
-                                            phy->xlayer_auto->frame.header_memory, phy->header_size + EMPTY_BYTE);
-        enqueue_states(phy, get_payload_states);
-        enqueue_states(phy, prepare_phy_states);
+            phy->xlayer_auto->frame.header_begin_it = phy->xlayer_auto->frame.header_memory;
+            phy->xlayer_auto->frame.payload_end_it = phy->xlayer_auto->frame.header_memory + phy->header_size +
+                                                     EMPTY_BYTE;
+
+            phy->spi_xfer.spi_dummy_buffer[0] = REG_READ_BURST | REG8_FIFOS;
+            sr_access_spi_transfer_non_blocking(phy->radio->radio_id, phy->spi_xfer.spi_dummy_buffer,
+                                                phy->xlayer_auto->frame.header_memory, phy->header_size + EMPTY_BYTE);
+            enqueue_states(phy, get_payload_states);
+            enqueue_states(phy, prepare_phy_states);
+        }
     }
 }
 
@@ -1224,7 +1326,7 @@ static void get_payload(wps_phy_t *phy)
         return;
     }
 
-    uint8_t payload_size        = phy->spi_xfer.read_info_in.data_frame_size - phy->header_size;
+    uint8_t payload_size = phy->spi_xfer.read_info_in.data_frame_size - phy->header_size;
     phy_output_signal_t *signal = main_is_tx(phy) ? &phy->signal_auto : &phy->signal_main;
     xlayer_frame_t *frame = main_is_tx(phy) ? &phy->xlayer_auto->frame : &phy->xlayer_main->frame;
 
@@ -1278,10 +1380,10 @@ static void close_spi(wps_phy_t *phy)
  */
 static void end(wps_phy_t *phy)
 {
-    wps_phy_state_t **dequeue_state;
+    wps_phy_state_t **dequeue_state = NULL;
 
-    phy->state_step    = 0;
-    dequeue_state      = (wps_phy_state_t **)circular_queue_front_raw(&phy->next_states);
+    phy->state_step = 0;
+    dequeue_state = (wps_phy_state_t **)circular_queue_front_raw(&phy->next_states);
     phy->current_state = *dequeue_state;
     circular_queue_dequeue_raw(&phy->next_states);
 }
@@ -1320,18 +1422,21 @@ static void prepare_syncing(wps_phy_t *phy)
 
     sr_access_write_reg16(phy->radio->radio_id, REG16_IRQ, RXENDE_0b1);
 
-    sr_access_write_reg16(phy->radio->radio_id, REG16_TIMERCFG_SLEEPCFG,
-                          SLEEP_IDLE_NO_WAKEONCE | AUTOWAKE_0b1 | SLPTIMEO_0b1 | SLPTXEND_0b1 | SLPRXEND_0b1 |
-                              SYNRXSTA_0b1);
-
     fast_sync_config_non_stop_rx(phy);
 
-    sr_access_write_reg8(phy->radio->radio_id, REG8_ACTIONS, FLUSHTX_0b1 | FLUSHRX_0b1 | SLEEP_0b1);
+    sr_access_write_reg16(phy->radio->radio_id, REG16_TIMERCFG_SLEEPCFG,
+                          SLEEP_IDLE_NO_WAKEONCE | AUTOWAKE_0b0 | SYNRXSTA_0b1);
+
+    sr_access_write_reg8(phy->radio->radio_id, REG8_ACTIONS, FLUSHTX_0b1 | FLUSHRX_0b1 | INITIMER_0b1);
 
     sr_access_write_reg16(phy->radio->radio_id, REG16_RF_GAIN_MANUGAIN, MANUGAIN_DEFAULT | SET_PKTRFGAIN(0));
 
-    sr_access_write_reg16(phy->radio->radio_id, REG16_IF_BASEBAND_GAIN_LNA,
-                          phy->config->channel->reg_pattern.if_baseband_gain_lna);
+    uint8_t integ_gain = sr_get_integ_gain(phy->config->channel->pulse_count, phy->config->chip_rate);
+
+    uint16_t if_baseband_gain_lna = (phy->config->channel->reg_pattern.if_baseband_gain_lna & ~BITS_INTEGGAIN) |
+                                    SET_INTEGGAIN(integ_gain);
+
+    sr_access_write_reg16(phy->radio->radio_id, REG16_IF_BASEBAND_GAIN_LNA, if_baseband_gain_lna);
     sr_access_write_reg16(phy->radio->radio_id, REG16_RXBANDFRE_CFG1FREQ,
                           phy->config->channel->reg_pattern.rxbandfre_cfg1freq);
     sr_access_write_reg16(phy->radio->radio_id, REG16_CFG2FREQ_CFG3FREQ,
@@ -1339,6 +1444,16 @@ static void prepare_syncing(wps_phy_t *phy)
     sr_access_write_reg16(phy->radio->radio_id, REG16_CFG_WIDTHS_TXPWR_RANDPULSE,
                           phy->config->channel->reg_pattern.cfg_widths_txpwr_randpulse);
     sr_access_write_reg16(phy->radio->radio_id, REG16_TX_PULSE_POS, phy->config->channel->reg_pattern.tx_pulse_pos);
+
+    uint16_t harddisables_ioconfig = sr_access_read_reg16(phy->radio->radio_id, REG16_HARDDISABLES_IOCONFIG);
+
+    harddisables_ioconfig = (harddisables_ioconfig & ~BITS_CHIP_RATE) | phy->config->chip_rate;
+    sr_access_write_reg16(phy->radio->radio_id, REG16_HARDDISABLES_IOCONFIG, harddisables_ioconfig);
+
+    uint16_t preamb_debug = sr_access_read_reg16(phy->radio->radio_id, REG16_PREAMB_DEBUG);
+
+    preamb_debug = (preamb_debug & ~BIT_SUMRXADC) | SUMRXADC(phy->config->chip_rate);
+    sr_access_write_reg16(phy->radio->radio_id, REG16_PREAMB_DEBUG, preamb_debug);
 
     sr_access_enable_radio_irq(phy->radio->radio_id);
 }
@@ -1353,7 +1468,8 @@ static void fast_sync_config_non_stop_rx(wps_phy_t *phy)
                           SET_PWRUPDLAY(PWRUPDELAY_VAL2RAW(phy->config->power_up_delay)) |
                               SET_SLPPERIOD_23_16(FAST_SYNC_IDLE_SLEEP_VAL >> 16));
     sr_access_write_reg16(phy->radio->radio_id, REG16_TIMELIMIT_BIASDELAY,
-                          SET_TIMEOUT(TIMEOUT_VAL2RAW(FAST_SYNC_IDLE_TIMEOUT_VAL)));
+                          SET_TIMEOUT(TIMEOUT_VAL2RAW(FAST_SYNC_IDLE_TIMEOUT_VAL)) | ALTRPLTO_0b1 |
+                              SET_BIASDELAY(EXTRA_BIAS_DELAY));
 }
 
 /** @brief Get if the main frame is in transmit mode.
@@ -1386,8 +1502,7 @@ static bool auto_is_tx(wps_phy_t *phy)
  */
 static bool tx_complete(read_events_t *read_events)
 {
-    return ((GET_TXENDI(read_events->irq) && !GET_RXENDI(read_events->irq) &&
-             !GET_TIMEOUTI(read_events->irq)) ||
+    return ((GET_TXENDI(read_events->irq) && !GET_RXENDI(read_events->irq) && !GET_TIMEOUTI(read_events->irq)) ||
             GET_TXUDRFLI(read_events->irq));
 }
 
@@ -1403,8 +1518,7 @@ static bool tx_complete(read_events_t *read_events)
  */
 static bool tx_complete_auto_reply(read_events_t *read_events)
 {
-    return (GET_TXENDI(read_events->irq) && !GET_TIMEOUTI(read_events->irq)) ||
-           GET_TXUDRFLI(read_events->irq);
+    return (GET_TXENDI(read_events->irq) && !GET_TIMEOUTI(read_events->irq)) || GET_TXUDRFLI(read_events->irq);
 }
 
 /** @brief Get the RX good status.
@@ -1440,8 +1554,7 @@ static bool rx_good_auto_reply(read_events_t *read_events)
 static bool rx_rejected(read_events_t *read_events)
 {
     return GET_RXENDI(read_events->irq) &&
-           (!GET_CRCPASSI(read_events->irq) ||
-            !(GET_ADDRMATI(read_events->irq) || GET_BRDCASTI(read_events->irq)));
+           (!GET_CRCPASSI(read_events->irq) || !(GET_ADDRMATI(read_events->irq) || GET_BRDCASTI(read_events->irq)));
 }
 
 /** @brief Get the RX rejected status for auto replies.
@@ -1453,8 +1566,7 @@ static bool rx_rejected(read_events_t *read_events)
 static bool rx_rejected_auto_reply(read_events_t *read_events)
 {
     return GET_ARRXENDI(read_events->irq) &&
-           (!GET_CRCPASSI(read_events->irq) ||
-            !(GET_ADDRMATI(read_events->irq) || GET_BRDCASTI(read_events->irq)));
+           (!GET_CRCPASSI(read_events->irq) || !(GET_ADDRMATI(read_events->irq) || GET_BRDCASTI(read_events->irq)));
 }
 
 /** @brief Get the RX lost status.
@@ -1525,30 +1637,81 @@ static void set_events_for_empty_tx(wps_phy_t *phy)
     phy->spi_xfer.radio_cfg_out.cfg_widths_txpwr_randpulse = 0;
     phy->spi_xfer.radio_cfg_out.tx_pulse_pos = 0;
     phy->spi_xfer.radio_cfg_out.irq = TXENDE_0b1;
+    phy->empty_tx = true;
 }
 
 static void init_transfer_structures(wps_phy_t *wps_phy)
 {
-    wps_phy->spi_xfer.radio_cfg_out.addr_actions           = REG_WRITE | REG8_ACTIONS;
-    wps_phy->spi_xfer.radio_cfg_out.addr_rx_address        = REG_WRITE | REG16_RXADDRESS;
-    wps_phy->spi_xfer.radio_cfg_out.addr_tx_address        = REG_WRITE | REG16_TXADDRESS;
-    wps_phy->spi_xfer.radio_cfg_out.addr_rx_tx_size        = REG_WRITE | REG16_RX_TX_SIZEREG;
-    wps_phy->spi_xfer.radio_cfg_out.addr_phy_0_1           = REG_WRITE | REG16_PHY_0_1;
+    wps_phy->spi_xfer.radio_cfg_out.addr_actions = REG_WRITE | REG8_ACTIONS;
+    wps_phy->spi_xfer.radio_cfg_out.addr_rx_address = REG_WRITE | REG16_RXADDRESS;
+    wps_phy->spi_xfer.radio_cfg_out.addr_tx_address = REG_WRITE | REG16_TXADDRESS;
+    wps_phy->spi_xfer.radio_cfg_out.addr_rx_tx_size = REG_WRITE | REG16_RX_TX_SIZEREG;
+    wps_phy->spi_xfer.radio_cfg_out.addr_phy_0_1 = REG_WRITE | REG16_PHY_0_1;
     wps_phy->spi_xfer.radio_cfg_out.burst_write_start_addr = REG_WRITE_BURST | REG16_CCA_SETTINGS;
+
+    wps_phy->spi_xfer.radio_cfg_out.addr_harddisables_ioconfig = REG_WRITE | REG16_HARDDISABLES_IOCONFIG;
+    wps_phy->spi_xfer.radio_cfg_out.harddisables_ioconfig = sr_access_read_reg16(wps_phy->radio->radio_id,
+                                                                                 REG16_HARDDISABLES_IOCONFIG);
+
+    wps_phy->spi_xfer.radio_cfg_out.addr_preamb_debug = REG_WRITE | REG16_PREAMB_DEBUG;
+    wps_phy->spi_xfer.radio_cfg_out.preamb_debug = MAXSIGLVL_OPTIMIZED_REG_VAL | SUMRXADC(CHIP_RATE_20_48_MHZ) |
+                                                   SET_MAINDEBUG(wps_phy->radio->main_debug);
 
     wps_phy->spi_xfer.fill_header_out.addr_fifo = REG_WRITE_BURST | REG8_FIFOS;
 
     wps_phy->spi_xfer.read_events_out.addr_pwr_status = REG8_POWER_STATE;
-    wps_phy->spi_xfer.read_events_out.addr_irq            = REG16_IRQ;
-    wps_phy->spi_xfer.read_events_out.addr_set_actions    = REG_WRITE | REG8_ACTIONS;
-    wps_phy->spi_xfer.read_events_out.set_actions         = SLEEP_0b1;
-    wps_phy->spi_xfer.read_events_out.addr_actions        = REG8_ACTIONS;
+    wps_phy->spi_xfer.read_events_out.addr_irq = REG16_IRQ;
+    wps_phy->spi_xfer.read_events_out.addr_set_actions = REG_WRITE | REG8_ACTIONS;
+    wps_phy->spi_xfer.read_events_out.set_actions = SLEEP_0b1;
+    wps_phy->spi_xfer.read_events_out.addr_actions = REG8_ACTIONS;
     /* Disable IRQ sources to be sure it does not trigger after a failed reception. */
-    wps_phy->spi_xfer.read_events_out.addr_set_irq        = REG_WRITE | REG16_IRQ;
-    wps_phy->spi_xfer.read_events_out.set_irq             = 0;
+    wps_phy->spi_xfer.read_events_out.addr_set_irq = REG_WRITE | REG16_IRQ;
+    wps_phy->spi_xfer.read_events_out.set_irq = 0;
 
-    wps_phy->spi_xfer.read_info_out.addr_frame_size       = REG8_FIFOS;
-    wps_phy->spi_xfer.read_info_out.addr_header_size      = REG8_FIFOS;
-    wps_phy->spi_xfer.read_info_out.burst_read_start_addr = REG_READ_BURST |
-                                                            REG16_FRAMEPROC_PHASEDATA;
+    wps_phy->spi_xfer.read_info_out.addr_frame_size = REG8_FIFOS;
+    wps_phy->spi_xfer.read_info_out.addr_header_size = REG8_FIFOS;
+    wps_phy->spi_xfer.read_info_out.burst_read_start_addr = REG_READ_BURST | REG16_FRAMEPROC_PHASEDATA;
+
+    wps_phy->spi_xfer.read_cir_info_out.addr_cir_info = REG_READ_BURST | REG8_FIFOS;
+}
+
+/** @brief Handle the dummy TX events.
+ *
+ *  @note This is related to ASIC bug #3:
+ *        The radio needs to be put in regular TX once to function properly.
+ *
+ *  @param[in] wps_phy The WPS PHY Object.
+ */
+static void handle_dummy_tx_events(wps_phy_t *wps_phy)
+{
+    /* Wait for IRQ pin. */
+    uint64_t timeout_irq_polling = swc_hal_get_tick_free_running_timer() +
+                                   (INIT_DUMMY_TX_TIMEOUT_MS * swc_hal_get_free_running_timer_frequency_hz() /
+                                    MS_TO_S_FACTOR);
+    bool timeout_occurs = false;
+
+    /* #3 Since the radio need to be put in radio needs to be put in regular TX once to function properly,
+     *    we need to make sure to handle the IRQ that will trigger. A timeout is needed here
+     *    because after a connect/disconnect routine, this interrupt doesn't always trigger.
+     */
+    while (sr_access_read_irq_pin(wps_phy->radio->radio_id) == 0 && timeout_occurs == false) {
+        if (swc_hal_get_tick_free_running_timer() > timeout_irq_polling) {
+            timeout_occurs = true;
+        }
+    }
+
+    uint16_t events = sr_access_read_reg16(wps_phy->radio->radio_id, REG16_IRQ);
+
+    if (!GET_TXUDRFLI(events) && !timeout_occurs && !GET_TXENDI(events)) {
+        do {
+            sr_access_write_reg8(wps_phy->radio->radio_id, REG8_ACTIONS, 0x0000);
+            wps_phy->pwr_status_cmd = sr_access_read_reg8(wps_phy->radio->radio_id, REG8_POWER_STATE);
+        } while (!GET_AWAKE(wps_phy->pwr_status_cmd));
+        /* Wait for IRQ pin. */
+        while (sr_access_read_irq_pin(wps_phy->radio->radio_id) == 0) {}
+    }
+    sr_access_read_reg16(wps_phy->radio->radio_id, REG16_IRQ);
+
+    /* Make sure to clear pending IRQ by disabling the radio IRQ in NVIC. */
+    sr_access_disable_radio_irq(wps_phy->radio->radio_id);
 }

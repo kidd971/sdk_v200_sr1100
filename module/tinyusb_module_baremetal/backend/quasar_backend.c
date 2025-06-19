@@ -8,8 +8,8 @@
  */
 
 /* INCLUDES *******************************************************************/
-#include "quasar_it.h"
 #include "quasar.h"
+#include "quasar_it.h"
 #include "tinyusb_module_baremetal_facade.h"
 
 /* CONSTANTS ******************************************************************/
@@ -39,7 +39,7 @@ void tusb_hal_timer_init(void)
         .timer_selection = TIMER_SELECTION_USB_TASK,
         .time_base = QUASAR_TIMER_TIME_BASE_MICROSECOND,
         .time_period = 500,
-        .irq_priority = IRQ_PRIORITY_TMER_USB_TASK
+        .irq_priority = IRQ_PRIORITY_TMER_USB_TASK,
     };
     quasar_timer_init(&timer_config);
 }

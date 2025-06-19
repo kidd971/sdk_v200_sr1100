@@ -28,8 +28,8 @@ extern "C" {
 
 /* TYPES **********************************************************************/
 typedef struct state_variable {
-        int16_t predicted_sample;
-        uint8_t index;
+    int16_t predicted_sample;
+    uint8_t index;
 } __attribute__((packed)) state_variable_t;
 
 typedef union adpcm_state {

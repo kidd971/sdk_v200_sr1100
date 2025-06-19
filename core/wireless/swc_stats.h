@@ -53,6 +53,19 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
  *  @return Reference to the statistics for the target channel.
  */
 swc_statistics_t *swc_connection_update_stats_per_channel(swc_connection_t *const conn, const uint8_t channel_number);
+
+/** @brief Update connection QOS indicators on a per channel basis.
+ *
+ *  After calling this function, the QOS indicators inside the
+ *  connection handle will be updated. The function also
+ *  returns a reference to these internal indicators so they
+ *  can be used by the caller.
+ *
+ *  @param[in] conn            Connection handle.
+ *  @param[in] channel_number  Target channel.
+ *  @return Reference to the QOS indicators for the target channel.
+ */
+swc_qos_indicators_t *swc_connection_update_qos_per_channel(swc_connection_t *const conn, const uint8_t channel_number);
 #endif
 
 /** @brief Reset all the connection statistics.

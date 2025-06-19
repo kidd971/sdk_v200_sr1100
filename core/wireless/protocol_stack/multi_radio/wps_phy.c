@@ -48,8 +48,8 @@ void wps_multi_radio_set_tx_wakeup_mode(multi_radio_tx_wakeup_mode_t tx_wakeup_m
 void wps_phy_init(wps_phy_t *wps_phy, wps_phy_cfg_t *cfg)
 {
     phy_init(wps_phy, cfg);
-    wps_phy->phy_handle                           = phy_handle;
-    wps_phy_multi.multi_radio.radios_lqi          = wps_phy_multi.lqi;
+    wps_phy->phy_handle = phy_handle;
+    wps_phy_multi.multi_radio.radios_lqi = wps_phy_multi.lqi;
     for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
         wps_phy_multi.multi_radio.radios_lqi[i].total_count = 0;
     }
@@ -58,7 +58,7 @@ void wps_phy_init(wps_phy_t *wps_phy, wps_phy_cfg_t *cfg)
             wps_phy_multi.multi_radio.radios_lqi[i].mode = LQI_MODE_0;
         }
     }
-    wps_phy_multi.multi_radio.radio_count         = WPS_RADIO_COUNT;
+    wps_phy_multi.multi_radio.radio_count = WPS_RADIO_COUNT;
     wps_phy_multi.multi_radio.hysteresis_tenth_db = MULTI_RADIO_RSSI_HYSTERESIS;
 }
 
@@ -74,7 +74,7 @@ void wps_phy_connect(wps_phy_t *wps_phy)
         single_radio_processing_switch_radio(wps_phy);
     }
     swc_hal_timer_multi_radio_timer_start();
-    sr_access_radio_context_switch(0);
+    sr_access_radio_context_switch(link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio));
 }
 
 void wps_phy_disconnect(wps_phy_t *wps_phy)
@@ -88,18 +88,23 @@ void wps_phy_disconnect(wps_phy_t *wps_phy)
     swc_hal_timer_multi_radio_timer_stop();
 }
 
-void wps_phy_set_radio_select(multi_radio_select_t radio_select)
+void wps_phy_set_multi_radio_select_mode(multi_radio_select_mode_t multi_radio_select_mode)
 {
-    wps_phy_multi.multi_radio.radio_select = radio_select;
+    wps_phy_multi.multi_radio.multi_radio_select_mode = multi_radio_select_mode;
+}
+
+multi_radio_select_mode_t wps_phy_get_multi_radio_select_mode(void)
+{
+    return wps_phy_multi.multi_radio.multi_radio_select_mode;
 }
 
 phy_output_signal_t wps_phy_get_main_signal(wps_phy_t *wps_phy)
 {
-    phy_output_signal_t leading_signal   = PHY_SIGNAL_YIELD;
+    phy_output_signal_t leading_signal = PHY_SIGNAL_YIELD;
     phy_output_signal_t following_signal = PHY_SIGNAL_YIELD;
-    uint8_t radio_idx                    = wps_phy_multi.current_radio_idx;
+    uint8_t radio_idx = wps_phy_multi.current_radio_idx;
 
-    wps_phy_multi.leading_radio_idx = link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio);
+    wps_phy_multi.leading_radio_idx = link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio);
     for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
         if (i == wps_phy_multi.leading_radio_idx) {
             leading_signal = phy_get_main_signal(&wps_phy[i]);
@@ -130,7 +135,8 @@ phy_output_signal_t wps_phy_get_main_signal(wps_phy_t *wps_phy)
         }
     } else {
         /* Yield if one of both radio is still processing the frame. */
-        if (is_frame_processing(leading_signal, wps_phy_multi.leading_radio_idx) || is_frame_processing(following_signal, wps_phy_multi.following_radio_idx)) {
+        if (is_frame_processing(leading_signal, wps_phy_multi.leading_radio_idx) ||
+            is_frame_processing(following_signal, wps_phy_multi.following_radio_idx)) {
             return PHY_SIGNAL_YIELD;
         } else {
             return leading_signal;
@@ -141,7 +147,7 @@ phy_output_signal_t wps_phy_get_main_signal(wps_phy_t *wps_phy)
 
 phy_output_signal_t wps_phy_get_auto_signal(wps_phy_t *wps_phy)
 {
-    uint8_t leading_radio_idx = link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio);
+    uint8_t leading_radio_idx = link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio);
 
     return phy_get_auto_signal(&wps_phy[leading_radio_idx]);
 }
@@ -152,10 +158,10 @@ void wps_phy_set_main_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer, xlayer_cfg_in
     uint8_t current_leading_radio_idx;
 
     /* Store previous leading radio index. */
-    previous_leading_radio_idx = link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio);
+    previous_leading_radio_idx = link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio);
     /* Update leading radio. */
     link_multi_radio_update(&wps_phy_multi.multi_radio);
-    current_leading_radio_idx = link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio);
+    current_leading_radio_idx = link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio);
     /* Update single radio processing if leading radio switched. */
     if ((wps_phy_multi.multi_radio.mode == MULTI_RADIO_MODE_1) &&
         (previous_leading_radio_idx != current_leading_radio_idx)) {
@@ -167,13 +173,13 @@ void wps_phy_set_main_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer, xlayer_cfg_in
 
     if (xlayer->frame.source_address == wps_phy->local_address) {
         /* Following radio does not transmit packets. */
-        wps_phy_multi.following_main_xlayer.frame.header_memory       = NULL;
-        wps_phy_multi.following_main_xlayer.frame.header_begin_it     = NULL;
-        wps_phy_multi.following_main_xlayer.frame.header_end_it       = NULL;
-        wps_phy_multi.following_main_xlayer.frame.header_memory_size  = 0;
-        wps_phy_multi.following_main_xlayer.frame.payload_memory      = NULL;
-        wps_phy_multi.following_main_xlayer.frame.payload_begin_it    = NULL;
-        wps_phy_multi.following_main_xlayer.frame.payload_end_it      = NULL;
+        wps_phy_multi.following_main_xlayer.frame.header_memory = NULL;
+        wps_phy_multi.following_main_xlayer.frame.header_begin_it = NULL;
+        wps_phy_multi.following_main_xlayer.frame.header_end_it = NULL;
+        wps_phy_multi.following_main_xlayer.frame.header_memory_size = 0;
+        wps_phy_multi.following_main_xlayer.frame.payload_memory = NULL;
+        wps_phy_multi.following_main_xlayer.frame.payload_begin_it = NULL;
+        wps_phy_multi.following_main_xlayer.frame.payload_end_it = NULL;
         wps_phy_multi.following_main_xlayer.frame.payload_memory_size = 0;
     } else {
         /* Following radio does not transmit ack. */
@@ -188,9 +194,8 @@ void wps_phy_set_main_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer, xlayer_cfg_in
             xlayer_cfg->rx_constgain = link_gain_loop_get_gain_value(&xlayer_cfg->gain_loop[i]);
             phy_set_main_xlayer(&wps_phy[i], xlayer, xlayer_cfg);
         } else {
-            wps_phy_multi.following_xlayer_cfg.channel      = &channel[i];
-            wps_phy_multi.following_xlayer_cfg.rx_constgain = link_gain_loop_get_gain_value(
-                &xlayer_cfg->gain_loop[i]);
+            wps_phy_multi.following_xlayer_cfg.channel = &channel[i];
+            wps_phy_multi.following_xlayer_cfg.rx_constgain = link_gain_loop_get_gain_value(&xlayer_cfg->gain_loop[i]);
             wps_phy_multi.following_xlayer_cfg.certification_header_en = false;
             phy_set_main_xlayer(&wps_phy[i], &wps_phy_multi.following_main_xlayer, &wps_phy_multi.following_xlayer_cfg);
         }
@@ -206,7 +211,7 @@ void wps_phy_set_auto_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer)
         return;
     }
 
-    uint8_t leading_radio_idx = link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio);
+    uint8_t leading_radio_idx = link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio);
 
     if (xlayer->frame.source_address == wps_phy->local_address) {
         for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
@@ -217,7 +222,7 @@ void wps_phy_set_auto_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer)
             }
         }
     } else {
-        wps_phy_multi.following_auto_xlayer                   = *xlayer;
+        wps_phy_multi.following_auto_xlayer = *xlayer;
 
         for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
             if (i == leading_radio_idx) {
@@ -235,14 +240,13 @@ void wps_phy_end_process(wps_phy_t *wps_phy)
         uint8_t gain_index = link_gain_loop_get_gain_index(&wps_phy->config->gain_loop[radio_idx]);
 
         link_lqi_update(&wps_phy_multi.multi_radio.radios_lqi[radio_idx], gain_index,
-                        wps_phy[radio_idx].xlayer_main->frame.frame_outcome,
-                        wps_phy[radio_idx].config->rssi_raw, wps_phy[radio_idx].config->rnsi_raw,
-                        wps_phy[radio_idx].config->phase_offset);
+                        wps_phy[radio_idx].xlayer_main->frame.frame_outcome, wps_phy[radio_idx].config->rssi_raw,
+                        wps_phy[radio_idx].config->rnsi_raw, wps_phy[radio_idx].config->phase_offset,
+                        wps_phy[radio_idx].config->phase_offset_count);
 
         /* Update gain loop */
         link_gain_loop_update(&wps_phy->config->gain_loop[radio_idx],
-                              wps_phy[radio_idx].xlayer_main->frame.frame_outcome,
-                              wps_phy[radio_idx].config->rssi_raw);
+                              wps_phy[radio_idx].xlayer_main->frame.frame_outcome, wps_phy[radio_idx].config->rssi_raw);
     }
 }
 
@@ -285,8 +289,7 @@ void wps_phy_multi_process_radio_timer(wps_phy_t *wps_phy)
     }
 }
 
-void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
-                            reg_write_cfg_t cfg)
+void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg)
 {
     for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
         phy_write_register(&wps_phy[i], starting_reg, data, cfg);
@@ -298,22 +301,16 @@ void wps_phy_clear_write_register(wps_phy_t *wps_phy)
     phy_clear_write_register(wps_phy);
 }
 
-void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer,
-                           bool *xfer_cmplt)
+void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt)
 {
     for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
         phy_read_register(&wps_phy[i], target_register, rx_buffer, xfer_cmplt);
     }
 }
 
-void wps_phy_enable_debug_feature(wps_phy_t *wps_phy, phy_debug_cfg_t *phy_debug)
+uint8_t wps_phy_multi_get_leading_radio(void)
 {
-    phy_enable_debug_feature(wps_phy, phy_debug);
-}
-
-uint8_t wps_phy_multi_get_replying_radio(void)
-{
-    return link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio);
+    return link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio);
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -336,7 +333,7 @@ static bool is_frame_processing(phy_output_signal_t output_signal, uint8_t index
 static void single_radio_processing_switch_radio(wps_phy_t *wps_phy)
 {
     for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
-        if (i == link_multi_radio_get_replying_radio(&wps_phy_multi.multi_radio)) {
+        if (i == link_multi_radio_get_leading_radio(&wps_phy_multi.multi_radio)) {
             wps_phy_multi.leading_radio_idx = i;
         } else {
             wps_phy_multi.following_radio_idx = i;

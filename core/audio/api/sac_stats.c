@@ -95,8 +95,8 @@ uint32_t sac_pipeline_get_consumer_queue_peak_buffer_load(sac_pipeline_t *pipeli
 
 void sac_pipeline_reset_stats(sac_pipeline_t *pipeline)
 {
-    uint32_t consume_size;
-    uint32_t produce_size;
+    uint32_t consume_size = 0;
+    uint32_t produce_size = 0;
 
     produce_size = pipeline->_statistics.producer_buffer_size;
     consume_size = pipeline->_statistics.consumer_buffer_size;

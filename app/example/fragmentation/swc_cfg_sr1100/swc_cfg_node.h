@@ -12,6 +12,13 @@
 /* CONSTANTS ******************************************************************/
 #define NETWORK_ROLE SWC_ROLE_NODE
 
+/* The timeout in second after which the pairing procedure will abort. */
+#define PAIRING_TIMEOUT_IN_SECONDS 10
+/* The pairing device role is used for the coordinator's pairing discovery list. */
+#define PAIRING_DEVICE_ROLE 1
+/* The application code prevents unwanted devices from pairing with this application. */
+#define PAIRING_APP_CODE 0x0000000000000555
+
 /* Output power configuration */
 #define TX_AUTO_REPLY_PULSE_COUNT 1
 #define TX_AUTO_REPLY_PULSE_WIDTH 3

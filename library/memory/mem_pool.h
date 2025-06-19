@@ -10,8 +10,8 @@
 #define MEM_POOL_H_
 
 /* INCLUDES *******************************************************************/
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #ifdef __cplusplus
@@ -20,11 +20,11 @@ extern "C" {
 
 /* TYPES **********************************************************************/
 typedef struct {
-    uint8_t  *mem_pool_begin;
+    uint8_t *mem_pool_begin;
     uint32_t capacity;
     uint32_t free_bytes;
-    uint8_t  *mem_pool_end;
-    uint8_t  *mem_pool_it;
+    uint8_t *mem_pool_end;
+    uint8_t *mem_pool_it;
 } mem_pool_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/

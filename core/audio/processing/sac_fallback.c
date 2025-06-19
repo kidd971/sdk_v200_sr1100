@@ -63,10 +63,10 @@ void sac_fallback_init(void *instance, const char *name, sac_pipeline_t *pipelin
 {
     (void)mem_pool;
 
-    uint32_t consumer_buffer_size_tenths;
+    uint32_t consumer_buffer_size_tenths = 0;
     sac_fallback_instance_t *inst = (sac_fallback_instance_t *)instance;
-    sac_fallback_cca_metrics_t *cca_metrics;
-    sac_fallback_link_margin_metrics_t *link_margin_metrics;
+    sac_fallback_cca_metrics_t *cca_metrics = NULL;
+    sac_fallback_link_margin_metrics_t *link_margin_metrics = NULL;
 
     *status = SAC_OK;
 
@@ -251,10 +251,10 @@ uint8_t sac_fallback_get_rx_link_margin(sac_fallback_instance_t *instance, sac_s
 
 int sac_fallback_format_stats(sac_fallback_instance_t *instance, char *buffer, uint16_t size, sac_status_t *status)
 {
-    sac_fallback_cca_metrics_t *cca_metrics;
-    sac_fallback_queue_metrics_t *consumer_queue_metrics;
-    sac_fallback_link_margin_metrics_t *link_margin_metrics;
-    sac_pipeline_t *pipeline;
+    sac_fallback_cca_metrics_t *cca_metrics = NULL;
+    sac_fallback_queue_metrics_t *consumer_queue_metrics = NULL;
+    sac_fallback_link_margin_metrics_t *link_margin_metrics = NULL;
+    sac_pipeline_t *pipeline = NULL;
     int string_length = 0;
 
     const char *is_active_str = "Fallback State";
@@ -341,9 +341,9 @@ bool sac_fallback_is_tx_device(sac_fallback_instance_t *instance, sac_status_t *
  */
 static void update_state(sac_fallback_instance_t *instance, sac_status_t *status)
 {
-    sac_fallback_cca_metrics_t *cca_metrics;
-    sac_fallback_queue_metrics_t *consumer_queue_metrics;
-    sac_fallback_link_margin_metrics_t *link_margin_metrics;
+    sac_fallback_cca_metrics_t *cca_metrics = NULL;
+    sac_fallback_queue_metrics_t *consumer_queue_metrics = NULL;
+    sac_fallback_link_margin_metrics_t *link_margin_metrics = NULL;
 
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return);
 
@@ -453,8 +453,8 @@ static void init_link_stats(sac_fallback_instance_t *instance)
 {
     sac_fallback_link_margin_metrics_t *lm_metrics = &instance->_internal.link_margin_metrics;
     sac_fallback_cca_metrics_t *cca_metrics = &instance->_internal.cca_metrics;
-    swc_fallback_info_t fallback_info;
-    swc_error_t swc_err;
+    swc_fallback_info_t fallback_info = {0};
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     fallback_info = swc_connection_get_fallback_info(instance->connection, &swc_err);
 
@@ -543,8 +543,8 @@ static void calculate_link_margin_metrics(sac_fallback_instance_t *instance)
 static void calculate_cca_metrics(sac_fallback_instance_t *instance)
 {
     sac_fallback_cca_metrics_t *cca_metrics = &instance->_internal.cca_metrics;
-    swc_fallback_info_t fallback_info;
-    swc_error_t swc_err;
+    swc_fallback_info_t fallback_info = {0};
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     fallback_info = swc_connection_get_fallback_info(instance->connection, &swc_err);
 

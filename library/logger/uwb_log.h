@@ -40,21 +40,21 @@ typedef enum level {
 } log_level_t;
 
 typedef struct {
-    uint8_t  enabled     :1;
-    uint8_t  timestamp   :1;
-    uint8_t  new_line    :1;
-    uint8_t  deferred    :1;
-    uint8_t  level       :3;
+    uint8_t enabled : 1;
+    uint8_t timestamp : 1;
+    uint8_t new_line : 1;
+    uint8_t deferred : 1;
+    uint8_t level : 3;
     uint16_t freq;
 } log_config_t;
 
 typedef struct {
-    log_config_t  config;
+    log_config_t config;
     circ_buffer_t circ_buf;
-    char         *buffer;
-    uint16_t      buf_size;
-    uint32_t    (*timestamp)(void);
-    void        (*io)(char *message);
+    char *buffer;
+    uint16_t buf_size;
+    uint32_t (*timestamp)(void);
+    void (*io)(char *message);
 } uwb_log_t;
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/

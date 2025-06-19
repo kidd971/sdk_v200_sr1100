@@ -56,23 +56,30 @@ typedef struct {
  *  @param[in] on_time_pll_cycles     CCA On time.
  *  @param[in] max_try_count          CCA max try count.
  *  @param[in] fail_action            CCA fail action.
- *  @param[in] enable                 CCA enable flag.
+ *  @return True if the CCA configuration is valid.
  */
-void link_cca_init(link_cca_t *cca, uint8_t threshold, uint16_t retry_time_pll_cycles, uint16_t on_time_pll_cycles,
-                   uint8_t max_try_count, cca_fail_action_t fail_action, bool enable);
+bool link_cca_init(link_cca_t *cca, uint8_t threshold, uint16_t retry_time_pll_cycles, uint16_t on_time_pll_cycles,
+                   uint8_t max_try_count, cca_fail_action_t fail_action);
+
+/** @brief Disable the link CCA module.
+ *
+ *  @param[in] cca  CCA object.
+ */
+void link_cca_disable(link_cca_t *cca);
 
 /** @brief Set CCA fallback try count array.
  *
- * @param[in] cca           CCA object.
- * @param[in] fbk_try_count Fallback try count array.
- * @param[in] fallback_size Fallback array size.
+ *  @param[in] cca            CCA object.
+ *  @param[in] fbk_try_count  Fallback try count array.
+ *  @param[in] fallback_size  Fallback array size.
+ *  @return True if the CCA configuration is valid.
  */
-void link_cca_set_fbk_try_count(link_cca_t *cca, uint8_t *fbk_try_count, size_t fallback_size);
+bool link_cca_set_fbk_try_count(link_cca_t *cca, uint8_t *fbk_try_count, size_t fallback_size);
 
-/** @brief Get CCA on time.
+/** @brief Get CCA ON time.
  *
  *  @param[in] cca  CCA object.
- *  @return  CCA on time.
+ *  @return  CCA ON time.
  */
 uint16_t link_cca_get_on_time(link_cca_t *cca);
 

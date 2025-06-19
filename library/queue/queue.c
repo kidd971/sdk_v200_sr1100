@@ -24,16 +24,16 @@ static queue_exit_critical_t exit_critical;
 void queue_init(queue_critical_cfg_t critical)
 {
     enter_critical = critical.enter_critical;
-    exit_critical  = critical.exit_critical;
+    exit_critical = critical.exit_critical;
     last_queue = NULL;
 }
 
-uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_nodes,
-                         uint16_t data_size, const char *queue_name)
+uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_nodes, uint16_t data_size,
+                         const char *queue_name)
 {
     queue_node_t *node_ptr = (queue_node_t *)pool;
     uint8_t *data = (uint8_t *)pool + (sizeof(queue_node_t) * num_nodes);
-    uint32_t num_bytes_used;
+    uint32_t num_bytes_used = 0;
 
     /* Initialize nodes */
     for (uint8_t i = 0; i < num_nodes; i++) {
@@ -56,7 +56,7 @@ uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_no
     /* Add queue to queue list */
     new_free_queue->prev_queue = last_queue;
     last_queue = new_free_queue;
-    num_bytes_used =  (num_nodes * ((sizeof(queue_node_t) + data_size)));
+    num_bytes_used = (num_nodes * ((sizeof(queue_node_t) + data_size)));
     /* Round up the number of bytes used to nearest 4-byte multiple */
     num_bytes_used = ((num_bytes_used + 3) & 0xfffffffc);
     return num_bytes_used;
@@ -66,10 +66,10 @@ void queue_init_queue(queue_t *queue, uint16_t limit, const char *q_name)
 {
     /* Initialize new queue */
     enter_critical();
-    queue->head   = NULL;
-    queue->tail   = NULL;
+    queue->head = NULL;
+    queue->tail = NULL;
     queue->length = 0;
-    queue->limit  = limit;
+    queue->limit = limit;
     queue->q_name = q_name;
     queue->free_queue_type = false;
     /* Add queue to queue list */
@@ -192,7 +192,7 @@ uint16_t queue_get_limit(queue_t *queue)
 
 void queue_flush(queue_t *queue_to_flush)
 {
-    queue_node_t *node;
+    queue_node_t *node = NULL;
 
     /* Cannot flush free queues */
     if (!queue_to_flush->free_queue_type) {
@@ -253,9 +253,9 @@ bool queue_get_stats(bool first, queue_stats_t *queue_stats)
         }
     }
     if (q_ptr != NULL) {
-        queue_stats->queue_name      = (char *)q_ptr->q_name;
-        queue_stats->queue_length    = q_ptr->length;
-        queue_stats->queue_limit     = q_ptr->limit;
+        queue_stats->queue_name = (char *)q_ptr->q_name;
+        queue_stats->queue_length = q_ptr->length;
+        queue_stats->queue_limit = q_ptr->limit;
         queue_stats->queue_free_type = q_ptr->free_queue_type;
         ret = true;
     }

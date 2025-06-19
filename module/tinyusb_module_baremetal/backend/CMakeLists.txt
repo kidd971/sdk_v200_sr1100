@@ -8,8 +8,6 @@ target_include_directories(module_tinyusb_baremetal_backend PUBLIC ${PROJECT_SOU
 
 if (HARDWARE STREQUAL "EVK")
     target_sources(module_tinyusb_baremetal_backend PRIVATE evk_backend.c)
-elseif(HARDWARE STREQUAL "PULSAR")
-    target_sources(module_tinyusb_baremetal_backend PRIVATE pulsar_backend.c)
 elseif(HARDWARE STREQUAL "QUASAR")
     target_sources(module_tinyusb_baremetal_backend PRIVATE quasar_backend.c)
 endif()

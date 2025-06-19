@@ -9,18 +9,30 @@
 
 /* INCLUDES *******************************************************************/
 #include "link_fallback.h"
+#include "stddef.h"
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 void link_fallback_init(link_fallback_t *const link_fallback, const uint8_t *const threshold, uint8_t threshold_count)
 {
-    link_fallback->threshold       = threshold;
+    link_fallback->threshold = threshold;
     link_fallback->threshold_count = threshold_count;
+}
+
+void link_fallback_disable(link_fallback_t *const link_fallback)
+{
+    link_fallback->threshold = NULL;
+    link_fallback->threshold_count = 0;
 }
 
 bool link_fallback_get_index(link_fallback_t *link_fallback, uint8_t payload_size, uint8_t *index)
 {
     *index = 0;
     bool active = false;
+
+    if ((link_fallback->threshold == NULL) || (link_fallback->threshold_count == 0)) {
+        /* Fallback is disabled. */
+        return false;
+    }
 
     for (uint8_t i = 0; i < link_fallback->threshold_count; i++) {
         if (payload_size <= link_fallback->threshold[i]) {

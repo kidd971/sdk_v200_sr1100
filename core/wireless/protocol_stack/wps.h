@@ -32,42 +32,20 @@ extern "C" {
 /*! User MACRO to identify data in auto-reply timeslot (auto reply timeslot) */
 #define AUTO_TIMESLOT(x) ((x) | BIT_AUTO_REPLY_TIMESLOT)
 
+/** @brief Check condition and set error code macro.
+ */
+#define CHECK_ERROR(cond, err_ptr, err_code, ret) \
+    do {                                          \
+        if (cond) {                               \
+            *(err_ptr) = (err_code);              \
+            ret;                                  \
+        }                                         \
+    } while (0)
+
 /* TYPES **********************************************************************/
 /** @brief WPS instance.
  */
 typedef struct wps wps_t;
-
-/** @brief Wireless Protocol Stack connection configuration.
- */
-typedef struct wps_connection_config {
-    /* Address */
-    /*! Current connection source address (Transmitting node address) */
-    uint16_t source_address;
-    /*! Current connection destination address (Receiving node address) */
-    uint16_t destination_address;
-
-    /* Buffer */
-    /*! Queue size */
-    uint16_t fifo_buffer_size;
-    /*! Length of the WPS header in the current configuration */
-    uint16_t header_length;
-    /*! Frame length to send/receive. Set to header + max payload size.*/
-    uint32_t frame_length;
-    /*! Length of the WPS header for ACK frame in the current configuration */
-    uint16_t ack_header_length;
-
-    /*! Connection priority */
-    uint8_t priority;
-    /*! Ranging mode */
-    wps_ranging_mode_t ranging_mode;
-    /*! Credit control flow flag. */
-    bool credit_fc_enabled;
-
-    /*! Get free running timer */
-    uint64_t (*get_tick)(void);
-    /*! Tick frequency in Hertz. */
-    uint32_t tick_frequency_hz;
-} wps_connection_cfg_t;
 
 /** @brief Wireless Protocol Stack connection header configuration.
  *
@@ -83,6 +61,8 @@ typedef struct wps_header_cfg {
     bool connection_id;
     /*! Credit control flow flag. */
     bool credit_fc_enabled;
+    /*! Dynamic PHY mode enabled flag. */
+    bool dynamic_phy_mode;
 } wps_header_cfg_t;
 
 /** @brief Wireless Protocol Stack structure.
@@ -135,9 +115,10 @@ void wps_radio_init(wps_radio_t *wps_radio, bool no_reset, sr_phy_error_t *err);
  *  @note Make sure that the HAL and the SPI buffer are properly initialized
  *        before calling this.
  *
- *  @param[in] wps_radio  WPS radio instance.
+ *  @param[in] wps_radio   WPS radio instance.
+ *  @param[in] calib_vars  Calibration structure.
  */
-void wps_radio_calibration(wps_radio_t *wps_radio);
+void wps_radio_calibration(wps_radio_t *wps_radio, calib_vars_t *calib_vars);
 
 /** @brief Get the radio's 64-bit serial number.
  *
@@ -276,8 +257,8 @@ void wps_config_node(wps_node_t *node, wps_radio_t *radio, wps_node_cfg_t *cfg, 
  *  @param[in]  schedule_size                 Schedule size. Timeslot's array size must match.
  *  @param[out] err                           Pointer to the error code.
  */
-void wps_config_network_schedule(wps_t *wps, uint32_t *timeslot_duration_pll_cycles, timeslot_t *timeslot, uint32_t schedule_size,
-                                 wps_error_t *err);
+void wps_config_network_schedule(wps_t *wps, uint32_t *timeslot_duration_pll_cycles, timeslot_t *timeslot,
+                                 uint32_t schedule_size, wps_error_t *err);
 
 /** @brief Reset schedule.
  *
@@ -337,10 +318,10 @@ void wps_disable_fast_sync(wps_t *wps, wps_error_t *err);
  *
  *  @param[in]  wps             Wireless Protocol Stack instance.
  *  @param[in]  rollover_value  Offset rollover value.
- *  @param[in]  increment_step  Number of timeslot between each offset increment.
+ *  @param[in]  step_ms         Time in milliseconds between each offset increment.
  *  @param[out] err             Pointer to the error code.
  */
-void wps_init_rdo(wps_t *wps, uint16_t rollover_value, uint16_t increment_step, wps_error_t *err);
+void wps_init_rdo(wps_t *wps, uint16_t rollover_value, uint16_t step_ms, wps_error_t *err);
 
 /** @brief Enable random data offset.
  *
@@ -364,8 +345,7 @@ void wps_disable_rdo(wps_t *wps, wps_error_t *err);
  *                                          offset.
  *  @param[out] err                         Pointer to the error code.
  */
-void wps_enable_ddcm(wps_t *wps, uint16_t max_timeslot_offset, uint32_t sync_loss_max_duration_pll,
-                     wps_error_t *err);
+void wps_enable_ddcm(wps_t *wps, uint16_t max_timeslot_offset, uint32_t sync_loss_max_duration_pll, wps_error_t *err);
 
 /** @brief Disable the distributed desync concurrency mechanism.
  *
@@ -415,24 +395,6 @@ uint8_t wps_get_connection_ack_header_size(wps_t *wps, wps_header_cfg_t header_c
 void wps_create_connection(wps_connection_t *connection, wps_node_t *node, wps_connection_cfg_t *config,
                            wps_error_t *err);
 
-/** @brief Enable connection fallback feature.
- *
- *  @param[in]  connection               Connection instance.
- *  @param[in]  threshold                Array of payload size for fallback threshold.
- *  @param[in]  threshold_count          Number of threshold.
- *  @param[in]  fallback_channel_buffer  Memory pointer to store fallback channels.
- *  @param[out] err                      Pointer to the error code.
- */
-void wps_connection_enable_fallback(wps_connection_t *connection, uint8_t *threshold, uint8_t threshold_count,
-                                    rf_channel_array_t fallback_channel_buffer, wps_error_t *err);
-
-/** @brief Disable connection fallback.
- *
- * @param[in]  connection  Connection instance.
- * @param[out] err         Pointer to the error code.
- */
-void wps_connection_disable_fallback(wps_connection_t *connection, wps_error_t *err);
-
 /** @brief Configure the connection header.
  *
  *  @note Must be called after wps_create_connection and all
@@ -444,7 +406,8 @@ void wps_connection_disable_fallback(wps_connection_t *connection, wps_error_t *
  *  @param[in]  header_cfg Header configuration.
  *  @param[out] err        Pointer to the error code.
  */
-void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, wps_header_cfg_t header_cfg, wps_error_t *err);
+void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, wps_header_cfg_t header_cfg,
+                                     wps_error_t *err);
 
 /** @brief Configure the header for ACK frame without dedicated auto-reply connection.
  *
@@ -458,7 +421,7 @@ void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, w
  *  @param[out] err         Pointer to the error code.
  */
 void wps_configure_header_acknowledge(wps_t *wps, wps_connection_t *connection, wps_header_cfg_t header_cfg,
-                                                wps_error_t *err);
+                                      wps_error_t *err);
 
 /** @brief Set connection's timeslot.
  *
@@ -489,7 +452,7 @@ void wps_connection_set_timeslot_priority(wps_connection_t *connection, wps_t *n
                                           const int32_t *const timeslot_id, uint32_t nb_timeslots,
                                           const uint8_t *const slots_priority);
 
-/** @brief Configure connection's RF channel.
+/** @brief Configure connection's RF channel for the 20.48 MHz PHY rate.
  *
  *  Configure the receiver's filter, transmission power and power amplifier.
  *
@@ -499,10 +462,23 @@ void wps_connection_set_timeslot_priority(wps_connection_t *connection, wps_t *n
  *  @param[in]  config          Channel configuration.
  *  @param[out] err             Pointer to the error code.
  */
-void wps_connection_config_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
-                                   channel_cfg_t *config, wps_error_t *err);
+void wps_connection_config_channel_20_48(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                         channel_cfg_t *config, wps_error_t *err);
 
-/** @brief Configure connection's fallback RF channel.
+/** @brief Configure connection's RF channel for the 40.96 MHz PHY rate.
+ *
+ *  Configure the receiver's filter, transmission power and power amplifier.
+ *
+ *  @param[in]  connection      Connection instance.
+ *  @param[in]  node            Node instance.
+ *  @param[in]  channel_x       Channel number.
+ *  @param[in]  config          Channel configuration.
+ *  @param[out] err             Pointer to the error code.
+ */
+void wps_connection_config_channel_40_96(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                         channel_cfg_t *config, wps_error_t *err);
+
+/** @brief Configure connection's fallback RF channel for the 20.48 MHz PHY rate.
  *
  *  Configure the receiver's filter, transmission power and power amplifier.
  *
@@ -513,8 +489,22 @@ void wps_connection_config_channel(wps_connection_t *connection, wps_node_t *nod
  *  @param[in]  config          Channel configuration.
  *  @param[out] err             Pointer to the error code.
  */
-void wps_connection_config_fallback_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
-                                            uint8_t fallback_index, channel_cfg_t *config, wps_error_t *err);
+void wps_connection_config_fallback_channel_20_48(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                                  uint8_t fallback_index, channel_cfg_t *config, wps_error_t *err);
+
+/** @brief Configure connection's fallback RF channel for the 40.96 MHz PHY rate.
+ *
+ *  Configure the receiver's filter, transmission power and power amplifier.
+ *
+ *  @param[in]  connection      Connection instance.
+ *  @param[in]  node            Node instance.
+ *  @param[in]  channel_x       Channel number.
+ *  @param[in]  fallback_index  Fallback index.
+ *  @param[in]  config          Channel configuration.
+ *  @param[out] err             Pointer to the error code.
+ */
+void wps_connection_config_fallback_channel_40_96(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                                  uint8_t fallback_index, channel_cfg_t *config, wps_error_t *err);
 
 /** @brief Configure connection's frame modulation and FEC level.
  *
@@ -524,8 +514,8 @@ void wps_connection_config_fallback_channel(wps_connection_t *connection, wps_no
  *  @param[in]  fec         FEC level.
  *  @param[out] err         Pointer to the error code.
  */
-void wps_connection_config_frame(wps_connection_t *connection, modulation_t modulation,
-                                 chip_repetition_t chip_repet, fec_level_t fec, wps_error_t *err);
+void wps_connection_config_frame(wps_connection_t *connection, modulation_t modulation, chip_repetition_t chip_repet,
+                                 fec_level_t fec, wps_error_t *err);
 
 /** @brief Enable acknowledgment for connection's packet.
  *
@@ -561,8 +551,8 @@ void wps_connection_enable_phases_aquisition(wps_connection_t *connection, phase
  *  @param[in]  deadline             Deadline in ticks. Packet is dropped when deadline is reached.
  *  @param[out] err                  Pointer to the error code.
  */
-void wps_connection_enable_stop_and_wait_arq(wps_connection_t *connection, uint16_t local_address,
-                                             uint32_t retry, uint32_t deadline, wps_error_t *err);
+void wps_connection_enable_stop_and_wait_arq(wps_connection_t *connection, uint16_t local_address, uint32_t retry,
+                                             uint32_t deadline, wps_error_t *err);
 
 /** @brief Disable Stop and Wait (SaW) and Automatic Repeat Request (ARQ) for connection's packet.
  *
@@ -603,37 +593,13 @@ void wps_connection_enable_auto_sync(wps_connection_t *connection, wps_error_t *
  */
 void wps_connection_disable_auto_sync(wps_connection_t *connection, wps_error_t *err);
 
-/** @brief Enable a connection's Clear Channel Assessment (CCA).
- *
- *  @param[in]  connection             Connection instance.
- *  @param[in]  threshold              CCA threshold.
- *  @param[in]  retry_time_pll_cycles  CCA retry time.
- *  @param[in]  max_try_count          CCA try count.
- *  @param[in]  fail_action            CCA fail action.
- *  @param[in]  cca_on_time_pll_cycle  CCA on time, in PLL cycle.
- *  @param[out] err                    Pointer to the error code.
- */
-void wps_connection_enable_cca(wps_connection_t *connection, uint8_t threshold, uint16_t retry_time_pll_cycles,
-                               uint8_t max_try_count, cca_fail_action_t fail_action, uint8_t cca_on_time_pll_cycle,
-                               wps_error_t *err);
-
-/** @brief Disable connection Clear Channel Assessment (CCA).
- *
- *  @note To properly disable CCA, the CCA module needs to be disabled with a threshold of 0xff.
- *
- *  @param[in]  connection  Connection instance.
- *  @param[out] err         Pointer to the error code.
- */
-void wps_connection_disable_cca(wps_connection_t *connection, wps_error_t *err);
-
 /** @brief Disable gain loop (SR1120 feature only).
  *
  *  @param[in]  connection  Connection instance.
  *  @param[in]  rx_gain     Fixed RX gain.
  *  @param[out] err         Pointer to the error code.
  */
-void wps_connection_disable_gain_loop(wps_connection_t *connection, uint8_t rx_gain,
-                                      wps_error_t *err);
+void wps_connection_disable_gain_loop(wps_connection_t *connection, uint8_t rx_gain, wps_error_t *err);
 
 /** @brief Enable gain loop.
  *
@@ -655,8 +621,8 @@ void wps_connection_enable_gain_loop(wps_connection_t *connection, wps_error_t *
  *  @param[in] extended_crc_en   Using extended CRC mode (32 bits).
  *  @param[in] err               WPS error.
  */
-void wps_connection_optimize_latency(wps_connection_t *connection, uint8_t ack_payload_size,
-                                     wps_node_t *node, bool extended_addr_en, bool extended_crc_en,  wps_error_t *err);
+void wps_connection_optimize_latency(wps_connection_t *connection, uint8_t ack_payload_size, wps_node_t *node,
+                                     bool extended_addr_en, bool extended_crc_en, wps_error_t *err);
 
 /** @brief Enable Credit Flow Control for connection's packet.
  *
@@ -680,21 +646,24 @@ void wps_connection_disable_credit_flow_ctrl(wps_connection_t *connection, wps_e
  *  @note The Core has successfully sent a frame. If ACKs are enabled, this callback is triggered when the
  *        ACK frame is received. If ACKs are disabled, it triggers every time the frame is sent.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                 wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS fail to transmit a frame.
  *
  *  @note An ACK frame was expected and was not received. If ACK is not enabled, this never triggers.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg, wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS drops a frame.
  *
@@ -702,43 +671,49 @@ void wps_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(voi
  *        (either in time or in number of retries) has been met. If ARQ is not enabled,
  *        this never triggers.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg, wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS successfully receives a frame.
  *
  *  @note The Core has successfully received a frame. The address matches its local address or the
  *        broadcast address and the CRC checked. The frame is ready to be picked up from the RX FIFO.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_set_rx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_set_rx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                 wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS successfully accumulates all ranging samples.
  *
  *  @note The required number of ranging data samples is reached.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_set_ranging_data_ready_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_set_ranging_data_ready_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                         wps_error_t *err);
 
 /** @brief Set the event callback of a connection.
  *
  *  @note This callback report error that occurs in the WPS.
  *        Possible error are shown in the wps_error_t structure.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_set_event_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_set_event_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg, wps_error_t *err);
 
 /** @brief Connect node to network.
  *
@@ -795,8 +770,7 @@ void wps_resume(wps_t *wps, wps_error_t *err);
  *  @param[in]  size        Required payload size.
  *  @param[out] err         Pointer to the error code.
  */
-void wps_get_free_slot(wps_connection_t *connection, uint8_t **payload, uint16_t size,
-                       wps_error_t *err);
+void wps_get_free_slot(wps_connection_t *connection, uint8_t **payload, uint16_t size, wps_error_t *err);
 
 /** @brief Send payload over the air.
  *
@@ -916,8 +890,7 @@ void wps_set_active_ratio(wps_t *wps, wps_connection_t *connection, uint8_t rati
  *  @param[in]  cfg           Write cfg.
  *  @param[out] err           Pointer to the error code.
  */
-void wps_request_write_register(wps_t *wps, uint8_t starting_reg, uint16_t data,
-                                reg_write_cfg_t cfg, wps_error_t *err);
+void wps_request_write_register(wps_t *wps, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg, wps_error_t *err);
 
 /** @brief Clear periodic register write.
  *
@@ -933,8 +906,8 @@ void wps_clear_write_register(wps_t *wps);
  *   @param[in] xfer_cmplt       Bool to notify application that the transfer is complete.
  *   @param[in] err              WPS Error.
  */
-void wps_request_read_register(wps_t *wps, uint8_t target_register, uint16_t *rx_buffer,
-                               bool *xfer_cmplt, wps_error_t *err);
+void wps_request_read_register(wps_t *wps, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt,
+                               wps_error_t *err);
 
 /** @brief Process the wps callback
  *

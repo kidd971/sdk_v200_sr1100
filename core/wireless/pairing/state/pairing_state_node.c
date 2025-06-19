@@ -167,8 +167,8 @@ static void authentication_wait_for_message(void)
 static void authentication_send_response(void)
 {
     /* Prepare the authentication response. */
-    pairing_authentication_response.pairing_command  = PAIRING_COMMAND_AUTHENTICATION_RESPONSE;
-    pairing_authentication_response.pairing_authentication_action  = pairing_authentication_action;
+    pairing_authentication_response.pairing_command = PAIRING_COMMAND_AUTHENTICATION_RESPONSE;
+    pairing_authentication_response.pairing_authentication_action = pairing_authentication_action;
 
     pairing_wireless_send_message((uint8_t *)&pairing_authentication_response, sizeof(pairing_authentication_response));
 
@@ -202,8 +202,8 @@ static void identification_send_message(void)
 {
     /* Prepare the identification message. */
     pairing_identification_message.pairing_command = PAIRING_COMMAND_IDENTIFICATION_MESSAGE;
-    pairing_identification_message.device_role     = pairing_address_get_device_role();
-    pairing_identification_message.unique_id       = pairing_wireless_get_radio_serial_number();
+    pairing_identification_message.device_role = pairing_address_get_device_role();
+    pairing_identification_message.unique_id = pairing_wireless_get_radio_serial_number();
 
     pairing_wireless_send_message((uint8_t *)&pairing_identification_message, sizeof(pairing_identification_message));
 
@@ -271,7 +271,7 @@ static void addressing_wait_for_message(void)
 static void addressing_send_response(void)
 {
     /* Prepare the addressing response. */
-    pairing_addressing_response.pairing_command  = PAIRING_COMMAND_ADDRESSING_RESPONSE;
+    pairing_addressing_response.pairing_command = PAIRING_COMMAND_ADDRESSING_RESPONSE;
     pairing_addressing_response.pairing_addressing_action = pairing_addressing_action;
 
     pairing_wireless_send_message((uint8_t *)&pairing_addressing_response, sizeof(pairing_addressing_response));

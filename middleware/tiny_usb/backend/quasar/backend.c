@@ -14,21 +14,23 @@
 #include "stm32u5xx.h"
 #include "tiny_usb_facade.h"
 
-
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void int_to_unicode(uint32_t value, uint8_t *pbuf, uint8_t len);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-size_t tuh_get_serial_id(uint8_t desc_str1[], size_t max_chars) {
+size_t tuh_get_serial_id(uint8_t desc_str1[], size_t max_chars)
+{
 
     (void)max_chars;
     size_t serial_len = 12;
-    uint8_t str[12 + 1];
-    uint32_t uid0, uid1, uid2;
+    uint8_t str[12 + 1] = {0};
+    uint32_t uid0 = 0;
+    uint32_t uid1 = 0;
+    uint32_t uid2 = 0;
 
-    uid0 = *(uint32_t *) (UID_BASE);
-    uid1 = *(uint32_t *) (UID_BASE + 0x4);
-    uid2 = *(uint32_t *) (UID_BASE + 0x8);
+    uid0 = *(uint32_t *)(UID_BASE);
+    uid1 = *(uint32_t *)(UID_BASE + 0x4);
+    uid2 = *(uint32_t *)(UID_BASE + 0x8);
 
     uid0 += uid2;
 
@@ -39,7 +41,7 @@ size_t tuh_get_serial_id(uint8_t desc_str1[], size_t max_chars) {
     }
 
     /* Convert ASCII string into UTF-16 */
-    for ( volatile size_t i = 0; i < serial_len; i++ ) {
+    for (volatile size_t i = 0; i < serial_len; i++) {
         desc_str1[i * 2] = str[i];
     }
 

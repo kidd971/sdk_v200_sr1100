@@ -40,12 +40,16 @@ static inline void sr_pwr_up(radio_t *radio, bool reset, sr_phy_error_t *err)
     sr_access_write_reg16(radio->radio_id, REG16_HARDDISABLES_IOCONFIG,
                           radio->std_spi | radio->outimped | CHIP_RATE_20_48_MHZ | radio->irq_polarity |
                               radio->clock_source.pll_clk_source | radio->clock_source.xtal_clk_source);
-    sr_access_write_reg16(radio->radio_id, REG16_PREAMB_DEBUG, REG16_PREAMB_DEBUG_OPT | SET_SUMRXADC(radio->sumrxadc));
+    sr_access_write_reg16(radio->radio_id, REG16_PREAMB_DEBUG,
+                          (SET_MAINDEBUG(MAIN_DEBUG_VAL_RX_TX_INFO_ON_SYNC_PIN) | MAXSIGLVL_OPTIMIZED_REG_VAL |
+                           SUMRXADC(CHIP_RATE_20_48_MHZ)));
 
-    uint16_t crc_30_16_value = sr_access_read_reg16(radio->radio_id, REG16_CRC_30_16);
+    if (reset) {
+        uint16_t crc_30_16_value = sr_access_read_reg16(radio->radio_id, REG16_CRC_30_16);
 
-    if (crc_30_16_value != REG16_CRC_30_16_DEFAULT) {
-        *err = PHY_MODEL_NOT_FOUND;
+        if (crc_30_16_value != REG16_CRC_30_16_DEFAULT) {
+            *err = PHY_MODEL_NOT_FOUND;
+        }
     }
 }
 

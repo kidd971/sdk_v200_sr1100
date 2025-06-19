@@ -45,7 +45,7 @@ typedef enum resampling_errors {
  *  This enum contains all the sample bit depth supported by this library.
  */
 typedef enum resampling_buffer_type {
-    BUFFER_8BITS  = 7,
+    BUFFER_8BITS = 7,
     BUFFER_16BITS = 15,
     BUFFER_20BITS = 19,
     BUFFER_24BITS = 23,

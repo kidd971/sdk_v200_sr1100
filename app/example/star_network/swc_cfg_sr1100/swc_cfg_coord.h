@@ -12,6 +12,17 @@
 /* CONSTANTS ******************************************************************/
 #define NETWORK_ROLE SWC_ROLE_COORDINATOR
 
+/* The device roles are used for the pairing discovery list. */
+#define DEVICE_ROLE_COORDINATOR 0
+#define DEVICE_ROLE_NODE_1      1
+#define DEVICE_ROLE_NODE_2      2
+/* The discovery list includes the coordinator and the node. */
+#define PAIRING_DISCOVERY_LIST_SIZE 3
+/* The application code prevents unwanted devices from pairing with this application. */
+#define PAIRING_APP_CODE 0x0000000000000777
+/* The timeout in second after which the pairing procedure will abort. */
+#define PAIRING_TIMEOUT_IN_SECONDS 10
+
 /* Output power configuration */
 #define TX_DATA_PULSE_COUNT 1
 #define TX_DATA_PULSE_WIDTH 7
@@ -36,7 +47,7 @@
 #define RX_FROM_NODE2_TIMESLOTS {MAIN_TIMESLOT(3)}
 
 /* Channels */
-#define CHANNEL_FREQ     {164, 174, 184, 194}
-#define CHANNEL_SEQUENCE {0, 1, 2, 3}
+#define CHANNEL_FREQ     {163, 171, 179, 187, 195}
+#define CHANNEL_SEQUENCE {0, 1, 2, 3, 4}
 
 #endif /* SWC_CFG_COORD_H_ */

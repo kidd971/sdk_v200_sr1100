@@ -27,3 +27,11 @@ uint16_t sac_get_nb_packets_in_x_ms(uint16_t ms, uint16_t audio_payload_size, ui
 
     return ((ms / 1000.0) / ((sample_count / nb_channel) / (float)sampling_rate));
 }
+
+uint16_t sac_get_ms_in_x_packets(uint16_t nb_packet, uint16_t audio_payload_size, uint8_t nb_channel,
+                                 sac_sample_format_t sample_format, uint32_t sampling_rate)
+{
+    uint16_t sample_count = (audio_payload_size * SAC_BYTE_SIZE_BITS) / sac_get_sample_size_from_format(sample_format);
+
+    return 1000 * nb_packet * ((sample_count / nb_channel) / (float)sampling_rate);
+}

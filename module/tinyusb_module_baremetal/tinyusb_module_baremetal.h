@@ -24,7 +24,6 @@ extern "C" {
  */
 void tinyusb_module_baremetal_setup(void);
 
-
 #ifdef __cplusplus
 }
 #endif

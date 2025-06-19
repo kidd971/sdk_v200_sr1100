@@ -1,4 +1,4 @@
-/** @file  swc_def.h
+/** @file  sr1100/swc_def.h
  *  @brief SPARK Wireless Core definitions.
  *
  *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
@@ -102,7 +102,7 @@ typedef enum swc_modulation {
     SWC_MOD_2BITPPM,
 } swc_modulation_t;
 
-/** @brief Connection's Modulation.
+/** @brief Connection's CHIP repetition.
  */
 typedef enum swc_chip_repetition {
     /*! 1 chip repetition */
@@ -160,11 +160,28 @@ typedef enum swc_event {
     SWC_EVENT_ERROR
 } swc_event_t;
 
+/** @brief Concurrency modes.
+ */
 typedef enum swc_concurrency_mode {
     /*! Concurrency mode for high performance MCU */
     SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
     /*! Concurrency mode for low performance MCU */
     SWC_CONCURRENCY_MODE_LOW_PERFORMANCE
 } swc_concurrency_mode_t;
+
+/** @brief QoS modes.
+ */
+typedef enum swc_phy_mode {
+    /*! 20.48 MHz with ISI mitigation on preamble and payload (10.24 MHz effective). */
+    SWC_CHIP_RATE_20_48_ISI_2,
+    /*! 27.30 MHz ID without ISI mitigation on preamble and payload (14.15 MHz effective). */
+    SWC_CHIP_RATE_27_30_ISI_2,
+    /*! 20.48 MHz without ISI on preamble only (20.48 MHz effective). */
+    SWC_CHIP_RATE_20_48_ISI_1,
+    /*! 27.30 MHz with ISI on preamble only (27.30 MHz effective). */
+    SWC_CHIP_RATE_27_30_ISI_1,
+    /*! 40.96 MHz ID without ISI on preamble only (40.96 MHz effective). */
+    SWC_CHIP_RATE_40_96_ISI_1,
+} swc_phy_mode_t;
 
 #endif /* SWC_DEF_H_ */

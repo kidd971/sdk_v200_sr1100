@@ -14,6 +14,11 @@
 #include <stdint.h>
 #include <string.h>
 
+/*! Chip rate countdown value. */
+#define CHIP_RATE_COUNT_DOWN_VAL 14
+/*! Chip rate value when inactive. */
+#define CHIP_RATE_COUNT_DOWN_INACTIVE 0x0f
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -197,6 +202,33 @@ void wps_mac_send_credit_flow_control_header_acknowledge(void *wps_mac, uint8_t 
  *  @param[in] credit_fc  Credit flow control instance.
  */
 void wps_mac_receive_credit_flow_control_header_acknowledge(void *wps_mac, uint8_t *credit_fc);
+
+/** @brief Interface to write the chip rate to the header buffer.
+ *
+ *  @param[in] wps_mac   MAC Layer instance.
+ *  @param[in] phy_mode  PHY mode.
+ */
+void wps_mac_send_phy_mode(void *wps_mac, uint8_t *phy_mode);
+
+/** @brief Interface to read the chip rate to the header buffer.
+ *
+ *  @param[in] wps_mac   MAC Layer instance.
+ *  @param[in] phy_mode  PHY mode.
+ */
+void wps_mac_receive_phy_mode(void *wps_mac, uint8_t *phy_mode);
+
+/** @brief Handle missing frame for dynamic chip rate protocol.
+ *
+ *  @param[in] wps_mac    MAC Layer instance.
+ */
+void wps_mac_handle_missing_phy_mode(void *wps_mac);
+
+/** @brief Get the size of the chip rate header field.
+ *
+ *  @param[in] wps_mac MAC Layer instance.
+ *  @return Header field size.
+ */
+uint8_t wps_mac_get_phy_mode_proto_size(void *wps_mac);
 
 #ifdef __cplusplus
 }

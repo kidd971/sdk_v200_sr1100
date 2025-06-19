@@ -19,11 +19,12 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize the fragmentation module.
  *
- *  @param[in] connection      Connection instance.
- *  @param[in] meta_tx_buffer  Meta data transmission buffer.
- *  @param[in] meta_tx_size    Meta data transmission buffer size.
+ *  @param[in]  connection      Connection instance.
+ *  @param[in]  meta_tx_buffer  Meta data transmission buffer.
+ *  @param[in]  meta_tx_size    Meta data transmission buffer size.
+ *  @param[out] err             Pointer to the error code.
  */
-void wps_frag_init(wps_connection_t *connection, void *meta_tx_buffer, uint32_t meta_tx_size);
+void wps_frag_init(wps_connection_t *connection, void *meta_tx_buffer, uint32_t meta_tx_size, wps_error_t *err);
 
 /** @brief Send payload over the air.
  *
@@ -59,21 +60,25 @@ uint16_t wps_frag_get_read_payload_size(wps_connection_t *connection, wps_error_
  *
  *  @note This callback is raised every time a fragment is successfully transmitted
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_frag_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_frag_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                      wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS fail to transmit a frame.
  *
  *  @note An ACK frame was expected and was not received. If ACK is not enabled, this never triggers.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_frag_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_frag_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                   wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS drops a frame.
  *
@@ -81,11 +86,13 @@ void wps_frag_set_tx_fail_callback(wps_connection_t *connection, void (*callback
  *        (either in time or in number of retries) has been met. If ARQ is not enabled,
  *        this never triggers.
  *
- *  @param[in] connection  Pointer to the connection.
- *  @param[in] callback    Function pointer to the callback.
- *  @param[in] parg        Void pointer argument for the callback.
+ *  @param[in]  connection  Pointer to the connection.
+ *  @param[in]  callback    Function pointer to the callback.
+ *  @param[in]  parg        Void pointer argument for the callback.
+ *  @param[out] err         Pointer to the error code.
  */
-void wps_frag_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg);
+void wps_frag_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                   wps_error_t *err);
 
 /** @brief Set the callback function to execute when the WPS successfully receives a frame.
  *

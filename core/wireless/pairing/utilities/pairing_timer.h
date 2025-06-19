@@ -17,11 +17,11 @@ extern "C" {
 #endif
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
-/** @brief Initialize the time manager module.
+/** @brief Set the timeout duration and begin counting the ticks to monitor the timeout.
  *
  *  @param[in] timeout_sec  The duration in seconds after which the timeout occurs.
  */
-void pairing_timer_init(uint16_t timeout_sec);
+void pairing_start_timeout_counter(uint16_t timeout_sec);
 
 /** @brief Get the current tick count from the HAL free running timer.
  *

@@ -32,8 +32,7 @@ typedef struct ep_swc_instance {
  *  @param[out] swc_producer_iface  Wireless Core producer audio endpoint interface.
  *  @param[out] swc_consumer_iface  Wireless Core consumer audio endpoint interface.
  */
-void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface,
-                           sac_endpoint_interface_t *swc_consumer_iface);
+void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface, sac_endpoint_interface_t *swc_consumer_iface);
 
 #ifdef __cplusplus
 }

@@ -15,6 +15,48 @@ BANNER=\
 '
 PATH="$HOME/.local/bin:$PATH"
 
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to detect package manager and install packages
+install_package() {
+    if [ -f /etc/debian_version ]; then
+        # For Debian/Ubuntu
+        sudo apt update
+        sudo apt install -y "$1"
+    elif [ -f /etc/redhat-release ]; then
+        # For RedHat/CentOS
+        sudo yum install -y "$1"
+    elif [ -f /etc/fedora-release ]; then
+        # For Fedora
+        sudo dnf install -y "$1"
+    elif [ -f /etc/arch-release ]; then
+        # For Arch Linux
+        sudo pacman -Sy --noconfirm "$1"
+    else
+        echo "Automatic installation of $1 failed. Please install $1 manually."
+        exit 1
+    fi
+}
+
+# Check for curl and install if not found
+if ! command_exists curl; then
+    echo "curl not found. Installing curl..."
+    install_package curl
+else
+    echo "curl is already installed."
+fi
+
+# Check for bzip2 and install if not found
+if ! command_exists bzip2; then
+    echo "bzip2 not found. Installing bzip2..."
+    install_package bzip2
+else
+    echo "bzip2 is already installed."
+fi
+
 if test -n "$BASH"; then
   SOURCE=$( cd -- "$( dirname -- "$( dirname -- "${BASH_SOURCE[0]}" )" )" &> /dev/null && pwd )
 elif test -n "$ZSH_NAME"; then
@@ -61,8 +103,8 @@ if [ -f $DEFAULT_ENV_FILE_PATH ]; then
 else
    # if not, create it.
    if [[ "$OSTYPE" == "darwin"* ]]; then
-      echo "macOS detected"
-      DEFAULT_ENV_PATH=$SOURCE/script/environment_macos.yml
+      echo "Error: macOS detected and not supported."
+      return 1
    else
       DEFAULT_ENV_PATH=$SOURCE/script/environment.yml
    fi
@@ -194,6 +236,13 @@ if [ -n "$patch_files" ]; then
             git apply "$patch_file"
       fi
    done
+fi
+
+if [ ! -d "$MAMBA_ROOT_PREFIX/dfu-util-be49612-binaries" ]; then
+   echo 'Setting up dfu-util binaries.'
+   curl -LOs https://github.com/sparkmicro/dfu-util/releases/download/v0.11-be49612/dfu-util_be49612.zip --output-dir $MAMBA_ROOT_PREFIX
+   unzip -qq $MAMBA_ROOT_PREFIX/dfu-util_be49612.zip -d $MAMBA_ROOT_PREFIX/dfu-util-be49612-binaries
+   rm $MAMBA_ROOT_PREFIX/dfu-util_be49612.zip
 fi
 
 return 0

@@ -10,6 +10,7 @@
 /* INCLUDES *******************************************************************/
 #include "wps.h"
 #include "sr_calib.h"
+#include "sr_phy_error.h"
 #include "sr_pwr_up.h"
 #include "sr_spectral.h"
 #include "swc_hal_facade.h"
@@ -20,6 +21,9 @@
 #define US_TO_PLL_FACTOR                       1000
 #define MS_TO_S_FACTOR                         1000
 #define DISCONNECT_TIMEOUT_MS                  1000
+/* PHY rate specific configurations. */
+#define PHY_RATE_IS_20_48 false
+#define PHY_RATE_IS_40_96 true
 
 /* PRIVATE GLOBALS ************************************************************/
 static circular_queue_t schedule_ratio_cfg_queue;
@@ -31,6 +35,10 @@ static bool is_main_timeslot(int8_t id);
 static uint32_t auto_reply_id_to_id(int8_t id);
 static uint8_t generate_active_pattern(bool *pattern, uint8_t active_ratio);
 static uint8_t find_channel_count_from_sequence(channel_sequence_t *channel_sequence);
+static void config_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x, channel_cfg_t *config,
+                           bool cfg_40_96, wps_error_t *err);
+static void config_fallback_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                    uint8_t fallback_index, channel_cfg_t *config, bool cfg_40_96, wps_error_t *err);
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 uint32_t wps_us_to_pll_cycle(uint32_t time_us, chip_rate_cfg_t chip_rate)
@@ -43,10 +51,10 @@ void wps_radio_init(wps_radio_t *wps_radio, bool no_reset, sr_phy_error_t *err)
     sr_pwr_up(&wps_radio->radio, !no_reset, err);
 }
 
-void wps_radio_calibration(wps_radio_t *wps_radio)
+void wps_radio_calibration(wps_radio_t *wps_radio, calib_vars_t *calib_vars)
 {
     sr_nvm_init(&wps_radio->radio, wps_radio->nvm);
-    sr_calibrate(&wps_radio->radio, wps_radio->spectral_calib_vars, wps_radio->nvm);
+    sr_calibrate(&wps_radio->radio, calib_vars, wps_radio->nvm);
 }
 
 uint64_t wps_radio_get_serial_number(wps_radio_t *wps_radio)
@@ -76,8 +84,7 @@ void wps_init_request_queue(wps_t *wps, xlayer_request_info_t *request_buffer, s
 
     /* Initialize pattern queue for throttling */
     for (uint8_t i = 0; i < request_config->schedule_ratio_size; i++) {
-        memset(request_config->schedule_ratio_buffer[i].pattern_cfg, 1,
-               WPS_PATTERN_THROTTLE_GRANULARITY);
+        memset(request_config->schedule_ratio_buffer[i].pattern_cfg, 1, WPS_PATTERN_THROTTLE_GRANULARITY);
     }
     wps->mac.schedule_ratio_cfg_queue = &schedule_ratio_cfg_queue;
     circular_queue_init(wps->mac.schedule_ratio_cfg_queue, request_config->schedule_ratio_buffer,
@@ -127,31 +134,27 @@ void wps_init(wps_t *wps, wps_node_t *node, wps_error_t *err)
 
     *err = WPS_NO_ERROR;
 
-    if (node->radio == NULL) {
-        *err = WPS_RADIO_NOT_INITIALIZED_ERROR;
-        return;
-    } else if (wps->channel_sequence.channel == NULL) {
-        *err = WPS_CHANNEL_SEQUENCE_NOT_INITIALIZED_ERROR;
-        return;
-    }
+    CHECK_ERROR(node->radio == NULL, err, WPS_RADIO_NOT_INITIALIZED_ERROR, return);
+    CHECK_ERROR(wps->channel_sequence.channel == NULL, err, WPS_CHANNEL_SEQUENCE_NOT_INITIALIZED_ERROR, return);
 
-    wps->node   = node;
+    wps->node = node;
     wps->mac.signal = WPS_DISCONNECT;
 
     mac_sync_cfg.sleep_level = wps->node->cfg.sleep_lvl;
     mac_sync_cfg.isi_mitig = wps->node->cfg.isi_mitig;
     mac_sync_cfg.isi_mitig_pauses = link_tdma_sync_get_isi_mitigation_pauses(mac_sync_cfg.isi_mitig);
     mac_sync_cfg.preamble_len = wps->node->cfg.preamble_len;
-    mac_sync_cfg.syncword_len = link_tdma_get_syncword_length(mac_sync_cfg.isi_mitig_pauses,
-                                                              wps->node->cfg.syncword_cfg.syncword_length);
+    mac_sync_cfg.sfd_len = link_tdma_get_sfd_length(mac_sync_cfg.isi_mitig_pauses, wps->node->cfg.sfd_cfg.sfd_length);
+
     mac_sync_cfg.tx_jitter_enabled = wps->node->cfg.tx_jitter_enabled;
     mac_sync_cfg.chip_rate = wps->chip_rate;
     wps_mac_init(&wps->mac, &wps->channel_sequence, &mac_sync_cfg, wps->node->cfg.local_address, wps->node->cfg.role,
                  wps->random_channel_sequence_enabled, wps->network_id, wps->node->cfg.frame_lost_max_duration,
-                 wps->node->max_payload_size, wps->node->max_header_size);
+                 wps->node->max_payload_size, wps->node->max_header_size, wps->node->max_payload_size_auto,
+                 wps->node->max_header_size_auto, &node->conn_list);
     for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
         wps->phy[i].wps_phy_callback = wps_mac_phy_callback;
-        wps->phy[i].mac              = (void *)&wps->mac;
+        wps->phy[i].mac = (void *)&wps->mac;
     }
 }
 
@@ -174,10 +177,10 @@ void wps_config_node(wps_node_t *node, wps_radio_t *radio, wps_node_cfg_t *cfg, 
     *err = WPS_NO_ERROR;
 
     node->radio = radio;
-    node->cfg   = *cfg;
-    node->cfg.syncword_cfg.syncword_bit_cost  = 2;
-    node->cfg.syncword_cfg.syncword_tolerance = 0xC;
-    node->max_payload_size  = 0;
+    node->cfg = *cfg;
+    node->cfg.sfd_cfg.sfd_bit_cost = 2;
+    node->cfg.sfd_cfg.sfd_tolerance = 0xC;
+    node->max_payload_size = 0;
     node->tx_queues_size = 0;
     node->rx_queues_size = 0;
     node->max_total_rx_data_size = 0;
@@ -185,12 +188,12 @@ void wps_config_node(wps_node_t *node, wps_radio_t *radio, wps_node_cfg_t *cfg, 
     wps_connection_list_init(&node->conn_list);
 }
 
-void wps_config_network_schedule(wps_t *wps, uint32_t *timeslot_duration_pll_cycles, timeslot_t *timeslot, uint32_t schedule_size,
-                                 wps_error_t *err)
+void wps_config_network_schedule(wps_t *wps, uint32_t *timeslot_duration_pll_cycles, timeslot_t *timeslot,
+                                 uint32_t schedule_size, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    wps->mac.scheduler.schedule.size     = schedule_size;
+    wps->mac.scheduler.schedule.size = schedule_size;
     wps->mac.scheduler.schedule.timeslot = timeslot;
 
     for (uint32_t i = 0; i < schedule_size; ++i) {
@@ -211,11 +214,7 @@ void wps_config_network_channel_sequence(wps_t *wps, const uint32_t *channel_seq
                                          uint32_t sequence_size, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
-    if (channel_sequence_buffer == NULL) {
-        *err = WPS_CHANNEL_SEQUENCE_INIT_ERROR;
-        return;
-    }
-
+    CHECK_ERROR(channel_sequence_buffer == NULL, err, WPS_CHANNEL_SEQUENCE_INIT_ERROR, return);
     wps->channel_sequence.channel = channel_sequence;
     wps->channel_sequence.sequence_size = sequence_size;
     wps->channel_sequence.channel_number = find_channel_count_from_sequence(&wps->channel_sequence);
@@ -240,10 +239,11 @@ uint8_t wps_get_connection_header_size(wps_t *wps, wps_header_cfg_t header_cfg)
 {
     uint8_t header_size = 0;
 
-    header_size += header_cfg.main_connection
-                       ? wps_mac_get_channel_index_proto_size(&wps->mac) + wps_mac_get_timeslot_id_saw_proto_size(&wps->mac)
-                       : 0;
+    header_size += header_cfg.main_connection ? wps_mac_get_channel_index_proto_size(&wps->mac) +
+                                                    wps_mac_get_timeslot_id_saw_proto_size(&wps->mac) :
+                                                0;
     header_size += header_cfg.rdo_enabled ? sizeof(wps->mac.link_rdo.offset) : 0;
+    header_size += header_cfg.dynamic_phy_mode ? sizeof(wps->mac.next_chip_rate) : 0;
 
     switch (header_cfg.ranging_mode) {
     case WPS_RANGING_STANDALONE_INITIATOR:
@@ -281,12 +281,13 @@ uint8_t wps_get_connection_ack_header_size(wps_t *wps, wps_header_cfg_t header_c
     return header_size;
 }
 
-void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, wps_header_cfg_t header_cfg, wps_error_t *err)
+void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, wps_header_cfg_t header_cfg,
+                                     wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    uint16_t proto_buffer_size;
-    link_error_t link_err;
+    uint16_t proto_buffer_size = 0;
+    link_error_t link_err = {0};
 
     proto_buffer_size = wps_get_connection_header_size(wps, header_cfg);
 
@@ -320,6 +321,17 @@ void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, w
         link_proto_info.size = wps_mac_get_rdo_proto_size(&wps->mac);
 
         link_protocol_add(&connection->link_protocol, &link_proto_info, &link_err);
+    }
+
+    if (header_cfg.dynamic_phy_mode == true) {
+        link_proto_info.id = MAC_PROTO_ID_PHY_MODE;
+        link_proto_info.instance = &wps->mac;
+        link_proto_info.send = wps_mac_send_phy_mode;
+        link_proto_info.receive = wps_mac_receive_phy_mode;
+        link_proto_info.size = wps_mac_get_phy_mode_proto_size(&wps->mac);
+
+        link_protocol_add(&connection->link_protocol, &link_proto_info, &link_err);
+        wps->mac.dynamic_phy_mode_en = true;
     }
 
     switch (header_cfg.ranging_mode) {
@@ -383,7 +395,7 @@ void wps_configure_header_connection(wps_t *wps, wps_connection_t *connection, w
 }
 
 void wps_configure_header_acknowledge(wps_t *wps, wps_connection_t *connection, wps_header_cfg_t header_cfg,
-                                                wps_error_t *err)
+                                      wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
@@ -391,8 +403,8 @@ void wps_configure_header_acknowledge(wps_t *wps, wps_connection_t *connection, 
         return;
     }
 
-    uint16_t proto_auto_buffer_size;
-    link_error_t link_err;
+    uint16_t proto_auto_buffer_size = 0;
+    link_error_t link_err = {0};
     link_protocol_info_t link_proto_info = {0};
 
     proto_auto_buffer_size = wps_get_connection_ack_header_size(wps, header_cfg);
@@ -455,32 +467,44 @@ void wps_create_connection(wps_connection_t *connection, wps_node_t *node, wps_c
 {
     *err = WPS_NO_ERROR;
 
+    CHECK_ERROR(connection->assigned_to_scheduler == false, err, WPS_CONNECTION_NOT_ASSIGNED_TO_SCHEDULER, return);
+
+    connection->cfg = *config;
     connection->free_tx_queue = &node->free_tx_queue;
     connection->free_rx_queue = &node->free_rx_queue;
-    connection->source_address = config->source_address;
-    connection->destination_address = config->destination_address;
     connection->auto_sync_enable = true;
     connection->certification_mode_enabled = false;
     connection->currently_enabled = true;
+    connection->is_tx_connection = node->cfg.local_address == config->source_address;
 
-    connection->header_size  = config->header_length;
-    connection->ack_header_size = config->ack_header_length;
-    connection->payload_size = config->frame_length - config->header_length - 1;
+    connection->payload_size = config->frame_length - config->header_size - 1;
     /* Count queue size separate for TX and RX connection */
-    if (node->cfg.local_address == config->source_address) {
+    if (connection->is_tx_connection) {
         node->tx_queues_size += config->fifo_buffer_size;
     } else {
         node->rx_queues_size += config->fifo_buffer_size;
         node->max_total_rx_data_size += config->fifo_buffer_size *
-                                        (config->header_length + connection->payload_size + EMPTY_BYTE);
+                                        (config->header_size + connection->payload_size + EMPTY_BYTE);
     }
 
-    if (connection->payload_size > node->max_payload_size) {
-        node->max_payload_size = connection->payload_size;
-    }
+    if (connection->is_main) {
+        /* Set max payload and header size for main connection */
+        if (connection->payload_size > node->max_payload_size) {
+            node->max_payload_size = connection->payload_size;
+        }
 
-    if (config->header_length > node->max_header_size) {
-        node->max_header_size = config->header_length;
+        if (config->header_size > node->max_header_size) {
+            node->max_header_size = config->header_size;
+        }
+    } else {
+        /* Set max payload and header size for auto connection */
+        if (connection->payload_size > node->max_payload_size_auto) {
+            node->max_payload_size_auto = connection->payload_size;
+        }
+
+        if (config->header_size > node->max_header_size_auto) {
+            node->max_header_size_auto = config->header_size;
+        }
     }
 
     xlayer_queue_init_queue(&connection->xlayer_queue, config->fifo_buffer_size, "connection queue");
@@ -491,15 +515,16 @@ void wps_create_connection(wps_connection_t *connection, wps_node_t *node, wps_c
     connection->tx_drop_callback = NULL;
     connection->rx_success_callback = NULL;
     connection->evt_callback = NULL;
-    connection->get_tick = config->get_tick;
-    connection->tick_frequency_hz = config->tick_frequency_hz;
     connection->total_cca_events = 0;
     connection->total_cca_fail_count = 0;
     connection->total_cca_tx_fail_count = 0;
     connection->total_pkt_dropped = 0;
-    connection->priority = config->priority;
-    connection->ranging_mode = config->ranging_mode;
     connection->ack_frame_enable = false;
+    if (node->cfg.role == NETWORK_COORDINATOR && config->tx_sync_frame_on_syncing) {
+        connection->send_sync_frame = true;
+    } else {
+        connection->send_sync_frame = false;
+    }
     if (config->ranging_mode == WPS_RANGING_STANDALONE_INITIATOR ||
         config->ranging_mode == WPS_RANGING_STANDALONE_RESPONDER) {
         connection->ack_frame_enable = true;
@@ -510,7 +535,7 @@ void wps_create_connection(wps_connection_t *connection, wps_node_t *node, wps_c
     if (config->credit_fc_enabled == true) {
         connection->ack_frame_enable = true;
     }
-    connection->first_tx_after_connect = true;
+
     connection->pattern = NULL;
 
     link_fallback_init(&connection->link_fallback, NULL, 0);
@@ -528,7 +553,7 @@ void wps_create_connection(wps_connection_t *connection, wps_node_t *node, wps_c
 void wps_connection_set_timeslot(wps_connection_t *connection, wps_t *network, const int32_t *const timeslot_id,
                                  uint32_t nb_timeslots, wps_error_t *err)
 {
-    uint32_t id;
+    uint32_t id = 0;
 
     *err = WPS_NO_ERROR;
 
@@ -538,27 +563,21 @@ void wps_connection_set_timeslot(wps_connection_t *connection, wps_t *network, c
         if (is_main_timeslot(id)) {
             uint8_t count = network->mac.scheduler.schedule.timeslot[id].main_connection_count;
 
-            if (!(count < WPS_MAX_CONN_PER_TIMESLOT)) {
-                *err = WPS_TIMESLOT_CONN_LIMIT_REACHED_ERROR;
-                return;
-            }
-
+            CHECK_ERROR(!(count < WPS_MAX_CONN_PER_TIMESLOT), err, WPS_TIMESLOT_CONN_LIMIT_REACHED_ERROR, return);
             network->mac.scheduler.schedule.timeslot[id].connection_main[count] = connection;
             network->mac.scheduler.schedule.timeslot[id].main_connection_count += 1;
             connection->is_main = true;
+            connection->assigned_to_scheduler = true;
         } else {
             id = auto_reply_id_to_id(id);
 
             uint8_t count = network->mac.scheduler.schedule.timeslot[id].auto_connection_count;
 
-            if (!(count < WPS_MAX_CONN_PER_TIMESLOT)) {
-                *err = WPS_TIMESLOT_CONN_LIMIT_REACHED_ERROR;
-                return;
-            }
-
+            CHECK_ERROR(!(count < WPS_MAX_CONN_PER_TIMESLOT), err, WPS_TIMESLOT_CONN_LIMIT_REACHED_ERROR, return);
             network->mac.scheduler.schedule.timeslot[id].connection_auto_reply[count] = connection;
             network->mac.scheduler.schedule.timeslot[id].auto_connection_count += 1;
             connection->is_main = false;
+            connection->assigned_to_scheduler = true;
         }
     }
 }
@@ -567,7 +586,7 @@ void wps_connection_set_timeslot_priority(wps_connection_t *connection, wps_t *n
                                           const int32_t *const timeslot_id, uint32_t nb_timeslots,
                                           const uint8_t *const slots_priority)
 {
-    uint32_t id;
+    uint32_t id = 0;
 
     for (uint32_t i = 0; i < nb_timeslots; ++i) {
         id = timeslot_id[i];
@@ -581,7 +600,7 @@ void wps_connection_set_timeslot_priority(wps_connection_t *connection, wps_t *n
             if (slots_priority != NULL) {
                 network->mac.scheduler.schedule.timeslot[id].connection_main_priority[count] = slots_priority[i];
             } else {
-                network->mac.scheduler.schedule.timeslot[id].connection_main_priority[count] = connection->priority;
+                network->mac.scheduler.schedule.timeslot[id].connection_main_priority[count] = connection->cfg.priority;
             }
         } else {
             id = auto_reply_id_to_id(id);
@@ -593,53 +612,46 @@ void wps_connection_set_timeslot_priority(wps_connection_t *connection, wps_t *n
             if (slots_priority != NULL) {
                 network->mac.scheduler.schedule.timeslot[id].connection_auto_priority[count] = slots_priority[i];
             } else {
-                network->mac.scheduler.schedule.timeslot[id].connection_auto_priority[count] = connection->priority;
+                network->mac.scheduler.schedule.timeslot[id].connection_auto_priority[count] = connection->cfg.priority;
             }
         }
     }
 }
 
-void wps_connection_enable_fallback(wps_connection_t *connection, uint8_t *threshold, uint8_t threshold_count,
-                                    rf_channel_array_t fallback_channel_buffer, wps_error_t *err)
+void wps_connection_config_channel_20_48(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                         channel_cfg_t *config, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    connection->fallback_channel = fallback_channel_buffer;
-
-    link_fallback_init(&connection->link_fallback, threshold, threshold_count);
+    config_channel(connection, node, channel_x, config, PHY_RATE_IS_20_48, err);
 }
 
-void wps_connection_disable_fallback(wps_connection_t *connection, wps_error_t *err)
+void wps_connection_config_channel_40_96(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                         channel_cfg_t *config, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    connection->fallback_channel = NULL;
-    link_fallback_init(&connection->link_fallback, NULL, 0);
+    config_channel(connection, node, channel_x, config, PHY_RATE_IS_40_96, err);
 }
 
-void wps_connection_config_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
-                                   channel_cfg_t *config, wps_error_t *err)
+void wps_connection_config_fallback_channel_20_48(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                                  uint8_t fallback_index, channel_cfg_t *config, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
-        config_spectrum_advance(node->radio[i].spectral_calib_vars, config, &connection->channel[channel_x][i]);
-    }
+    config_fallback_channel(connection, node, channel_x, fallback_index, config, PHY_RATE_IS_20_48, err);
 }
 
-void wps_connection_config_fallback_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
-                                            uint8_t fallback_index, channel_cfg_t *config, wps_error_t *err)
+void wps_connection_config_fallback_channel_40_96(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                                  uint8_t fallback_index, channel_cfg_t *config, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
-        config_spectrum_advance(node->radio[i].spectral_calib_vars, config,
-                                &connection->fallback_channel[fallback_index][channel_x][i]);
-    }
+    config_fallback_channel(connection, node, channel_x, fallback_index, config, PHY_RATE_IS_40_96, err);
 }
 
-void wps_connection_config_frame(wps_connection_t *connection, modulation_t modulation,
-                                 chip_repetition_t chip_repet, fec_level_t fec, wps_error_t *err)
+void wps_connection_config_frame(wps_connection_t *connection, modulation_t modulation, chip_repetition_t chip_repet,
+                                 fec_level_t fec, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
@@ -653,7 +665,7 @@ void wps_connection_config_frame(wps_connection_t *connection, modulation_t modu
 
     connection->frame_cfg.modulation = modulation;
     connection->frame_cfg.chip_repet = chip_repet;
-    connection->frame_cfg.fec        = fec;
+    connection->frame_cfg.fec = fec;
 }
 
 void wps_connection_enable_ack(wps_connection_t *connection, wps_error_t *err)
@@ -670,29 +682,26 @@ void wps_connection_disable_ack(wps_connection_t *connection, wps_error_t *err)
     connection->ack_enable = false;
 }
 
-void wps_connection_enable_phases_aquisition(wps_connection_t *connection, phase_infos_t *phase_info_buffer, uint8_t max_sample_size, wps_error_t *err)
+void wps_connection_enable_phases_aquisition(wps_connection_t *connection, phase_infos_t *phase_info_buffer,
+                                             uint8_t max_sample_size, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
     link_phase_init(&connection->link_phase, phase_info_buffer, max_sample_size);
 }
 
-void wps_connection_enable_stop_and_wait_arq(wps_connection_t *connection, uint16_t local_address,
-                                             uint32_t retry, uint32_t deadline, wps_error_t *err)
+void wps_connection_enable_stop_and_wait_arq(wps_connection_t *connection, uint16_t local_address, uint32_t retry,
+                                             uint32_t deadline, wps_error_t *err)
 {
-    bool board_seq;
+    uint8_t board_seq;
 
     *err = WPS_NO_ERROR;
+    CHECK_ERROR(connection->ack_enable == false, err, WPS_ACK_DISABLED_ERROR, return);
 
-    if (connection->ack_enable == false) {
-        *err = WPS_ACK_DISABLED_ERROR;
-        return;
-    }
-
-    if (local_address == connection->destination_address) {
-        board_seq = true;
+    if (local_address == connection->cfg.destination_address) {
+        board_seq = RX_DEFAULT_SAW_INDEX;
     } else {
-        board_seq = false;
+        board_seq = TX_DEFAULT_SAW_INDEX;
     }
 
     link_saw_arq_init(&connection->stop_and_wait_arq, deadline, retry, board_seq, true);
@@ -719,28 +728,7 @@ void wps_connection_disable_auto_sync(wps_connection_t *connection, wps_error_t 
     connection->auto_sync_enable = false;
 }
 
-void wps_connection_enable_cca(wps_connection_t *connection, uint8_t threshold, uint16_t retry_time_pll_cycles,
-                               uint8_t max_try_count, cca_fail_action_t fail_action, uint8_t cca_on_time_pll_cycle,
-                               wps_error_t *err)
-{
-    *err = WPS_NO_ERROR;
-
-    if (cca_on_time_pll_cycle == 0) {
-        *err = WPS_INVALID_CCA_SETTINGS;
-        return;
-    }
-    link_cca_init(&connection->cca, threshold, retry_time_pll_cycles, cca_on_time_pll_cycle, max_try_count, fail_action,
-                  true);
-}
-
-void wps_connection_disable_cca(wps_connection_t *connection, wps_error_t *err)
-{
-    *err = WPS_NO_ERROR;
-    link_cca_init(&connection->cca, WPS_DISABLE_CCA_THRESHOLD, 0, 0, 0, CCA_FAIL_ACTION_TX, false);
-}
-
-void wps_connection_disable_gain_loop(wps_connection_t *connection, uint8_t rx_gain,
-                                      wps_error_t *err)
+void wps_connection_disable_gain_loop(wps_connection_t *connection, uint8_t rx_gain, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
     for (uint8_t i = 0; i < connection->max_channel_count; i++) {
@@ -760,11 +748,11 @@ void wps_connection_enable_gain_loop(wps_connection_t *connection, wps_error_t *
     }
 }
 
-void wps_connection_optimize_latency(wps_connection_t *connection, uint8_t ack_payload_size,
-                                     wps_node_t *node, bool extended_addr_en, bool extended_crc_en,  wps_error_t *err)
+void wps_connection_optimize_latency(wps_connection_t *connection, uint8_t ack_payload_size, wps_node_t *node,
+                                     bool extended_addr_en, bool extended_crc_en, wps_error_t *err)
 {
     uint32_t isi_mitig_pause = link_tdma_sync_get_isi_mitigation_pauses(node->cfg.isi_mitig);
-    uint32_t syncword_bits = link_tdma_get_syncword_length(isi_mitig_pause, node->cfg.syncword_cfg.syncword_length);
+    uint32_t sfd_bits = link_tdma_get_sfd_length(isi_mitig_pause, node->cfg.sfd_cfg.sfd_length);
     uint32_t preamble_bits = node->cfg.preamble_len;
     bool iook = (connection->frame_cfg.modulation == MODULATION_IOOK) ? true : false;
     bool two_bit_ppm = (connection->frame_cfg.modulation == MODULATION_2BITPPM) ? true : false;
@@ -777,17 +765,17 @@ void wps_connection_optimize_latency(wps_connection_t *connection, uint8_t ack_p
     *err = WPS_NO_ERROR;
 
     connection->empty_queue_max_delay =
-        wps_utils_get_delayed_wakeup_event(preamble_bits, syncword_bits, iook, fec, two_bit_ppm, chip_repet, isi_mitig,
-                                           address_bits, connection->payload_size + connection->header_size, crc_bits,
-                                           connection->cca.retry_time_pll_cycles, connection->cca.max_try_count,
-                                           connection->ack_enable, ack_payload_size);
+        wps_utils_get_delayed_wakeup_event(preamble_bits, sfd_bits, iook, fec, two_bit_ppm, chip_repet, isi_mitig,
+                                           address_bits, connection->payload_size + connection->cfg.header_size,
+                                           crc_bits, connection->cca.retry_time_pll_cycles,
+                                           connection->cca.max_try_count, connection->ack_enable, ack_payload_size);
 }
 
-void wps_init_rdo(wps_t *wps, uint16_t rollover_value, uint16_t increment_step, wps_error_t *err)
+void wps_init_rdo(wps_t *wps, uint16_t rollover_value, uint16_t step_ms, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    link_rdo_init(&wps->mac.link_rdo, rollover_value, increment_step);
+    link_rdo_init(&wps->mac.link_rdo, rollover_value, step_ms);
 }
 
 void wps_enable_rdo(wps_t *wps, wps_error_t *err)
@@ -804,8 +792,7 @@ void wps_disable_rdo(wps_t *wps, wps_error_t *err)
     link_rdo_disable(&wps->mac.link_rdo);
 }
 
-void wps_enable_ddcm(wps_t *wps, uint16_t max_timeslot_offset, uint32_t sync_loss_max_duration_pll,
-                     wps_error_t *err)
+void wps_enable_ddcm(wps_t *wps, uint16_t max_timeslot_offset, uint32_t sync_loss_max_duration_pll, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
@@ -829,12 +816,7 @@ void wps_connection_config_status(wps_connection_t *connection, connect_status_c
 void wps_connection_enable_credit_flow_ctrl(wps_connection_t *connection, bool has_main_ts, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
-
-    if (connection->ack_enable == false && has_main_ts == true) {
-        *err = WPS_ACK_DISABLED_ERROR;
-        return;
-    }
-
+    CHECK_ERROR((connection->ack_enable == false && has_main_ts == true), err, WPS_ACK_DISABLED_ERROR, return);
     link_credit_flow_ctrl_init(&connection->credit_flow_ctrl, true, WPS_MIN_QUEUE_SIZE);
 }
 
@@ -845,52 +827,49 @@ void wps_connection_disable_credit_flow_ctrl(wps_connection_t *connection, wps_e
     link_credit_flow_ctrl_init(&connection->credit_flow_ctrl, false, 0);
 }
 
-void wps_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                 wps_error_t *err)
 {
-    if (connection != NULL) {
-        connection->tx_success_callback      = callback;
-        connection->tx_success_parg_callback = parg;
-    }
+    CHECK_ERROR(connection == NULL, err, WPS_CONNECTION_NOT_ALLOCATED, return);
+    connection->tx_success_callback = callback;
+    connection->tx_success_parg_callback = parg;
 }
 
-void wps_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg, wps_error_t *err)
 {
-    if (connection != NULL) {
-        connection->tx_fail_callback      = callback;
-        connection->tx_fail_parg_callback = parg;
-    }
+    CHECK_ERROR(connection == NULL, err, WPS_CONNECTION_NOT_ALLOCATED, return);
+    connection->tx_fail_callback = callback;
+    connection->tx_fail_parg_callback = parg;
 }
 
-void wps_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg, wps_error_t *err)
 {
-    if (connection != NULL) {
-        connection->tx_drop_callback      = callback;
-        connection->tx_drop_parg_callback = parg;
-    }
+    CHECK_ERROR(connection == NULL, err, WPS_CONNECTION_NOT_ALLOCATED, return);
+    connection->tx_drop_callback = callback;
+    connection->tx_drop_parg_callback = parg;
 }
 
-void wps_set_rx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_set_rx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                 wps_error_t *err)
 {
-    if (connection != NULL) {
-        connection->rx_success_callback      = callback;
-        connection->rx_success_parg_callback = parg;
-    }
+    CHECK_ERROR(connection == NULL, err, WPS_CONNECTION_NOT_ALLOCATED, return);
+    connection->rx_success_callback = callback;
+    connection->rx_success_parg_callback = parg;
 }
 
-void wps_set_ranging_data_ready_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_set_ranging_data_ready_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                         wps_error_t *err)
 {
-    if (connection != NULL) {
-        connection->ranging_data_ready_callback      = callback;
-        connection->ranging_data_ready_parg_callback = parg;
-    }
+    CHECK_ERROR(connection == NULL, err, WPS_CONNECTION_NOT_ALLOCATED, return);
+    connection->ranging_data_ready_callback = callback;
+    connection->ranging_data_ready_parg_callback = parg;
 }
 
-void wps_set_event_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_set_event_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg, wps_error_t *err)
 {
-    if (connection != NULL) {
-        connection->evt_callback      = callback;
-        connection->evt_parg_callback = parg;
-    }
+    CHECK_ERROR(connection == NULL, err, WPS_CONNECTION_NOT_ALLOCATED, return);
+    connection->evt_callback = callback;
+    connection->evt_parg_callback = parg;
 }
 
 void wps_connect(wps_t *wps, wps_error_t *err)
@@ -898,27 +877,26 @@ void wps_connect(wps_t *wps, wps_error_t *err)
     wps_phy_cfg_t phy_cfg = {0};
 
     *err = WPS_NO_ERROR;
-    if (wps->mac.signal == WPS_NOT_INIT) {
-        *err = WPS_NOT_INIT_ERROR;
-        return;
-    }
-
-    if (!(wps->mac.signal == WPS_DISCONNECT)) {
-        *err = WPS_ALREADY_CONNECTED_ERROR;
-        return;
-    }
+    CHECK_ERROR(wps->mac.signal == WPS_NOT_INIT, err, WPS_NOT_INIT_ERROR, return);
+    CHECK_ERROR(!(wps->mac.signal == WPS_DISCONNECT), err, WPS_ALREADY_CONNECTED_ERROR, return);
 
     wps->mac.signal = WPS_CONNECT;
 
-    for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
-        phy_cfg.radio          = &wps->node->radio[i].radio;
-        phy_cfg.local_address  = wps->node->cfg.local_address;
-        phy_cfg.syncword_cfg   = wps->node->cfg.syncword_cfg;
-        phy_cfg.preamble_len   = wps->node->cfg.preamble_len;
-        phy_cfg.sleep_lvl      = wps->node->cfg.sleep_lvl;
-        phy_cfg.crc_polynomial = wps->node->cfg.crc_polynomial;
-        phy_cfg.rx_gain        = wps->node->cfg.rx_gain;
+    uint8_t isi_mitigation_pauses = link_tdma_sync_get_isi_mitigation_pauses(wps->node->cfg.isi_mitig);
 
+    for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
+        phy_cfg.radio = &wps->node->radio[i].radio;
+        phy_cfg.local_address = wps->node->cfg.local_address;
+        phy_cfg.sfd_cfg = wps->node->cfg.sfd_cfg;
+        phy_cfg.preamble_len_reg_val = link_tdma_get_preamble_reg_value(isi_mitigation_pauses,
+                                                                        wps->node->cfg.preamble_len,
+                                                                        wps->node->cfg.sfd_cfg.sfd_length);
+        phy_cfg.sleep_lvl = wps->node->cfg.sleep_lvl;
+        phy_cfg.crc_polynomial = wps->node->cfg.crc_polynomial;
+        phy_cfg.rx_gain = wps->node->cfg.rx_gain;
+#if SR1100
+        phy_cfg.isi_indicator_enabled = wps->node->cfg.isi_indicator_enabled;
+#endif
         wps_phy_init(&wps->phy[i], &phy_cfg);
     }
 
@@ -929,41 +907,28 @@ void wps_connect(wps_t *wps, wps_error_t *err)
 void wps_disconnect(wps_t *wps, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
-    xlayer_request_info_t *request;
+    xlayer_request_info_t *request = NULL;
 
-    if (wps->mac.signal == WPS_NOT_INIT) {
-        *err = WPS_NOT_INIT_ERROR;
-        return;
-    }
-
-    if (wps->mac.signal == WPS_DISCONNECT) {
-        *err = WPS_ALREADY_DISCONNECTED_ERROR;
-        return;
-    }
+    CHECK_ERROR(wps->mac.signal == WPS_NOT_INIT, err, WPS_NOT_INIT_ERROR, return);
+    CHECK_ERROR(wps->mac.signal == WPS_DISCONNECT, err, WPS_ALREADY_DISCONNECTED_ERROR, return);
 
     if (wps->mac.fast_sync_enabled && !link_tdma_sync_is_slave_synced(&wps->mac.tdma_sync)) {
         wps_phy_disconnect(wps->phy);
         wps->mac.signal = WPS_DISCONNECT;
     } else {
         request = circular_queue_get_free_slot(&wps->mac.request_queue);
-        if (request != NULL) {
-            request->config = NULL;
-            request->type   = REQUEST_PHY_DISCONNECT;
-            circular_queue_enqueue(&wps->mac.request_queue);
-        } else {
-            *err = WPS_REQUEST_QUEUE_FULL;
-            return;
-        }
+        CHECK_ERROR(request == NULL, err, WPS_REQUEST_QUEUE_FULL, return);
+        request->config = NULL;
+        request->type = REQUEST_PHY_DISCONNECT;
+        circular_queue_enqueue(&wps->mac.request_queue);
 
         uint64_t disconnect_timout_time = swc_hal_get_tick_free_running_timer() +
                                           (DISCONNECT_TIMEOUT_MS * swc_hal_get_free_running_timer_frequency_hz() /
                                            MS_TO_S_FACTOR);
 
         while (wps->mac.signal != WPS_DISCONNECT) {
-            if (swc_hal_get_tick_free_running_timer() > disconnect_timout_time) {
-                *err = WPS_DISCONNECT_TIMEOUT_ERROR;
-                return;
-            }
+            CHECK_ERROR(swc_hal_get_tick_free_running_timer() > disconnect_timout_time, err,
+                        WPS_DISCONNECT_TIMEOUT_ERROR, return);
         };
     }
 }
@@ -971,11 +936,7 @@ void wps_disconnect(wps_t *wps, wps_error_t *err)
 void wps_reset(wps_t *wps, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
-
-    if (wps->mac.signal == WPS_DISCONNECT) {
-        *err = WPS_ALREADY_DISCONNECTED_ERROR;
-        return;
-    }
+    CHECK_ERROR(wps->mac.signal == WPS_DISCONNECT, err, WPS_ALREADY_DISCONNECTED_ERROR, return);
 
     wps_disconnect(wps, err);
     wps_connect(wps, err);
@@ -998,70 +959,50 @@ void wps_resume(wps_t *wps, wps_error_t *err)
 void wps_init_connection_throttle(wps_connection_t *connection, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
-
-    if (connection->pattern != NULL) {
-        memset(connection->pattern, 1, WPS_PATTERN_THROTTLE_GRANULARITY * sizeof(bool));
-        connection->pattern_count       = 0;
-        connection->pattern_total_count = WPS_PATTERN_THROTTLE_GRANULARITY;
-        connection->active_ratio        = 100;
-    }
+    CHECK_ERROR(connection->pattern == NULL, err, WPS_THROTTLING_PATTERN_NOT_ALLOCATED, return);
+    memset(connection->pattern, 1, WPS_PATTERN_THROTTLE_GRANULARITY * sizeof(bool));
+    connection->pattern_count = 0;
+    connection->pattern_total_count = WPS_PATTERN_THROTTLE_GRANULARITY;
+    connection->active_ratio = 100;
 }
 
 void wps_set_active_ratio(wps_t *wps, wps_connection_t *connection, uint8_t ratio_percent, wps_error_t *err)
 {
-    xlayer_request_info_t *request;
-    wps_schedule_ratio_cfg_t *schedule_ratio_cfg = circular_queue_get_free_slot(
-        wps->mac.schedule_ratio_cfg_queue);
+    xlayer_request_info_t *request = NULL;
+    wps_schedule_ratio_cfg_t *schedule_ratio_cfg = circular_queue_get_free_slot(wps->mac.schedule_ratio_cfg_queue);
 
     *err = WPS_NO_ERROR;
 
-    if (schedule_ratio_cfg != NULL) {
-        request = circular_queue_get_free_slot(&wps->mac.request_queue);
-        if (request != NULL) {
-            schedule_ratio_cfg->active_ratio = ratio_percent;
-            schedule_ratio_cfg->pattern_total_count =
-                generate_active_pattern(schedule_ratio_cfg->pattern_cfg, ratio_percent);
-            schedule_ratio_cfg->pattern_current_count = 0;
-            schedule_ratio_cfg->target_conn           = connection;
-        } else {
-            *err = WPS_REQUEST_QUEUE_FULL;
-            return;
-        }
-    } else {
-        *err = WPS_SCHEDULE_RATIO_REQUEST_QUEUE_FULL;
-        return;
-    }
+    CHECK_ERROR(schedule_ratio_cfg == NULL, err, WPS_SCHEDULE_RATIO_REQUEST_QUEUE_FULL, return);
+    request = circular_queue_get_free_slot(&wps->mac.request_queue);
+    CHECK_ERROR(request == NULL, err, WPS_REQUEST_QUEUE_FULL, return);
+
+    schedule_ratio_cfg->active_ratio = ratio_percent;
+    schedule_ratio_cfg->pattern_total_count = generate_active_pattern(schedule_ratio_cfg->pattern_cfg, ratio_percent);
+    schedule_ratio_cfg->pattern_current_count = 0;
+    schedule_ratio_cfg->target_conn = connection;
 
     request->config = schedule_ratio_cfg;
-    request->type   = REQUEST_MAC_CHANGE_SCHEDULE_RATIO;
+    request->type = REQUEST_MAC_CHANGE_SCHEDULE_RATIO;
     circular_queue_enqueue(wps->mac.schedule_ratio_cfg_queue);
     circular_queue_enqueue(&wps->mac.request_queue);
 }
 
-void wps_get_free_slot(wps_connection_t *connection, uint8_t **payload, uint16_t size,
-                       wps_error_t *err)
+void wps_get_free_slot(wps_connection_t *connection, uint8_t **payload, uint16_t size, wps_error_t *err)
 {
-    xlayer_frame_t *frame;
+    xlayer_frame_t *frame = NULL;
 
     *err = WPS_NO_ERROR;
-
-    if (xlayer_queue_get_size(&connection->xlayer_queue) >=
-        xlayer_queue_get_max_size(&connection->xlayer_queue)) {
-        *err = WPS_QUEUE_FULL_ERROR;
-        return;
-    }
-
+    CHECK_ERROR(xlayer_queue_get_size(&connection->xlayer_queue) >=
+                    xlayer_queue_get_max_size(&connection->xlayer_queue),
+                err, WPS_QUEUE_FULL_ERROR, return);
     connection->tx_node = xlayer_queue_get_free_node(connection->free_tx_queue);
+    CHECK_ERROR(connection->tx_node == NULL, err, WPS_QUEUE_FULL_ERROR, return);
 
-    if (connection->tx_node == NULL) {
-        *err = WPS_QUEUE_FULL_ERROR;
-        return;
-    }
-
-    frame    = &connection->tx_node->xlayer.frame;
+    frame = &connection->tx_node->xlayer.frame;
 
     /* Allocate space for node data */
-    frame->max_frame_size = connection->header_size + size + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
+    frame->max_frame_size = connection->cfg.header_size + size + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
     uint8_t *slot_data = xlayer_circular_data_allocate_space(connection->tx_data, frame->max_frame_size);
 
     if (slot_data == NULL) {
@@ -1071,43 +1012,35 @@ void wps_get_free_slot(wps_connection_t *connection, uint8_t **payload, uint16_t
         return;
     }
 
-    xlayer_queue_set_tx_frame_buffer(frame, connection->header_size, slot_data);
+    xlayer_queue_set_tx_frame_buffer(frame, connection->cfg.header_size, slot_data);
 
     *payload = frame->payload_begin_it;
 }
 
 void wps_send(wps_connection_t *connection, const uint8_t *payload, uint8_t size, wps_error_t *err)
 {
-    xlayer_frame_t *frame;
+    xlayer_frame_t *frame = NULL;
     bool user_payload = false;
 
     *err = WPS_NO_ERROR;
 
-    if (size > connection->payload_size && (connection->payload_size != 0)) {
-        *err = WPS_WRONG_TX_SIZE_ERROR;
-        return;
-    }
-
-    if (xlayer_queue_get_size(&connection->xlayer_queue) >=
-        xlayer_queue_get_max_size(&connection->xlayer_queue)) {
-        *err = WPS_QUEUE_FULL_ERROR;
-        return;
-    }
+    CHECK_ERROR(size > connection->payload_size && (connection->payload_size != 0), err, WPS_WRONG_TX_SIZE_ERROR,
+                return);
+    CHECK_ERROR((xlayer_queue_get_size(&connection->xlayer_queue) >=
+                 xlayer_queue_get_max_size(&connection->xlayer_queue)),
+                err, WPS_QUEUE_FULL_ERROR, return);
 
     if (connection->tx_node == NULL) {
         /* case where get free slot was not used first */
         connection->tx_node = xlayer_queue_get_free_node(connection->free_tx_queue);
-        user_payload        = true;
+        user_payload = true;
 
         /* if free node is not available, will return an error */
-        if (connection->tx_node == NULL) {
-            *err = WPS_QUEUE_FULL_ERROR;
-            return;
-        }
+        CHECK_ERROR(connection->tx_node == NULL, err, WPS_QUEUE_FULL_ERROR, return);
 
         /* Allocate space for node data */
         frame = &connection->tx_node->xlayer.frame;
-        frame->max_frame_size = connection->header_size + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
+        frame->max_frame_size = connection->cfg.header_size + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
         uint8_t *slot_data = xlayer_circular_data_allocate_space(connection->tx_data, frame->max_frame_size);
 
         if (slot_data == NULL) {
@@ -1116,18 +1049,18 @@ void wps_send(wps_connection_t *connection, const uint8_t *payload, uint8_t size
             *err = WPS_NOT_ENOUGH_MEMORY_ERROR;
             return;
         }
-        xlayer_queue_set_tx_frame_buffer(frame, connection->header_size, slot_data);
+        xlayer_queue_set_tx_frame_buffer(frame, connection->cfg.header_size, slot_data);
     }
 
     frame = &connection->tx_node->xlayer.frame;
-    frame->retry_count         = 0;
-    frame->time_stamp          = connection->get_tick();
+    frame->retry_count = 0;
+    frame->time_stamp = connection->cfg.get_tick();
     frame->payload_memory_size = size;
-    frame->header_memory_size  = connection->header_size;
-    frame->payload_memory      = (uint8_t *)payload;
-    frame->payload_begin_it    = (uint8_t *)payload;
-    frame->payload_end_it      = frame->payload_begin_it + size;
-    frame->user_payload        = user_payload;
+    frame->header_memory_size = connection->cfg.header_size;
+    frame->payload_memory = (uint8_t *)payload;
+    frame->payload_begin_it = (uint8_t *)payload;
+    frame->payload_end_it = frame->payload_begin_it + size;
+    frame->user_payload = user_payload;
     if (xlayer_queue_enqueue_node(&connection->xlayer_queue, connection->tx_node) == false) {
         xlayer_circular_data_free_space(connection->tx_data, frame->header_memory, frame->max_frame_size);
         xlayer_queue_free_node(connection->tx_node);
@@ -1137,35 +1070,31 @@ void wps_send(wps_connection_t *connection, const uint8_t *payload, uint8_t size
 
 wps_rx_frame wps_read(wps_connection_t *connection, wps_error_t *err)
 {
-    wps_rx_frame frame_out;
+    wps_rx_frame frame_out = {0};
 
     *err = WPS_NO_ERROR;
 
     if (xlayer_queue_get_size(&connection->xlayer_queue) == 0) {
-
-        *err              = WPS_QUEUE_EMPTY_ERROR;
+        *err = WPS_QUEUE_EMPTY_ERROR;
         frame_out.payload = NULL;
-        frame_out.size    = 0;
+        frame_out.size = 0;
         return frame_out;
     }
 
     xlayer_t *frame = &xlayer_queue_get_node(&connection->xlayer_queue)->xlayer;
 
     frame_out.payload = (frame->frame.payload_begin_it);
-    frame_out.size    = frame->frame.payload_end_it - frame->frame.payload_begin_it;
+    frame_out.size = frame->frame.payload_end_it - frame->frame.payload_begin_it;
 
     return frame_out;
 }
 
 void wps_read_done(wps_connection_t *connection, wps_error_t *err)
 {
-    xlayer_queue_node_t *node;
+    xlayer_queue_node_t *node = NULL;
 
     node = xlayer_queue_dequeue_node(&connection->xlayer_queue);
-    if (node == NULL) {
-        *err = WPS_QUEUE_EMPTY_ERROR;
-        return;
-    }
+    CHECK_ERROR(node == NULL, err, WPS_QUEUE_EMPTY_ERROR, return);
 
     wps_mac_xlayer_free_node_with_data(connection, node);
 
@@ -1174,19 +1103,19 @@ void wps_read_done(wps_connection_t *connection, wps_error_t *err)
 
 wps_rx_frame wps_read_to_buffer(wps_connection_t *connection, uint8_t *payload, size_t max_size, wps_error_t *err)
 {
-    wps_rx_frame frame_out;
+    wps_rx_frame frame_out = {0};
 
     frame_out = wps_read(connection, err);
     if (*err != WPS_NO_ERROR) {
         frame_out.payload = NULL;
-        frame_out.size    = 0;
+        frame_out.size = 0;
         return frame_out;
     }
 
     if (frame_out.size > max_size) {
-        *err              = WPS_WRONG_RX_SIZE_ERROR;
+        *err = WPS_WRONG_RX_SIZE_ERROR;
         frame_out.payload = NULL;
-        frame_out.size    = 0;
+        frame_out.size = 0;
         return frame_out;
     }
 
@@ -1195,7 +1124,7 @@ wps_rx_frame wps_read_to_buffer(wps_connection_t *connection, uint8_t *payload, 
     wps_read_done(connection, err);
     if (*err != WPS_NO_ERROR) {
         frame_out.payload = NULL;
-        frame_out.size    = 0;
+        frame_out.size = 0;
         return frame_out;
     }
 
@@ -1206,11 +1135,7 @@ uint16_t wps_get_read_payload_size(wps_connection_t *connection, wps_error_t *er
 {
     *err = WPS_NO_ERROR;
 
-    if (xlayer_queue_get_size(&connection->xlayer_queue) == 0) {
-
-        *err = WPS_QUEUE_EMPTY_ERROR;
-        return 0;
-    }
+    CHECK_ERROR(xlayer_queue_get_size(&connection->xlayer_queue) == 0, err, WPS_QUEUE_EMPTY_ERROR, return 0);
 
     xlayer_t *frame = &xlayer_queue_get_node(&connection->xlayer_queue)->xlayer;
 
@@ -1250,31 +1175,25 @@ wps_event_t wps_get_event(wps_connection_t *connection)
     return event;
 }
 
-void wps_request_write_register(wps_t *wps, uint8_t starting_reg, uint16_t data,
-                                reg_write_cfg_t cfg, wps_error_t *err)
+void wps_request_write_register(wps_t *wps, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg, wps_error_t *err)
 {
-    xlayer_request_info_t *request;
+    xlayer_request_info_t *request = NULL;
     xlayer_write_request_info_t *write_request = circular_queue_get_free_slot(wps->mac.write_request_queue);
 
     *err = WPS_NO_ERROR;
+    CHECK_ERROR(write_request == NULL, err, WPS_WRITE_REQUEST_QUEUE_FULL, return);
 
-    if (write_request != NULL) {
-        request = circular_queue_get_free_slot(&wps->mac.request_queue);
-        if (request != NULL) {
-            write_request->target_register = starting_reg;
-            write_request->data            = data;
-            write_request->cfg             = cfg;
-            circular_queue_enqueue(wps->mac.write_request_queue);
+    request = circular_queue_get_free_slot(&wps->mac.request_queue);
+    CHECK_ERROR(request == NULL, err, WPS_REQUEST_QUEUE_FULL, return);
 
-            request->config = write_request;
-            request->type   = REQUEST_PHY_WRITE_REG;
-            circular_queue_enqueue(&wps->mac.request_queue);
-        } else {
-            *err = WPS_REQUEST_QUEUE_FULL;
-        }
-    } else {
-        *err = WPS_WRITE_REQUEST_QUEUE_FULL;
-    }
+    write_request->target_register = starting_reg;
+    write_request->data = data;
+    write_request->cfg = cfg;
+    circular_queue_enqueue(wps->mac.write_request_queue);
+
+    request->config = write_request;
+    request->type = REQUEST_PHY_WRITE_REG;
+    circular_queue_enqueue(&wps->mac.request_queue);
 }
 
 void wps_clear_write_register(wps_t *wps)
@@ -1282,37 +1201,32 @@ void wps_clear_write_register(wps_t *wps)
     wps_phy_clear_write_register(wps->phy);
 }
 
-void wps_request_read_register(wps_t *wps, uint8_t target_register, uint16_t *rx_buffer,
-                               bool *xfer_cmplt, wps_error_t *err)
+void wps_request_read_register(wps_t *wps, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt,
+                               wps_error_t *err)
 {
-    xlayer_request_info_t *request;
+    xlayer_request_info_t *request = NULL;
     xlayer_read_request_info_t *read_request = circular_queue_get_free_slot(wps->mac.read_request_queue);
 
     *err = WPS_NO_ERROR;
+    CHECK_ERROR(read_request == NULL, err, WPS_READ_REQUEST_QUEUE_FULL, return);
 
-    if (read_request != NULL) {
-        request = circular_queue_get_free_slot(&wps->mac.request_queue);
-        if (request != NULL) {
-            *xfer_cmplt                   = false;
-            read_request->rx_buffer       = rx_buffer;
-            read_request->target_register = target_register;
-            read_request->xfer_cmplt      = xfer_cmplt;
-            circular_queue_enqueue(wps->mac.read_request_queue);
+    request = circular_queue_get_free_slot(&wps->mac.request_queue);
+    CHECK_ERROR(request == NULL, err, WPS_REQUEST_QUEUE_FULL, return);
 
-            request->config = read_request;
-            request->type   = REQUEST_PHY_READ_REG;
-            circular_queue_enqueue(&wps->mac.request_queue);
-        } else {
-            *err = WPS_REQUEST_QUEUE_FULL;
-        }
-    } else {
-        *err = WPS_READ_REQUEST_QUEUE_FULL;
-    }
+    *xfer_cmplt = false;
+    read_request->rx_buffer = rx_buffer;
+    read_request->target_register = target_register;
+    read_request->xfer_cmplt = xfer_cmplt;
+    circular_queue_enqueue(wps->mac.read_request_queue);
+
+    request->config = read_request;
+    request->type = REQUEST_PHY_READ_REG;
+    circular_queue_enqueue(&wps->mac.request_queue);
 }
 
 void wps_process_callback(wps_t *wps)
 {
-    wps_callback_inst_t *callback;
+    wps_callback_inst_t *callback = NULL;
 
     /* Process MAC connection statistics */
     wps_mac_statistics_process_data(&wps->mac.stats_process_data);
@@ -1381,36 +1295,27 @@ uint32_t wps_get_phy_total_pkt_dropped(wps_connection_t *connection)
 
 wps_phase_frame wps_read_phase(wps_connection_t *connection, wps_error_t *err)
 {
-    wps_phase_frame phase_frame;
+    wps_phase_frame phase_frame = {0};
 
     *err = WPS_NO_ERROR;
 
     phase_frame.size = link_phase_get_metrics_array(&connection->link_phase, &phase_frame.payload);
-    if (phase_frame.payload == NULL) {
-        *err = WPS_QUEUE_EMPTY_ERROR;
-    }
+    CHECK_ERROR(phase_frame.payload == NULL, err, WPS_QUEUE_EMPTY_ERROR, return phase_frame);
     return phase_frame;
 }
 
 void wps_read_phase_done(wps_connection_t *connection, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
-
-    if (!link_phase_done(&connection->link_phase)) {
-        *err = WPS_QUEUE_EMPTY_ERROR;
-    }
+    CHECK_ERROR(!link_phase_done(&connection->link_phase), err, WPS_QUEUE_EMPTY_ERROR, return);
 }
 
 uint8_t wps_get_channel_count(wps_t *wps, wps_error_t *err)
 {
     *err = WPS_NO_ERROR;
 
-    if (wps->channel_sequence.channel != NULL) {
-        return wps->channel_sequence.channel_number;
-    }
-
-    *err = WPS_CHANNEL_SEQUENCE_NOT_INITIALIZED_ERROR;
-    return 0;
+    CHECK_ERROR(wps->channel_sequence.channel == NULL, err, WPS_CHANNEL_SEQUENCE_NOT_INITIALIZED_ERROR, return 0);
+    return wps->channel_sequence.channel_number;
 }
 
 /* PRIVATE FUNCTION ***********************************************************/
@@ -1456,15 +1361,15 @@ static uint32_t auto_reply_id_to_id(int8_t id)
  */
 static uint8_t generate_active_pattern(bool *pattern, uint8_t active_ratio)
 {
-    uint8_t current_gcd         = wps_utils_gcd(active_ratio, PERCENT_DENOMINATOR);
-    uint8_t active_elements     = active_ratio / current_gcd;
+    uint8_t current_gcd = wps_utils_gcd(active_ratio, PERCENT_DENOMINATOR);
+    uint8_t active_elements = active_ratio / current_gcd;
     uint8_t total_number_of_val = PERCENT_DENOMINATOR / current_gcd;
-    uint16_t pos                = 0;
+    uint16_t pos = 0;
 
     memset(pattern, 0, total_number_of_val);
 
     for (uint8_t i = 0; i < active_elements; i++) {
-        pos                                = ((i * total_number_of_val) / active_elements);
+        pos = ((i * total_number_of_val) / active_elements);
         pattern[pos % total_number_of_val] = 1;
     }
 
@@ -1502,4 +1407,68 @@ static uint8_t find_channel_count_from_sequence(channel_sequence_t *channel_sequ
     }
 
     return unique_count;
+}
+
+/** @brief Configure connection's RF channel.
+ *
+ *  Configure the receiver's filter, transmission power and power amplifier.
+ *
+ *  @param[in]  connection      Connection instance.
+ *  @param[in]  node            Node instance.
+ *  @param[in]  channel_x       Channel number.
+ *  @param[in]  config          Channel configuration.
+ *  @param[in]  cfg_40_96       Flag to indicate if 40.96 structure is to be used.
+ *  @param[out] err             Pointer to the error code.
+ */
+static void config_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x, channel_cfg_t *config,
+                           bool cfg_40_96, wps_error_t *err)
+{
+    *err = WPS_NO_ERROR;
+
+    sr_phy_error_t phy_err = SR_SPECTRAL_ERROR_NONE;
+    calib_vars_t *calib_vars;
+    rf_channel_t *channel;
+
+    for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
+        calib_vars = cfg_40_96 ? node->radio[i].spectral_calib_vars_40_96 : node->radio[i].spectral_calib_vars_20_48;
+        channel = cfg_40_96 ? &connection->channel_40_96[channel_x][i] : &connection->channel_20_48[channel_x][i];
+        phy_err = config_spectrum_advance(calib_vars, config, channel);
+        if (phy_err != SR_SPECTRAL_ERROR_NONE) {
+            *err = WPS_SPECTRAL_CONFIG_FAILED;
+            return;
+        }
+    }
+}
+
+/** @brief Configure connection's fallback RF channel.
+ *
+ *  Configure the receiver's filter, transmission power and power amplifier.
+ *
+ *  @param[in]  connection      Connection instance.
+ *  @param[in]  node            Node instance.
+ *  @param[in]  channel_x       Channel number.
+ *  @param[in]  fallback_index  Fallback index.
+ *  @param[in]  config          Channel configuration.
+ *  @param[in]  cfg_40_96       Flag to indicate if 40.96 structure is to be used.
+ *  @param[out] err             Pointer to the error code.
+ */
+static void config_fallback_channel(wps_connection_t *connection, wps_node_t *node, uint8_t channel_x,
+                                    uint8_t fallback_index, channel_cfg_t *config, bool cfg_40_96, wps_error_t *err)
+{
+    *err = WPS_NO_ERROR;
+
+    sr_phy_error_t phy_err = SR_SPECTRAL_ERROR_NONE;
+    calib_vars_t *calib_vars;
+    rf_channel_t *channel;
+
+    for (size_t i = 0; i < WPS_RADIO_COUNT; i++) {
+        calib_vars = cfg_40_96 ? node->radio[i].spectral_calib_vars_40_96 : node->radio[i].spectral_calib_vars_20_48;
+        channel = cfg_40_96 ? &connection->fallback_channel_40_96[fallback_index][channel_x][i] :
+                              &connection->fallback_channel_20_48[fallback_index][channel_x][i];
+        phy_err = config_spectrum_advance(calib_vars, config, channel);
+        if (phy_err != SR_SPECTRAL_ERROR_NONE) {
+            *err = WPS_SPECTRAL_CONFIG_FAILED;
+            return;
+        }
+    }
 }

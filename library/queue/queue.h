@@ -19,13 +19,13 @@ extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-#define QUEUE_LIMIT_UNLIMITED  0xffff
+/*! Calculate number of bytes required for the queue. */
 #define QUEUE_NB_BYTES_NEEDED(num_nodes, data_size) ((num_nodes) * ((sizeof(queue_node_t) + (data_size))))
 
 /* TYPES **********************************************************************/
 typedef struct queue_node {
-    uint8_t           *data;
-    struct queue      *home_queue;
+    uint8_t *data;
+    struct queue *home_queue;
     struct queue_node *next;
     /*! Number of bytes allocated for each node. */
     uint16_t data_size;
@@ -38,19 +38,19 @@ typedef struct queue_node {
 typedef struct queue {
     queue_node_t *head;
     queue_node_t *tail;
-    uint16_t     length;
-    uint16_t     limit;
-    bool         free_queue_type;
-    const char   *q_name;
+    uint16_t length;
+    uint16_t limit;
+    bool free_queue_type;
+    const char *q_name;
     struct queue *prev_queue;
 } queue_t;
 
 typedef struct queue_stats {
     uint16_t queue_length;
     uint16_t queue_limit;
-    char     *queue_name;
-    bool     queue_free_type;
- } queue_stats_t;
+    char *queue_name;
+    bool queue_free_type;
+} queue_stats_t;
 
 typedef struct queue_critical_cfg {
     void (*enter_critical)(void);
@@ -81,8 +81,8 @@ void queue_init(queue_critical_cfg_t critical);
  *  @param[in] queue_name      Queue name.
  *  @return Amount of memory consumed by this pool. This value rounded up to the nearest 4-byte multiple.
  */
-uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_nodes,
-                         uint16_t data_size, const char *queue_name);
+uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_nodes, uint16_t data_size,
+                         const char *queue_name);
 
 /** @brief Initialize a new queue.
  *

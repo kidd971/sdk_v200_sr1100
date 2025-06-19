@@ -12,10 +12,8 @@
 #include "swc_hal_facade.h"
 
 /* CONSTANTS ******************************************************************/
-#define FREE_RUNNING_TIMER_PRIORITY       3
-#define MULTI_RADIO_MAX_TIMER_PERIOD      0xFFFE
-#define QUASAR_FREE_RUNNING_TIMER_FREQ_HZ 1000
-#define MULTI_RADIO_TIMER_PRESCALER       8
+#define MULTI_RADIO_MAX_TIMER_PERIOD 0xFFFE
+#define MULTI_RADIO_TIMER_PRESCALER  8
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 /* Context Switching and Interrupt Management */
@@ -172,13 +170,6 @@ bool swc_hal_radio_2_is_spi_busy(void)
 }
 
 /* Timer and Delay Management */
-void swc_hal_free_running_timer_init(void)
-{
-    quasar_irq_priority_t irq_priority = FREE_RUNNING_TIMER_PRIORITY;
-
-    quasar_timer_free_running_ms_init(irq_priority);
-}
-
 uint64_t swc_hal_get_tick_free_running_timer(void)
 {
     return quasar_timer_free_running_ms_get_tick_count();
@@ -186,7 +177,7 @@ uint64_t swc_hal_get_tick_free_running_timer(void)
 
 uint32_t swc_hal_get_free_running_timer_frequency_hz(void)
 {
-    return QUASAR_FREE_RUNNING_TIMER_FREQ_HZ;
+    return quasar_timer_free_running_ms_get_tick_frequency();
 }
 
 /* Dual Radio Timer Management */

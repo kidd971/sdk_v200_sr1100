@@ -13,12 +13,15 @@
 #include <string.h>
 
 /* CONSTANTS ******************************************************************/
-#define ADD_REM_DIFF       2
+#define ADD_REM_DIFF 2
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static uint16_t resample_add_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output, uint16_t sample_count);
-static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output, uint16_t sample_count);
-static uint16_t resample_bypass(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output, uint16_t sample_count);
+static uint16_t resample_add_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output,
+                                    uint16_t sample_count);
+static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output,
+                                       uint16_t sample_count);
+static uint16_t resample_bypass(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output,
+                                uint16_t sample_count);
 static void resampling_stop(resampling_instance_t *instance);
 static uint32_t interp_linear(resampling_instance_t *instance, int32_t *y, int32_t *y1, int32_t *out, uint16_t size);
 static void update_last_sample(resampling_instance_t *instance, int32_t *ptr_input, uint16_t sample_count);
@@ -31,8 +34,8 @@ static uint8_t sizeof_buffer_type(resampling_instance_t *instance);
 resampling_errors_t resampling_init(resampling_instance_t *instance, resampling_config_t *resampling_config)
 {
     /* WARNING this initialisation works only in audio 16 bits sample bit depth */
-    uint32_t resampling_size;
-    uint16_t nb_sample_ch;
+    uint32_t resampling_size = 0;
+    uint16_t nb_sample_ch = 0;
 
     /* Config verification */
     if (resampling_config->nb_channel > RESAMPLING_CFG_MAX_NB_CHANNEL) {
@@ -50,25 +53,28 @@ resampling_errors_t resampling_init(resampling_instance_t *instance, resampling_
     }
 
     /* Struct initialization */
-    instance->status      = RESAMPLING_WAIT_QUEUE_FULL;
-    instance->correction  = RESAMPLING_NO_CORRECTION;
+    instance->status = RESAMPLING_WAIT_QUEUE_FULL;
+    instance->correction = RESAMPLING_NO_CORRECTION;
     instance->buffer_type = resampling_config->buffer_type;
-    instance->nb_channel  = resampling_config->nb_channel;
+    instance->nb_channel = resampling_config->nb_channel;
     nb_sample_ch = resampling_config->nb_sample / resampling_config->nb_channel;
 
     instance->buffer_type_max = (1 << instance->buffer_type);
 
-    resampling_size  = (uint32_t)(resampling_config->resampling_length / nb_sample_ch) * nb_sample_ch;
+    resampling_size = (uint32_t)(resampling_config->resampling_length / nb_sample_ch) * nb_sample_ch;
 
-    instance->step_add      = (uint32_t)(instance->buffer_type_max / resampling_size);
-    instance->step_rem      = (uint32_t)(instance->buffer_type_max / (resampling_size - ADD_REM_DIFF));
+    instance->step_add = (uint32_t)(instance->buffer_type_max / resampling_size);
+    instance->step_rem = (uint32_t)(instance->buffer_type_max / (resampling_size - ADD_REM_DIFF));
 
-    instance->max_x_axis    = (uint32_t)((resampling_size - 1) * (1.0 / resampling_size) * instance->buffer_type_max);
+    instance->max_x_axis = (uint32_t)((resampling_size - 1) * (1.0 / resampling_size) * instance->buffer_type_max);
 
     instance->bias_step_add = (uint32_t)((((double)1.0 / (double)resampling_size) * (double)instance->buffer_type_max -
-                                          (double)instance->step_add) * (double)instance->buffer_type_max);
-    instance->bias_step_rem = (uint32_t)((((double)1.0 / (double)(resampling_size - ADD_REM_DIFF)) * (double)instance->buffer_type_max -
-                                          (double)instance->step_rem) * (double)instance->buffer_type_max);
+                                          (double)instance->step_add) *
+                                         (double)instance->buffer_type_max);
+    instance->bias_step_rem =
+        (uint32_t)((((double)1.0 / (double)(resampling_size - ADD_REM_DIFF)) * (double)instance->buffer_type_max -
+                    (double)instance->step_rem) *
+                   (double)instance->buffer_type_max);
 
     return RESAMPLING_NO_ERROR;
 }
@@ -84,14 +90,14 @@ uint16_t resample(resampling_instance_t *instance, void *ptr_input, void *ptr_ou
     if (instance->status != RESAMPLING_IDLE) {
         switch (instance->correction) {
         case RESAMPLING_ADD_SAMPLE:
-                return resample_add_sample(instance, (uint32_t *)ptr_input, (uint32_t *)ptr_output, sample_count);
-                break;
+            return resample_add_sample(instance, (uint32_t *)ptr_input, (uint32_t *)ptr_output, sample_count);
+            break;
         case RESAMPLING_REMOVE_SAMPLE:
-                return resample_remove_sample(instance, ptr_input, ptr_output, sample_count);
-                break;
+            return resample_remove_sample(instance, ptr_input, ptr_output, sample_count);
+            break;
         case RESAMPLING_NO_CORRECTION:
-                return resample_bypass(instance, ptr_input, ptr_output, sample_count);
-                break;
+            return resample_bypass(instance, ptr_input, ptr_output, sample_count);
+            break;
         default:
             return resample_bypass(instance, ptr_input, ptr_output, sample_count);
             break;
@@ -120,19 +126,18 @@ uint8_t resample_get_channel_count(resampling_instance_t *instance)
  *  @param[out] ptr_output    Pointer to output data.
  *  @return Samples count.
  */
-static uint16_t resample_add_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output, uint16_t sample_count)
+static uint16_t resample_add_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output,
+                                    uint16_t sample_count)
 {
-    uint16_t size;
-    uint8_t nb_ch;
+    uint16_t size = 0;
+    uint8_t nb_ch = 0;
 
     /* Initialise variable */
     nb_ch = (instance->nb_channel == 0) ? 1 : instance->nb_channel;
     size = 0;
 
-    /*
-     * Resampling START
-     */
     if (instance->status == RESAMPLING_START) {
+        /* Resampling START */
         instance->status = RESAMPLING_RUNNING;
         instance->bias = instance->bias_step_add;
         instance->x_axis = instance->max_x_axis;
@@ -145,28 +150,22 @@ static uint16_t resample_add_sample(resampling_instance_t *instance, uint32_t *p
                             (int32_t)cast_type_read(instance, (int32_t *)instance->last_sample, nb_ch + mux_index));
             size++;
         }
-    /*
-     * resampling is already running
-     */
     } else if (instance->status == RESAMPLING_RUNNING) {
-        /*
-         * Calculate the first value(s) of the output buffer using the last samples of last interpolation.
-         */
+        /* Resampling is already running*/
+
+        /* Calculate the first value(s) of the output buffer using the last samples of last interpolation. */
         size += interp_linear(instance, get_ptr_addr(instance, instance->last_sample, nb_ch),
                               (int32_t *)instance->last_sample, (int32_t *)ptr_output, nb_ch);
     }
 
-    /*
-     * Calculate the second value(s) of the output buffer using the last sample of last interpolation.
-     */
+    /* Calculate the second value(s) of the output buffer using the last sample of last interpolation. */
     size += interp_linear(instance, (int32_t *)ptr_input, get_ptr_addr(instance, instance->last_sample, nb_ch),
                           (int32_t *)get_ptr_addr(instance, (int32_t *)ptr_output, size), nb_ch);
 
-    /*
-     * Interpolation
-     */
-    size += interp_linear(instance, (int32_t *)get_ptr_addr(instance, (int32_t *)ptr_input, nb_ch), (int32_t *)ptr_input,
-                          (int32_t *)get_ptr_addr(instance, (int32_t *)ptr_output, size), (sample_count - size));
+    /* Interpolation */
+    size += interp_linear(instance, (int32_t *)get_ptr_addr(instance, (int32_t *)ptr_input, nb_ch),
+                          (int32_t *)ptr_input, (int32_t *)get_ptr_addr(instance, (int32_t *)ptr_output, size),
+                          (sample_count - size));
 
     update_last_sample(instance, (int32_t *)ptr_input, sample_count);
 
@@ -191,17 +190,18 @@ static uint16_t resample_add_sample(resampling_instance_t *instance, uint32_t *p
  *  @param[out] ptr_output    Pointer to output data.
  *  @return Samples count.
  */
-static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output, uint16_t sample_count)
+static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output,
+                                       uint16_t sample_count)
 {
-    volatile uint16_t size;
-    uint8_t nb_ch;
+    volatile uint16_t size = 0;
+    uint8_t nb_ch = 0;
 
+    /* Initialise variable */
     nb_ch = instance->nb_channel == 0 ? 1 : instance->nb_channel;
     size = 0;
-    /*
-     * Resampling START
-     */
+
     if (instance->status == RESAMPLING_START) {
+        /* Resampling START */
         instance->status = RESAMPLING_RUNNING;
         instance->bias = instance->bias_step_rem;
         instance->x_axis = instance->step_rem;
@@ -214,20 +214,16 @@ static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t
                             (int32_t)cast_type_read(instance, (int32_t *)instance->last_sample, nb_ch + mux_index));
             size++;
         }
-    /*
-     * resampling is already running
-     */
     } else if (instance->status == RESAMPLING_RUNNING) {
-        /*
-         * Calculate the first value(s) of the output buffer using the last sample of last interpolation.
-         */
-        size += interp_linear(instance, (int32_t *)ptr_input, get_ptr_addr(instance, (int32_t *)instance->last_sample, nb_ch),
-                              (int32_t *)ptr_output, nb_ch);
+        /* Resampling is already running. */
+
+        /* Calculate the first value(s) of the output buffer using the last sample of last interpolation. */
+        size += interp_linear(instance, (int32_t *)ptr_input,
+                              get_ptr_addr(instance, (int32_t *)instance->last_sample, nb_ch), (int32_t *)ptr_output,
+                              nb_ch);
     }
 
-    /*
-     * Interpolation
-     */
+    /* Interpolation */
     size += interp_linear(instance, get_ptr_addr(instance, (int32_t *)ptr_input, size), (int32_t *)ptr_input,
                           get_ptr_addr(instance, (int32_t *)ptr_output, size), sample_count - size);
 
@@ -236,7 +232,8 @@ static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t
     /* When the resampling is finish, remove extra sample. */
     if (instance->x_axis >= instance->max_x_axis) {
         for (uint8_t mux_index = 0; mux_index < nb_ch; mux_index++) {
-            cast_type_write(instance, (int32_t *)ptr_output, size, cast_type_read(instance, (int32_t *)ptr_input, size));
+            cast_type_write(instance, (int32_t *)ptr_output, size,
+                            cast_type_read(instance, (int32_t *)ptr_input, size));
             size++;
         }
         resampling_stop(instance);
@@ -253,10 +250,11 @@ static uint16_t resample_remove_sample(resampling_instance_t *instance, uint32_t
  *  @param[out] ptr_output    Pointer to output data.
  *  @return Samples count.
  */
-static uint16_t resample_bypass(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output, uint16_t sample_count)
+static uint16_t resample_bypass(resampling_instance_t *instance, uint32_t *ptr_input, uint32_t *ptr_output,
+                                uint16_t sample_count)
 {
-    uint16_t size;
-    uint8_t nb_ch;
+    uint16_t size = 0;
+    uint8_t nb_ch = 0;
 
     /* Initialise variable */
     nb_ch = (instance->nb_channel == 0) ? 1 : instance->nb_channel;
@@ -269,8 +267,7 @@ static uint16_t resample_bypass(resampling_instance_t *instance, uint32_t *ptr_i
         size++;
     }
 
-    memcpy((void *)get_ptr_addr(instance, (int32_t *)ptr_output, size),
-           (void *)ptr_input,
+    memcpy((void *)get_ptr_addr(instance, (int32_t *)ptr_output, size), (void *)ptr_input,
            sizeof_buffer_type(instance) * (sample_count - size));
 
     update_last_sample(instance, (int32_t *)ptr_input, sample_count);
@@ -299,19 +296,19 @@ static void resampling_stop(resampling_instance_t *instance)
  */
 static uint32_t interp_linear(resampling_instance_t *instance, int32_t *y, int32_t *y1, int32_t *out, uint16_t size)
 {
-    uint16_t idx;
-    uint8_t nb_ch;
-    int64_t y1_value;
-    int64_t y_value;
-    int32_t interp;
-    int8_t bias_comp;
+    uint16_t idx = 0;
+    uint8_t nb_ch = 0;
+    int64_t y1_value = 0;
+    int64_t y_value = 0;
+    int32_t interp = 0;
+    int8_t bias_comp = 0;
 
     idx = 0;
     nb_ch = instance->nb_channel;
 
     while (idx < size) {
         y1_value = cast_type_read(instance, y1, idx);
-        y_value  = cast_type_read(instance, y, idx);
+        y_value = cast_type_read(instance, y, idx);
 
         interp = (int32_t)(y1_value + ((instance->x_axis * (y_value - y1_value)) >> instance->buffer_type));
 
@@ -366,7 +363,8 @@ static void update_last_sample(resampling_instance_t *instance, int32_t *ptr_inp
 
     for (uint16_t mux_index = 0; mux_index < nb_sample; mux_index++) {
         cast_type_write(instance, instance->last_sample, mux_index,
-                        (int32_t)cast_type_read(instance, (int32_t *)ptr_input, (sample_count - nb_sample) + mux_index));
+                        (int32_t)cast_type_read(instance, (int32_t *)ptr_input,
+                                                (sample_count - nb_sample) + mux_index));
     }
 }
 
@@ -379,7 +377,7 @@ static void update_last_sample(resampling_instance_t *instance, int32_t *ptr_inp
  */
 static int32_t cast_type_read(resampling_instance_t *instance, int32_t *in, uint16_t index)
 {
-    int32_t value;
+    int32_t value = 0;
 
     switch (instance->buffer_type) {
     case BUFFER_8BITS:

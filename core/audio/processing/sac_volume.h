@@ -20,9 +20,9 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /*! Maximum possible value for the audio volume. */
-#define SAC_VOLUME_MAX  1
+#define SAC_VOLUME_MAX 1
 /*! Minimum possible value for the audio volume. */
-#define SAC_VOLUME_MIN  0
+#define SAC_VOLUME_MIN 0
 /*! Step value to use when gradually increasing the volume towards the desired value. */
 #define SAC_VOLUME_GRAD 0.0003
 /*! Step value to use when increasing or decreasing the volume. */

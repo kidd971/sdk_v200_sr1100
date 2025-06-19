@@ -37,6 +37,10 @@ typedef enum swc_error {
     SWC_ERR_MODULATION,
     /*! The configured FEC ratio is invalid */
     SWC_ERR_FEC_RATIO,
+    /*! The configured CCA retry time is bigger than the maximum allowed */
+    SWC_ERR_CCA_RETRY_TIME,
+    /*! The configured CCA try count is bigger than the maximum allowed */
+    SWC_ERR_CCA_TRY_COUNT,
     /*! The configured CCA fail action is invalid */
     SWC_ERR_CCA_FAIL_ACTION,
     /*! The configured CCA threshold is invalid */
@@ -95,8 +99,8 @@ typedef enum swc_error {
     SWC_ERR_FRAGMENTATION_NOT_SUPPORTED,
     /*! The configured output driver impedance is invalid */
     SWC_ERR_OUTIMPED,
-    /*! User tried to send on a connection that can't send */
-    SWC_ERR_SEND_ON_RX_CONN,
+    /*! User tried to call a TX connection function on a RX connection. */
+    SWC_ERR_TX_CONN_ACTION_ON_RX_CONN,
     /*! Input parameter is out of acceptable value */
     SWC_ERR_ZERO_TIMESLOT_SEQ_LEN,
     /*! Zero value was given to channel sequence length */
@@ -158,13 +162,42 @@ typedef enum swc_error {
     /*! Radio model not found. */
     SWC_ERR_RADIO_NOT_FOUND,
     /*! Sleep level for one of the time slots is incorrect. */
-    SWC_ERR_INCORRECT_TS_SLEEP_LEVEL,
+    SWC_ERR_INVALID_TIMESLOT_SLEEP_LEVEL,
     /*! Pulse configuration for 27MHz is not valid */
     SWC_ERR_INVALID_PULSE_CONFIG_27M,
     /*! Operation must be done before SWC setup. */
     SWC_ERR_INVALID_OPERATION_AFTER_SETUP,
     /*! No channel are initialized in one of the connections */
-    SWC_ERR_NO_CHANNEL_INIT
+    SWC_ERR_NO_CHANNEL_INIT,
+    /*! Selected channel is out of range for the current radio model. */
+    SWC_ERR_CHANNEL_OUT_OF_RANGE,
+    /*! PHY mode was requested why the feature is disabled. */
+    SWC_ERR_DYNAMIC_PHY_MODE_DISABLED,
+    /*! Connection hasn't been allocated and the pointer is null */
+    SWC_ERR_UNINITIALIZED_CONNECTION,
+    /*! Failed to create connection due to internal error.*/
+    SWC_ERR_CONNECTION_CREATION_FAILED,
+    /*! Failed to configure frame due to internal error.*/
+    SWC_ERR_FRAME_CONFIGURATION_FAILED,
+    /*! Failed to set callback due to internal error.*/
+    SWC_ERR_FAILED_TO_SET_CALLBACK,
+    /*! The node instance hasn't been initialized before. */
+    SWC_ERR_NODE_NOT_INITIALIZED,
+    /*! Network ID doesn't match the Network ID set during node init. */
+    SWC_ERR_NOT_MATCHING_NETWORK_ID,
+    /*! User tried to flush a connection's queue while the SWC is running */
+    SWC_ERR_FLUSH_QUEUE_WHILE_RUNNING,
+    /*! Connection settings cannot be modified after the connection priority or slot priority
+     *  has been initialized. Ensure that these feature API calls are the last ones made
+     *  when configuring a connection.
+     */
+    SWC_ERR_INVALID_OPERATION_AFTER_SWC_LOCK,
+    /* Slot priority feature cannot be use if connection priority is enabled. */
+    SWC_ERR_INVALID_OPERATION_CONN_PRIO_ENABLED,
+    /*! Connection priority feature cannot be use if slot priority is enabled. */
+    SWC_ERR_INVALID_OPERATION_SLOT_PRIO_ENABLED,
+    /*! User tried to call a RX connection function on a TX connection. */
+    SWC_ERR_RX_CONN_ACTION_ON_TX_CONN,
 } swc_error_t;
 
 #endif /* SWC_ERROR_H_ */

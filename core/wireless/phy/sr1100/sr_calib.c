@@ -28,12 +28,12 @@ void sr_calibrate(radio_t *radio, calib_vars_t *spectral_calib, nvm_t *nvm)
 {
     chip_rate_cfg_t calibration_chip_rate = radio->chip_rate;
 
-    spectral_calib->chip_id          = sr_nvm_get_serial_number_chip_id(nvm);
-    spectral_calib->resistune        = sr_nvm_get_resistune(nvm);
+    spectral_calib->chip_id = sr_nvm_get_serial_number_chip_id(nvm);
+    spectral_calib->resistune = sr_nvm_get_resistune(nvm);
     spectral_calib->vref_tune_offset = sr_nvm_get_vref_adjust_vref_tune_offset(nvm);
-    spectral_calib->ireftune         = sr_nvm_get_ireftune(nvm);
-    radio->vref_tune                 = spectral_calib->vref_tune_offset;
-    radio->iref_tune                 = spectral_calib->ireftune;
+    spectral_calib->ireftune = sr_nvm_get_ireftune(nvm);
+    radio->vref_tune = spectral_calib->vref_tune_offset;
+    radio->iref_tune = spectral_calib->ireftune;
 
     sr_access_write_reg16(radio->radio_id, REG16_V_I_TIME_REFS,
                           SET_VREFTUNE(radio->vref_tune) | SET_IREFTUNE(radio->iref_tune));
@@ -47,9 +47,8 @@ void sr_calibrate(radio_t *radio, calib_vars_t *spectral_calib, nvm_t *nvm)
     }
     /* Setup CHIP rate and Clock source for calibration */
     sr_access_write_reg16(radio->radio_id, REG16_HARDDISABLES_IOCONFIG,
-                          radio->std_spi | radio->outimped | radio->chip_rate | radio->irq_polarity |
-                              calibration_chip_rate | radio->clock_source.pll_clk_source |
-                              radio->clock_source.xtal_clk_source);
+                          radio->std_spi | radio->outimped | radio->irq_polarity | calibration_chip_rate |
+                              radio->clock_source.pll_clk_source | radio->clock_source.xtal_clk_source);
 
     /* DL tune for RX/TX */
     sr_calib_dl_tune_tx(radio, &spectral_calib->dl_tune);
@@ -67,6 +66,15 @@ void sr_calibrate(radio_t *radio, calib_vars_t *spectral_calib, nvm_t *nvm)
                               radio->std_spi | radio->outimped | radio->chip_rate | radio->irq_polarity |
                                   radio->clock_source.pll_clk_source | radio->clock_source.xtal_clk_source);
     }
+}
+
+void sr_calib_apply_saved_calibration(radio_t *radio, calib_vars_t *spectral_calib)
+{
+    sr_access_write_reg16(radio->radio_id, REG16_TIMERCFG_SLEEPCFG, 0x00);
+    sr_access_write_reg16(radio->radio_id, REG16_IF_BASEBAND_GAIN_LNA, REG16_IF_BASEBAND_GAIN_LNA_DEFAULT);
+    sr_access_write_reg16(radio->radio_id, REG16_V_I_TIME_REFS,
+                          SET_VREFTUNE(radio->vref_tune) | SET_IREFTUNE(radio->iref_tune) |
+                              SET_DLTUNING(spectral_calib->dl_tune));
 }
 
 bool sr_calib_dl_tune_rx(radio_t *radio, uint8_t *dl_tune_out)
@@ -107,7 +115,7 @@ bool sr_calib_get_vcro_codes_rx(radio_t *radio, calib_vars_t *spectral_calib)
  */
 static bool dl_tune(radio_t *radio, uint8_t *dl_tune_out)
 {
-    uint16_t dl_tune;
+    uint16_t dl_tune = 0;
     uint8_t i = 0;
 
     for (i = 0; i < DL_TUNE_VALUE_COUNT; i++) {
@@ -141,7 +149,7 @@ static bool dl_tune(radio_t *radio, uint8_t *dl_tune_out)
  */
 static bool get_vcro_codes(radio_t *radio, uint32_t *target_vcro_table)
 {
-    uint8_t vcro;
+    uint8_t vcro = 0;
 
     for (uint8_t dcro_code = 0; dcro_code < DCRO_MAX_COUNT; dcro_code++) {
         /* Initialize VCRO table */
@@ -154,7 +162,7 @@ static bool get_vcro_codes(radio_t *radio, uint32_t *target_vcro_table)
             vcro_temp += vcro + MSB_CODE_FREQ;
         }
 
-        vcro_temp            = (vcro_temp / VCRO_AVERAGING_COUNT);
+        vcro_temp = (vcro_temp / VCRO_AVERAGING_COUNT);
         *target_vcro_table++ = ((vcro_temp * 2048) / 100);
     }
     return true;
@@ -162,51 +170,43 @@ static bool get_vcro_codes(radio_t *radio, uint32_t *target_vcro_table)
 
 /** @brief Put the radio in RX static power state.
  *
- *  @note This consist of :
- *          - Reset main commands   (0x01)
- *          - Reset timer/sleep cfg (0x04 - 0x05)
- *          - Disabling the buffer load interrupt (0x26)
- *          - Default Debug control (0x27)
- *          - Default main feature with RADIODIR to 1 (0x28)
- *          - Set integgain to 3    (0x0C)
- *
  *  @param[in] radio  SR hardware abstraction layer instance.
  */
 static void put_radio_in_rx_power_state(radio_t *radio)
 {
-    uint8_t pwr_status;
+    uint8_t pwr_status = 0;
 
+    /* Put the radio in RX mode. */
     sr_access_write_reg16(radio->radio_id, REG16_FRAMEPROC_PHASEDATA, RX_MODE);
+    /* Disable autowake to allow device to be manually awaken. */
     sr_access_write_reg16(radio->radio_id, REG16_TIMERCFG_SLEEPCFG, 0x00);
+    /* Reset receiver gains to default. */
     sr_access_write_reg16(radio->radio_id, REG16_IF_BASEBAND_GAIN_LNA, REG16_IF_BASEBAND_GAIN_LNA_DEFAULT);
 
     do {
+        /* Wake up the radio */
         sr_access_write_reg8(radio->radio_id, REG8_ACTIONS, 0x00);
         pwr_status = sr_access_read_reg8(radio->radio_id, REG8_POWER_STATE);
-    } while (!GET_AWAKE(pwr_status));
+    } while (!GET_AWAKE(pwr_status) || !GET_RX_EN(pwr_status));
 }
 
 /** @brief Put the radio in Delay line static power state.
- *
- *  @note This consist of :
- *          - Reset main commands   (0x01)
- *          - Reset timer/sleep cfg (0x04 - 0x05)
- *          - Disabling the buffer load interrupt (0x26)
- *          - Default Debug control (0x27)
- *          - Default main feature  (0x28)
- *          - Set integgain to 3    (0x0C)
  *
  *  @param[in] radio  SR hardware abstraction layer instance.
  */
 static void put_radio_in_dll_power_state(radio_t *radio)
 {
-    uint8_t pwr_status;
+    uint8_t pwr_status = 0;
 
+    /* Put the radio in TX mode. */
     sr_access_write_reg16(radio->radio_id, REG16_FRAMEPROC_PHASEDATA, TX_MODE);
+    /* Disable autowake to allow device to be manually awaken. */
     sr_access_write_reg16(radio->radio_id, REG16_TIMERCFG_SLEEPCFG, 0x00);
+    /* Reset receiver gains to default. */
     sr_access_write_reg16(radio->radio_id, REG16_IF_BASEBAND_GAIN_LNA, REG16_IF_BASEBAND_GAIN_LNA_DEFAULT);
 
     do {
+        /* Wake up the radio */
         sr_access_write_reg8(radio->radio_id, REG8_ACTIONS, 0x00);
         pwr_status = sr_access_read_reg8(radio->radio_id, REG8_POWER_STATE);
     } while (!GET_AWAKE(pwr_status));

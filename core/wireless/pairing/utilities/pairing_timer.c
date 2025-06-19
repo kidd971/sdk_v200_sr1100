@@ -23,7 +23,7 @@ static uint32_t local_tick_frequency_hz;
 static uint32_t get_tick_frequency_hz(void);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-void pairing_timer_init(uint16_t timeout_sec)
+void pairing_start_timeout_counter(uint16_t timeout_sec)
 {
     /* Get the tick frequency. */
     local_tick_frequency_hz = swc_hal_get_free_running_timer_frequency_hz();
@@ -42,7 +42,10 @@ uint32_t pairing_timer_get_current_timer_tick_count(void)
 
 bool pairing_timer_is_timeout(void)
 {
-    return ((pairing_timer_get_current_timer_tick_count() - local_initial_timer_tick_count) > local_timeout_tick_count) ? true : false;
+    return ((pairing_timer_get_current_timer_tick_count() - local_initial_timer_tick_count) >
+            local_timeout_tick_count) ?
+               true :
+               false;
 }
 
 void pairing_timer_blocking_delay_ms(uint16_t delay_ms)

@@ -36,7 +36,7 @@ else()
 endif()
 
 include(CMakeDependentOption)
-cmake_dependent_option(WPS_ENABLE_PHY_STATS_PER_BANDS "Enable per channel statistics" ON "WPS_ENABLE_PHY_STATS" OFF)
+cmake_dependent_option(WPS_ENABLE_PHY_STATS_PER_BANDS "Enable per channel statistics" OFF "WPS_ENABLE_PHY_STATS" OFF)
 if(WPS_ENABLE_PHY_STATS_PER_BANDS)
     target_compile_definitions(swc PUBLIC WPS_ENABLE_PHY_STATS_PER_BANDS=1)
 else()
@@ -65,12 +65,12 @@ else()
 endif()
 
 if (MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
+    message("WPS_RADIO_COUNT = 2")
     target_compile_definitions(swc PUBLIC WPS_RADIO_COUNT=2)
 else()
+    message("WPS_RADIO_COUNT = 1")
     target_compile_definitions(swc PUBLIC WPS_RADIO_COUNT=1)
 endif()
-
-message("WPS Core being compiled for a number of " ${WPS_RADIO_COUNT} " " ${TRANSCEIVER} " transceiver")
 
 target_compile_definitions(swc PUBLIC ${ACCESS_ADV_ERR_CHECK_EN} ${TRANSCEIVER})
 

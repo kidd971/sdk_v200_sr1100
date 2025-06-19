@@ -63,6 +63,13 @@ typedef struct spectral_calib_vars {
  */
 void sr_calibrate(radio_t *radio, calib_vars_t *spectral_calib, nvm_t *nvm);
 
+/** @brief Apply previously saved calibration to the radio.
+ *
+ *  @param[in] radio           Radio's instance.
+ *  @param[in] spectral_calib  Output calibration values for spectral module.
+ */
+void sr_calib_apply_saved_calibration(radio_t *radio, calib_vars_t *spectral_calib);
+
 /** @brief Tune delay line in RX mode.
  *
  *  @param[in]  radio        Radio's instance.

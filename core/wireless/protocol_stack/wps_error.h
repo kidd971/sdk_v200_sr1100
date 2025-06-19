@@ -63,10 +63,18 @@ typedef enum wps_err {
     WPS_SCHEDULE_RATIO_REQUEST_QUEUE_FULL,
     /*! Not enough memory error */
     WPS_NOT_ENOUGH_MEMORY_ERROR,
-    /*! CCA settings is invalid */
-    WPS_INVALID_CCA_SETTINGS,
     /*! An error have occurred when initializing the network channel sequence. */
     WPS_CHANNEL_SEQUENCE_INIT_ERROR,
+    /*! WPS Connection need to be assigned to scheduler first before initialization. */
+    WPS_CONNECTION_NOT_ASSIGNED_TO_SCHEDULER,
+    /*! WPS connection hasn't been allocated and the pointer is null */
+    WPS_CONNECTION_NOT_ALLOCATED,
+    /*! WPS connection throttle pattern not allocated */
+    WPS_THROTTLING_PATTERN_NOT_ALLOCATED,
+    /*! WPS Fragmentation module failed to set callback due to unitialized connection. */
+    WPS_FRAG_FAILED_TO_SET_CALLBACK,
+    /*! WPS spectral config failed. */
+    WPS_SPECTRAL_CONFIG_FAILED,
 } wps_error_t;
 
 #endif /* WPS_ERROR_H_ */

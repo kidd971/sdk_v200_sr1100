@@ -22,15 +22,15 @@ static void sr_nvm_set_byte(uint8_t radio_id, nvm_vdd_hal_t *vdd, uint8_t addr, 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void sr_nvm_write(radio_t *radio, nvm_vdd_hal_t *vdd, uint8_t *buf, uint8_t addr_start, uint8_t addr_end)
 {
-    uint8_t idx          = 0;
+    uint8_t idx = 0;
     uint8_t addr_current = addr_start;
-    uint8_t read_status;
+    uint8_t read_status = 0;
 
-    /* Wake up the radio */
-    sr_access_write_reg8(radio->radio_id, REG8_ACTIONS, 0x00);
     sr_access_write_reg16(radio->radio_id, REG16_IF_BASEBAND_GAIN_LNA, REG16_IF_BASEBAND_GAIN_LNA_DEFAULT);
 
     do {
+        /* Wake up the radio */
+        sr_access_write_reg8(radio->radio_id, REG8_ACTIONS, 0x00);
         read_status = sr_access_read_reg8(radio->radio_id, REG8_POWER_STATE);
     } while (!GET_AWAKE(read_status));
 
@@ -56,8 +56,8 @@ void sr_nvm_write(radio_t *radio, nvm_vdd_hal_t *vdd, uint8_t *buf, uint8_t addr
  */
 static void sr_nvm_set_byte(uint8_t radio_id, nvm_vdd_hal_t *vdd, uint8_t addr, uint8_t byte)
 {
-    uint8_t bit_array[16];
-    uint8_t dummy_rx[16];
+    uint8_t bit_array[16] = {0};
+    uint8_t dummy_rx[16] = {0};
     int8_t array_index = 0;
 
     /* Fill up array with bit/addr pairs for each 1 bit */

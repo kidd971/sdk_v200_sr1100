@@ -80,8 +80,7 @@ void wps_phy_set_auto_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer);
  *  @param[in] data          Byte to send.
  *  @param[in] cfg           write config.
  */
-void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
-                            reg_write_cfg_t cfg);
+void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg);
 
 /** @brief Clear periodic register write.
  *
@@ -96,18 +95,7 @@ void wps_phy_clear_write_register(wps_phy_t *wps_phy);
  *  @param[out] rx_buffer        Buffer containing register data.
  *  @param[out] xfer_cmplt       Flag to notify transfer complete.
  */
-void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer,
-                           bool *xfer_cmplt);
-
-/** @brief Enable the debug feature of the radio.
- *
- *  @note Use for experimental feature located in
- *        the radio, like interleav, preamble / syncword
- *        detection etc.
- *
- *  @param[in] phy_debug  PHY debugging features configuration.
- */
-void wps_phy_enable_debug_feature(wps_phy_t *wps_phy, phy_debug_cfg_t *phy_debug);
+void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt);
 
 /** @brief Process the phy Layer state machine of the wireless protocol stack.
  *

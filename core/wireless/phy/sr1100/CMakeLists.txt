@@ -14,7 +14,7 @@ target_sources(swc
         sr_spectral.c
     PUBLIC
         sr1100_def.h
-        sr1100_v3_reg.h
+        sr1120_V3_reg.h
         sr_calib.h
         sr_def.h
         sr_nvm.h

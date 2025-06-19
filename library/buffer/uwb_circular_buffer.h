@@ -25,14 +25,14 @@ typedef enum circ_buff_error {
 } circ_buff_error_t;
 
 typedef struct {
-    void    *in_idx;
-    void    *out_idx;
-    bool     buf_full;
-    bool     buf_empty;
+    void *in_idx;
+    void *out_idx;
+    bool buf_full;
+    bool buf_empty;
     uint32_t buf_capacity;
-    uint8_t  item_size;
-    void    *buffer;
-    void    *buffer_end;
+    uint8_t item_size;
+    void *buffer;
+    void *buffer_end;
     uint32_t num_data;
     uint32_t free_space;
 } circ_buffer_t;

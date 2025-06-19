@@ -55,11 +55,15 @@ extern "C" {
  *                                               considered unsynced.
  *  @param[in]  max_expected_payload_size        Maximum expected payload size.
  *  @param[in]  max_expected_header_size         Maximum expected header size.
+ *  @param[in]  max_expected_payload_size_auto   Maximum expected payload size in auto-reply.
+ *  @param[in]  max_expected_header_size_auto    Maximum expected header size in auto-reply.
+ *  @param[in]  connection_list                  Connection list.
  */
 void wps_mac_init(wps_mac_t *wps_mac, channel_sequence_t *channel_sequence, wps_mac_sync_cfg_t *sync_cfg,
                   uint16_t local_address, wps_role_t node_role, bool random_channel_sequence_enabled,
                   uint8_t network_id, uint32_t frame_lost_max_duration, uint8_t max_expected_payload_size,
-                  uint8_t max_expected_header_size);
+                  uint8_t max_expected_header_size, uint8_t max_expected_payload_size_auto,
+                  uint8_t max_expected_header_size_auto, wps_connection_list_t *connection_list);
 
 /** @brief Reset the MAC Layer object.
  *

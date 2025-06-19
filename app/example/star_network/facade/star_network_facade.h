@@ -1,16 +1,13 @@
 /** @file  star_network_facade.h
  *  @brief Facades for low-level platform-specific features required by the application example.
  *
- *  @note This header defines the interfaces for various hardware features used by
- *  the star network example. These facades abstract the underlying
- *  platform-specific implementations of features like SPI communication,
- *  IRQ handling, timer functions, and context switching mechanisms. The actual
- *  implementations are selected at compile time based on the target platform,
- *  allowing for flexibility and portability across different hardware.
+ *  @note This header defines the interfaces for various hardware features used by the star network example.
  *
- *  The facade is designed to be a compile-time dependency only, with no
- *  support for runtime polymorphism. This ensures tight integration with the
- *  build system and minimal overhead.
+ *  These facades abstract the underlying platform-specific implementations of features like SPI communication, IRQ
+ *  handling, timer functions, and context switching mechanisms. The actual implementations are selected at compile time
+ *  based on the target platform, allowing for flexibility and portability across different hardware. The facade is
+ *  designed to be a compile-time dependency only, with no support for runtime polymorphism. This ensures tight
+ *  integration with the build system and minimal overhead.
  *
  *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
@@ -32,44 +29,30 @@ extern "C" {
 /* MACROS *********************************************************************/
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
-/* TYPES **********************************************************************/
-/** @brief Board's User button enumeration.
- */
-typedef enum star_network_btn {
-    BUTTON_A,
-    BUTTON_B,
-    BUTTON_C,
-    BUTTON_D,
-} star_network_btn_t;
-
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Triggers a software interrupt for context switching in a bare-metal environment.
  *
- *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism.
- *  It configures and triggers a software interrupt specifically allocated for context switching purposes.
- *  The interrupt invoked by this function should be set with the lowest priority to ensure that it does
- *  not preempt more critical system operations.
+ *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism. It
+ *  configures and triggers a software interrupt specifically allocated for context switching purposes. The interrupt
+ *  invoked by this function should be set with the lowest priority to ensure that it does not preempt more critical
+ *  system operations.
  *
- *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used
- *  to perform the context switch by setting the PendSV interrupt pending bit. The actual context
- *  switching logic, including saving and restoring of contexts, is handled by the interrupt service
- *  routine (ISR) associated with the software interrupt, which should invoke
- *  `swc_connection_callbacks_processing_handler` as part of its execution.
+ *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used to perform the context
+ *  switch by setting the PendSV interrupt pending bit. The actual context switching logic, including saving and
+ *  restoring of contexts, is handled by the interrupt service routine (ISR) associated with the software interrupt,
+ *  which should invoke `swc_connection_callbacks_processing_handler` as part of its execution.
  *
  *  Usage:
- *  This function should be registered with `swc_register_context_switch_trigger` as part of the
- *  initialization process for applications that require custom context switching mechanisms,
- *  allowing the wireless core to manage task priorities and execute less critical processes seamlessly.
- *
- *  @see swc_register_context_switch_trigger
+ *  This function should be registered with `swc_init` as part of the initialization process for applications that
+ *  require custom context switching mechanisms, allowing the wireless core to manage task priorities and execute less
+ *  critical processes seamlessly.
  */
 void facade_context_switch_trigger(void);
 
-/**
- *  @brief Registers a callback function to be invoked by the context switch IRQ handler.
+/** @brief Registers a callback function to be invoked by the context switch IRQ handler.
  *
- *  @note The primary use case involves registering the `swc_connection_callbacks_processing_handler`
- *  provided by the SWC API. This handler is then called within the context switch IRQ handler.
+ *  @note The primary use case involves registering the `swc_connection_callbacks_processing_handler` provided by the
+ *  SWC API. This handler is then called within the context switch IRQ handler.
  *
  *  Example usage:
  *  @code
@@ -106,36 +89,53 @@ void facade_button_handling(void (*button1_callback)(void), void (*button2_callb
  */
 void facade_delay(uint32_t ms_delay);
 
-/** @brief Read the input from the user button.
+/** @brief Read the state of the node's user button that will set the coordinator's LED state.
  *
- *  @param[in] button  User button.
+ *  @return Returns true if the button is pressed, false otherwise.
+ */
+bool facade_node_read_user_button_state(void);
+
+/** @brief Read the state of the coordinator's user button 1 that will set the node1's LED state.
  *
- *  @return true if button is pressed.
+ *  @return Returns true if the button is pressed, false otherwise.
  */
-bool facade_read_button_status(star_network_btn_t button);
+bool facade_coord_read_user_button_1_state(void);
 
-/** @brief Print characters through USB.
+/** @brief Read the state of the coordinator's user button 2 that will set the node2's LED state.
  *
- *  @param[in] fmt  Pointer to the characters to be printed.
- *  @param[in] ...  Variable argument list.
+ *  @return Returns true if the button is pressed, false otherwise.
  */
-void facade_usb_printf(const char *fmt, ...);
+bool facade_coord_read_user_button_2_state(void);
 
-/** @brief Notify user of payload present in frame.
+/** @brief Print a string of characters.
+ *
+ *  @param[in] string  Null terminated string to print.
  */
-void facade_payload_sent_status(void);
+void facade_print_string(char *string);
 
-/** @brief Notify user of no payload present in frame.
+/** @brief Notify user that the coord received a payload from node 1.
  */
-void facade_empty_payload_sent_status(void);
+void facade_node1_payload_coord_received_status(void);
 
-/** @brief Notify user of payload present in frame.
+/** @brief Notify user that the coord received an empty payload from node 1.
  */
-void facade_payload_received_status(void);
+void facade_node1_empty_payload_coord_received_status(void);
 
-/** @brief Notify user of no payload present in frame.
+/** @brief Notify user that the coord received a payload from node 2.
  */
-void facade_empty_payload_received_status(void);
+void facade_node2_payload_coord_received_status(void);
+
+/** @brief Notify user that the coord received an empty payload from node 2.
+ */
+void facade_node2_empty_payload_coord_received_status(void);
+
+/** @brief Notify user that the node received a payload from the coord.
+ */
+void facade_coord_payload_node_received_status(void);
+
+/** @brief Notify user that the node received an empty payload from the coord.
+ */
+void facade_coord_empty_payload_node_received_status(void);
 
 /** @brief Enter pairing notification LED pattern.
  */
@@ -148,6 +148,12 @@ void facade_notify_not_paired(void);
 /** @brief Successful pairing notification LED pattern.
  */
 void facade_notify_pairing_successful(void);
+
+/** @brief Get the current system tick value in milliseconds.
+ *
+ *  @return The current millisecond system tick value.
+ */
+uint32_t facade_get_tick_ms(void);
 
 #ifdef __cplusplus
 }

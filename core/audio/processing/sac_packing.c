@@ -8,18 +8,17 @@
  */
 
 /* INCLUDES *******************************************************************/
-#include <string.h>
 #include "sac_packing.h"
+#include <string.h>
 
-/* MACROS *********************************************************************/
-#define SAMPLE_SIZE_18BITS (2.25f)
-#define PACKED_SIZE_18BITS ((uint8_t)(SAMPLE_SIZE_18BITS * 4.0f))
-#define SAMPLE_SIZE_20BITS (2.5f)
-#define PACKED_SIZE_20BITS ((uint8_t)(SAMPLE_SIZE_20BITS * 2.0f))
-#define SAMPLE_SIZE_16BITS 2
-#define SAMPLE_SIZE_24BITS 3
-#define SAMPLE_SIZE_32BITS 4
-
+/* CONSTANTS ******************************************************************/
+#define SAMPLE_SIZE_18BITS            (2.25f)
+#define PACKED_SIZE_18BITS            ((uint8_t)(SAMPLE_SIZE_18BITS * 4.0f))
+#define SAMPLE_SIZE_20BITS            (2.5f)
+#define PACKED_SIZE_20BITS            ((uint8_t)(SAMPLE_SIZE_20BITS * 2.0f))
+#define SAMPLE_SIZE_16BITS            2
+#define SAMPLE_SIZE_24BITS            3
+#define SAMPLE_SIZE_32BITS            4
 #define CODEC_WORD_SIZE_OFFSET_18BITS 2
 
 /* PRIVATE FUNCTION PROTOTYPES *************************************************/
@@ -181,14 +180,16 @@ static uint16_t pack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
     uint32_t *data32_in = (uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i += 4) {
         *(uint32_t *)(&(data_out[0])) = 0;
         /* Check if sample #4 exists. */
         if ((i + 3) < sample_count) {
-            /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 6 bits and copy sample #4. */
+            /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 6 bits and copy sample
+             * #4.
+             */
             *(uint32_t *)(&(data_out[6])) &= (~0x3FFFFU << 6);
             *(uint32_t *)(&(data_out[6])) = (((data32_in[3] >> CODEC_WORD_SIZE_OFFSET_18BITS) & 0x3FFFF) << 6);
             /* Increment return size by (floor(2.25)). */
@@ -197,7 +198,9 @@ static uint16_t pack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
 
         /* Check if sample #3 exists. */
         if ((i + 2) < sample_count) {
-            /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 4 bits and copy sample #3. */
+            /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 4 bits and copy sample
+             * #3.
+             */
             *(uint32_t *)(&(data_out[4])) &= (~0x3FFFFU << 4);
             *(uint32_t *)(&(data_out[4])) |= (((data32_in[2] >> CODEC_WORD_SIZE_OFFSET_18BITS) & 0x3FFFF) << 4);
             /* Increment return size by (floor(2.25)). */
@@ -206,14 +209,17 @@ static uint16_t pack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
 
         /* Check if sample #2 exists. */
         if ((i + 1) < sample_count) {
-            /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 2 bits and copy sample #2. */
+            /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 2 bits and copy sample
+             * #2.
+             */
             *(uint32_t *)(&(data_out[2])) &= (~0x3FFFFU << 2);
             *(uint32_t *)(&(data_out[2])) |= (((data32_in[1] >> CODEC_WORD_SIZE_OFFSET_18BITS) & 0x3FFFF) << 2);
             /* Increment return size by (floor(2.25)). */
             ret += 2;
         }
 
-        /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, copy sample #1 without erasing sample #2. */
+        /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, copy sample #1 without erasing sample #2.
+         */
         *(uint32_t *)(&(data_out[0])) &= ~0x3FFFF;
         *(uint32_t *)(&(data_out[0])) |= ((data32_in[0] >> CODEC_WORD_SIZE_OFFSET_18BITS) & 0x3FFFF);
         /* Increment return size by (ceil(2.25)). */
@@ -239,7 +245,7 @@ static uint16_t pack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
     uint32_t *data32_in = (uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i += 2) {
@@ -254,7 +260,7 @@ static uint16_t pack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
             ret += 2;
         }
         /* Copy Sample #1 without erasing Sample #2. */
-        *(uint32_t *)(&(data_out[0])) |=  ((data32_in[0]) & 0xFFFFF);
+        *(uint32_t *)(&(data_out[0])) |= ((data32_in[0]) & 0xFFFFF);
         /* Increment return size by (ceil(2.5)). */
         ret += 3;
 
@@ -278,12 +284,12 @@ static uint16_t pack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
     uint32_t *data32_in = (uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
         /* Copy Sample. */
-        *(uint32_t *)(&(data_out[0])) =  ((*data32_in) & 0xFFFFFF);
+        *(uint32_t *)(&(data_out[0])) = ((*data32_in) & 0xFFFFFF);
         /* Increment return size. */
         ret += SAMPLE_SIZE_24BITS;
 
@@ -307,12 +313,12 @@ static uint16_t pack_32bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
     uint32_t *data32_in = (uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
         /* Copy Sample. */
-        *(uint32_t *)(&(data_out[0])) =  (((*data32_in) >> 8) & 0xFFFFFF);
+        *(uint32_t *)(&(data_out[0])) = (((*data32_in) >> 8) & 0xFFFFFF);
         /* Increment return size. */
         ret += SAMPLE_SIZE_24BITS;
 
@@ -336,7 +342,7 @@ static uint16_t pack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
     uint32_t *data32_in = (uint32_t *)buffer_in;
     uint16_t *data_out = (uint16_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
@@ -361,12 +367,12 @@ static uint16_t pack_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
     uint32_t *data32_in = (uint32_t *)buffer_in;
     uint16_t *data_out = (uint16_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
         /* Copy 16 bits MSB of input sample. */
-        data_out[i] =  ((data32_in[i] >> 8) & 0xFFFF);
+        data_out[i] = ((data32_in[i] >> 8) & 0xFFFF);
         /* Increment return size. */
         ret += SAMPLE_SIZE_16BITS;
     }
@@ -386,7 +392,7 @@ static uint16_t scale_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size,
     uint8_t *data24_in = buffer_in;
     uint16_t *data_out = (uint16_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_24BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
@@ -414,7 +420,7 @@ static uint16_t unpack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint8_t *data_in = buffer_in;
     uint16_t sample_count = (uint16_t)((buffer_in_size + SAMPLE_SIZE_18BITS - 1) / SAMPLE_SIZE_18BITS);
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i += 4) {
@@ -471,7 +477,7 @@ static uint16_t unpack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint8_t *data_in = buffer_in;
     uint16_t sample_count = (uint16_t)((float)buffer_in_size / SAMPLE_SIZE_20BITS);
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i += 2) {
@@ -512,7 +518,7 @@ static uint16_t unpack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint8_t *data_in = buffer_in;
     uint16_t sample_count = (uint16_t)((float)buffer_in_size / SAMPLE_SIZE_24BITS);
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
@@ -542,7 +548,7 @@ static uint16_t unpack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size
     uint16_t *data32_in = (uint16_t *)buffer_in;
     uint32_t *data_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_16BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
@@ -568,7 +574,7 @@ static uint16_t unpack_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size
     uint16_t *data32_in = (uint16_t *)buffer_in;
     uint32_t *data_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_16BITS;
-    uint16_t i;
+    uint16_t i = 0;
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
@@ -593,7 +599,7 @@ static uint16_t extend_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
 {
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
 
     /* Copy data into output buffer. */
     memcpy(buffer_out, buffer_in, buffer_in_size);
@@ -617,7 +623,7 @@ static uint16_t extend_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
 {
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
 
     /* Copy data into output buffer. */
     memcpy(buffer_out, buffer_in, buffer_in_size);
@@ -641,7 +647,7 @@ static uint16_t extend_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
 {
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
-    uint16_t i;
+    uint16_t i = 0;
 
     /* Copy data into output buffer. */
     memcpy(buffer_out, buffer_in, buffer_in_size);

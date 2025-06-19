@@ -17,43 +17,45 @@
 
 /** @brief The connection priority ID to know when the highest basic connection priority should be returned.
  */
-#define USE_HIGHEST_CONNECTION_PRIORITY  0xFF
+#define USE_HIGHEST_CONNECTION_PRIORITY 0xFF
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static uint8_t get_highest_conn_index_based_on_priority(wps_connection_t **connections, const uint8_t *connection_priorities,
-                                                        uint8_t connection_count);
+static uint8_t get_highest_conn_index_based_on_priority(wps_connection_t **connections,
+                                                        const uint8_t *connection_priorities, uint8_t connection_count);
 
 static uint8_t get_highest_main_conn_index_based_on_priority_and_credits(wps_connection_t **connections,
                                                                          const uint8_t *connection_priorities,
-                                                                         uint8_t connection_count,
-                                                                         uint8_t depth);
+                                                                         uint8_t connection_count, uint8_t depth);
 
 static uint8_t get_highest_auto_conn_index_based_on_priority_and_credits(wps_connection_t **connections,
                                                                          const uint8_t *connection_priorities,
                                                                          uint8_t connection_count);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-uint8_t wps_conn_priority_get_highest_main_conn_index(wps_connection_t **connections, const uint8_t *connection_priorities,
-                                                      uint8_t connection_count)
+uint8_t wps_conn_priority_get_highest_main_conn_index(wps_connection_t **connections,
+                                                      const uint8_t *connection_priorities, uint8_t connection_count)
 {
     wps_connection_t *first_connection = connections[0];
 
     if (first_connection->credit_flow_ctrl.enabled == false) {
         return get_highest_conn_index_based_on_priority(connections, connection_priorities, connection_count);
     } else {
-        uint8_t high_priority_id = get_highest_main_conn_index_based_on_priority_and_credits(connections, connection_priorities,
-                                                                                             connection_count, connection_count - 1);
+        uint8_t high_priority_id = get_highest_main_conn_index_based_on_priority_and_credits(connections,
+                                                                                             connection_priorities,
+                                                                                             connection_count,
+                                                                                             connection_count - 1);
 
         if (high_priority_id == USE_HIGHEST_CONNECTION_PRIORITY) {
-            high_priority_id = get_highest_conn_index_based_on_priority(connections, connection_priorities, connection_count);
+            high_priority_id = get_highest_conn_index_based_on_priority(connections, connection_priorities,
+                                                                        connection_count);
         }
 
         return high_priority_id;
     }
 }
 
-uint8_t wps_conn_priority_get_highest_auto_conn_index(wps_connection_t **connections, const uint8_t *connection_priorities,
-                                                      uint8_t connection_count)
+uint8_t wps_conn_priority_get_highest_auto_conn_index(wps_connection_t **connections,
+                                                      const uint8_t *connection_priorities, uint8_t connection_count)
 {
     wps_connection_t *first_connection = connections[0];
 
@@ -73,12 +75,12 @@ uint8_t wps_conn_priority_get_highest_auto_conn_index(wps_connection_t **connect
  *  @param[in] connection_count       Connection count.
  *  @return Connection index with the highest priority.
  */
-static uint8_t get_highest_conn_index_based_on_priority(wps_connection_t **connections, const uint8_t *connection_priorities,
-                                                        uint8_t connection_count)
+static uint8_t get_highest_conn_index_based_on_priority(wps_connection_t **connections,
+                                                        const uint8_t *connection_priorities, uint8_t connection_count)
 {
-    xlayer_t *free_xlayer;
-    xlayer_queue_node_t *node;
-    uint8_t min_prio  = WPS_MAX_CONN_PRIORITY + 1;
+    xlayer_t *free_xlayer = NULL;
+    xlayer_queue_node_t *node = NULL;
+    uint8_t min_prio = WPS_MAX_CONN_PRIORITY + 1;
     uint8_t min_index = 0;
 
     for (uint8_t i = 0; i < connection_count; i++) {
@@ -116,8 +118,7 @@ static uint8_t get_highest_conn_index_based_on_priority(wps_connection_t **conne
  */
 static uint8_t get_highest_main_conn_index_based_on_priority_and_credits(wps_connection_t **connections,
                                                                          const uint8_t *connection_priorities,
-                                                                         uint8_t connection_count,
-                                                                         uint8_t depth)
+                                                                         uint8_t connection_count, uint8_t depth)
 {
     uint8_t high_priority_conn_id = get_highest_conn_index_based_on_priority(connections, connection_priorities,
                                                                              connection_count);
@@ -137,7 +138,8 @@ static uint8_t get_highest_main_conn_index_based_on_priority_and_credits(wps_con
         memcpy(new_connection_priorities, connection_priorities, sizeof(new_connection_priorities));
         /* Use a different connection, `high_priority_conn_id` connection will not be taken into account. */
         new_connection_priorities[high_priority_conn_id] = WPS_MAX_CONN_PRIORITY + 1;
-        high_priority_conn_id = get_highest_main_conn_index_based_on_priority_and_credits(connections, new_connection_priorities,
+        high_priority_conn_id = get_highest_main_conn_index_based_on_priority_and_credits(connections,
+                                                                                          new_connection_priorities,
                                                                                           connection_count, depth - 1);
 
         return high_priority_conn_id;

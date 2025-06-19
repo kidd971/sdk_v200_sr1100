@@ -51,7 +51,7 @@ static sac_endpoint_t *find_last_endpoint(sac_endpoint_t *ep);
 /* PUBLIC FUNCTIONS ***********************************************************/
 void sac_init(sac_cfg_t cfg, sac_hal_t *hal, sac_status_t *status)
 {
-    queue_critical_cfg_t queue_critical;
+    queue_critical_cfg_t queue_critical = {0};
 
     *status = SAC_OK;
 
@@ -84,7 +84,7 @@ void sac_mixer_init(sac_mixer_module_cfg_t cfg, sac_status_t *status)
 sac_pipeline_t *sac_pipeline_init(const char *name, sac_endpoint_t *producer, sac_pipeline_cfg_t cfg,
                                   sac_endpoint_t *consumer, sac_status_t *status)
 {
-    sac_pipeline_t *pipeline;
+    sac_pipeline_t *pipeline = NULL;
 
     *status = SAC_OK;
 
@@ -109,7 +109,7 @@ sac_pipeline_t *sac_pipeline_init(const char *name, sac_endpoint_t *producer, sa
 sac_endpoint_t *sac_endpoint_init(void *instance, const char *name, sac_endpoint_interface_t iface,
                                   sac_endpoint_cfg_t cfg, sac_status_t *status)
 {
-    sac_endpoint_t *endpoint;
+    sac_endpoint_t *endpoint = NULL;
 
     *status = SAC_OK;
 
@@ -135,7 +135,7 @@ sac_endpoint_t *sac_endpoint_init(void *instance, const char *name, sac_endpoint
 sac_processing_t *sac_processing_stage_init(void *instance, const char *name, sac_processing_interface_t iface,
                                             sac_status_t *status)
 {
-    sac_processing_t *process;
+    sac_processing_t *process = NULL;
 
     *status = SAC_OK;
 
@@ -155,7 +155,7 @@ sac_processing_t *sac_processing_stage_init(void *instance, const char *name, sa
 
 void sac_pipeline_add_processing(sac_pipeline_t *pipeline, sac_processing_t *process, sac_status_t *status)
 {
-    sac_processing_t *current_process;
+    sac_processing_t *current_process = NULL;
 
     *status = SAC_OK;
 
@@ -224,7 +224,7 @@ void sac_endpoint_link(sac_endpoint_t *consumer, sac_endpoint_t *producer, sac_s
 
 void sac_pipeline_add_input_pipeline(sac_pipeline_t *pipeline, sac_pipeline_t *input_pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *producer;
+    sac_endpoint_t *producer = NULL;
 
     *status = SAC_OK;
 
@@ -247,9 +247,9 @@ void sac_pipeline_add_input_pipeline(sac_pipeline_t *pipeline, sac_pipeline_t *i
 
 void sac_pipeline_setup(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_processing_t *process;
-    sac_endpoint_t *consumer;
-    sac_endpoint_t *producer;
+    sac_processing_t *process = NULL;
+    sac_endpoint_t *consumer = NULL;
+    sac_endpoint_t *producer = NULL;
 
     *status = SAC_OK;
 
@@ -284,8 +284,8 @@ void sac_pipeline_setup(sac_pipeline_t *pipeline, sac_status_t *status)
 
 void sac_pipeline_produce(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *producer;
-    uint16_t size;
+    sac_endpoint_t *producer = NULL;
+    uint16_t size = 0;
 
     *status = SAC_OK;
 
@@ -326,7 +326,7 @@ void sac_pipeline_produce(sac_pipeline_t *pipeline, sac_status_t *status)
 
 void sac_pipeline_consume(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *consumer;
+    sac_endpoint_t *consumer = NULL;
 
     *status = SAC_OK;
 
@@ -371,7 +371,7 @@ void sac_pipeline_start(sac_pipeline_t *pipeline, sac_status_t *status)
 
 void sac_pipeline_stop(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *consumer;
+    sac_endpoint_t *consumer = NULL;
 
     *status = SAC_OK;
 
@@ -405,12 +405,12 @@ uint32_t sac_processing_ctrl(sac_processing_t *sac_processing, sac_pipeline_t *p
 
 void sac_pipeline_process(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    queue_node_t *producer_node;
-    queue_node_t *input_node;
-    queue_node_t *output_node;
-    sac_endpoint_t *consumer;
-    sac_endpoint_t *producer;
-    uint8_t crc;
+    queue_node_t *producer_node = NULL;
+    queue_node_t *input_node = NULL;
+    queue_node_t *output_node = NULL;
+    sac_endpoint_t *consumer = NULL;
+    sac_endpoint_t *producer = NULL;
+    uint8_t crc = 0;
 
     *status = SAC_OK;
 
@@ -547,10 +547,10 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
 {
     sac_endpoint_t *consumer = pipeline->consumer;
     sac_endpoint_t *producer = pipeline->producer;
-    uint16_t queue_data_inflation_size;
-    uint16_t queue_data_size;
-    uint8_t free_queue_size;
-    uint8_t queue_size;
+    uint16_t queue_data_inflation_size = 0;
+    uint16_t queue_data_size = 0;
+    uint8_t free_queue_size = 0;
+    uint8_t queue_size = 0;
 
     *status = SAC_OK;
 
@@ -734,8 +734,8 @@ static bool is_consumer_overflowing(sac_endpoint_t *consumer)
 static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_node_t *processing_node,
                                                 sac_status_t *status)
 {
-    uint16_t length;
-    queue_node_t *consumer_node;
+    uint16_t length = 0;
+    queue_node_t *consumer_node = NULL;
     sac_endpoint_t *consumer = pipeline->consumer;
 
     *status = SAC_OK;
@@ -824,8 +824,8 @@ static bool is_process_exec_required(sac_processing_t *process, sac_pipeline_t *
  */
 static queue_node_t *process_samples(sac_pipeline_t *pipeline, queue_node_t *input_node, sac_status_t *status)
 {
-    uint16_t rv;
-    queue_node_t *output_node;
+    uint16_t rv = 0;
+    queue_node_t *output_node = NULL;
     sac_processing_t *process = pipeline->process;
 
     *status = SAC_OK;
@@ -925,8 +925,8 @@ static void enqueue_producer_node(sac_pipeline_t *pipeline, sac_status_t *status
 static uint16_t produce(sac_pipeline_t *pipeline, sac_status_t *status)
 {
     sac_endpoint_t *producer = pipeline->producer;
-    uint8_t *payload;
-    uint16_t payload_size;
+    uint8_t *payload = NULL;
+    uint16_t payload_size = 0;
 
     *status = SAC_OK;
 
@@ -958,8 +958,8 @@ static uint16_t produce(sac_pipeline_t *pipeline, sac_status_t *status)
  */
 static uint16_t consume(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_status_t *status)
 {
-    uint8_t *payload;
-    uint16_t payload_size, crc;
+    uint8_t *payload = NULL;
+    uint16_t payload_size, crc = 0;
 
     *status = SAC_OK;
 
@@ -999,8 +999,8 @@ static uint16_t consume(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_
  */
 static void consume_no_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_status_t *status)
 {
-    uint16_t size;
-    queue_node_t *node;
+    uint16_t size = 0;
+    queue_node_t *node = NULL;
 
     *status = SAC_OK;
 
@@ -1069,8 +1069,8 @@ static void consume_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sa
  */
 static queue_node_t *start_mixing_process(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    queue_node_t *temp_node;
-    queue_node_t *output_node;
+    queue_node_t *temp_node = NULL;
+    queue_node_t *output_node = NULL;
     sac_endpoint_t *producer = pipeline->producer;
     uint8_t producer_index = 0;
 

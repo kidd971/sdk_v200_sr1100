@@ -27,10 +27,10 @@ extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-/*! MAC header byte 0, bit 7 */
-#define HEADER_BYTE0_SEQ_NUM_MASK BIT(7)
-/*! MAC header byte 0, bit 6 downto 0 */
-#define HEADER_BYTE0_TIME_SLOT_ID_MASK BITS8(6, 0)
+/*! MAC header byte 0, bit 7 downto 6 */
+#define HEADER_BYTE0_SEQ_NUM_MASK BITS8(7, 6)
+/*! MAC header byte 0, bit 5 downto 0 */
+#define HEADER_BYTE0_TIME_SLOT_ID_MASK BITS8(5, 0)
 
 /* TYPES **********************************************************************/
 /** @brief Wireless protocol stack MAC Layer output signal.
@@ -73,6 +73,8 @@ typedef enum wps_mac_proto_id {
     MAC_PROTO_ID_CONNECTION_ID,
     /*! MAC layer Credit Flow Control protocol identifier */
     MAC_PROTO_ID_CREDIT_FC,
+    /*! MAC layer phy mode protocol identifier */
+    MAC_PROTO_ID_PHY_MODE,
 } wps_mac_proto_id_t;
 
 /** @brief Wireless protocol stack MAC Layer output signal parameter.
@@ -100,8 +102,8 @@ typedef struct wps_mac_sync_cfg {
     sleep_lvl_t sleep_level;
     /*! Frame preamble length */
     uint32_t preamble_len;
-    /*! Frame syncword length */
-    uint32_t syncword_len;
+    /*! Frame SFD length */
+    uint32_t sfd_len;
     /*! ISI mitigation level */
     isi_mitig_t isi_mitig;
     /*! ISI mitigation level corresponding pauses */
@@ -130,6 +132,21 @@ typedef enum wps_input_signal {
     /*! WPS resume signal */
     WPS_RESUME,
 } wps_input_signal_t;
+
+/** @brief QoS modes.
+ */
+typedef enum phy_mode {
+    /*! 20.48 MHz with ISI mitigation on preamble and payload (10.24 MHz effective). */
+    CHIP_RATE_20_48_ISI_2,
+    /*! 27.30 MHz ID without ISI mitigation on preamble and payload (14.15 MHz effective). */
+    CHIP_RATE_27_30_ISI_2,
+    /*! 20.48 MHz without ISI on preamble only (20.48 MHz effective). */
+    CHIP_RATE_20_48_ISI_1,
+    /*! 27.30 MHz with ISI on preamble only (27.30 MHz effective). */
+    CHIP_RATE_27_30_ISI_1,
+    /*! 40.96 MHz ID without ISI on preamble only (40.96 MHz effective). */
+    CHIP_RATE_40_96_ISI_1,
+} phy_mode_t;
 
 /** @brief Wireless protocol stack MAC Layer main structure.
  */
@@ -163,6 +180,9 @@ typedef struct wps_mac_struct {
 
     /*! Synchronization module instance */
     tdma_sync_t tdma_sync;
+
+    /*! Number of timeslots that will be slept over */
+    uint8_t ts_increment_count;
 
     /*! Current node role (Coordinator/Node) */
     wps_role_t node_role;
@@ -206,8 +226,31 @@ typedef struct wps_mac_struct {
     uint8_t max_expected_header_size;
     /*! Max possible payload size to be received */
     uint8_t max_expected_payload_size;
+    /*! Max possible header size to be received in auto-reply */
+    uint8_t max_expected_header_size_auto;
+    /*! Max possible payload size to be received in auto-reply */
+    uint8_t max_expected_payload_size_auto;
+
     /*! Channel structure for muted transfer */
     rf_channel_t muted_transfer_channel;
+    /*! Current chip rate */
+    chip_rate_cfg_t current_chip_rate;
+    /*! Next chip rate */
+    chip_rate_cfg_t next_chip_rate;
+    /*! Current ISI mitigation */
+    isi_mitig_t current_isi_mitig;
+    /*! Next ISI mitigation */
+    isi_mitig_t next_isi_mitig;
+    /*! Requested PHY mode */
+    phy_mode_t requested_phy_mode;
+    /*! Current PHY mode */
+    phy_mode_t current_phy_mode;
+    /*! Chip rate swap count down */
+    uint8_t phy_mode_swap_count_down;
+    /*! Dynamic PHY mode enabled */
+    bool dynamic_phy_mode_en;
+    /*! Connection list */
+    wps_connection_list_t *connection_list;
 
     /*! function pointer to trigger the callback process */
     void (*callback_context_switch)(void);

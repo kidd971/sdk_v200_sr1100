@@ -118,8 +118,7 @@ void phy_set_auto_xlayer(wps_phy_t *wps_phy, xlayer_t *xlayer);
  *  @param[in] data          Byte to send.
  *  @param[in] cfg           Write config.
  */
-void phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
-                        reg_write_cfg_t cfg);
+void phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg);
 
 /** @brief Clear periodic write registers.
  *
@@ -134,18 +133,7 @@ void phy_clear_write_register(wps_phy_t *wps_phy);
  *  @param[out] rx_buffer        Buffer containing register data.
  *  @param[out] xfer_cmplt       Flag to notify transfer complete.
  */
-void phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer,
-                       bool *xfer_cmplt);
-
-/** @brief Enable the debug feature of the radio.
- *
- *  @note Use for experimental feature located in
- *        the radio, like interleav, preamble / syncword
- *        detection etc.
- *  @param[in] wps_phy    WPS PHY instance.
- *  @param[in] phy_debug  PHY debugging features configuration.
- */
-void phy_enable_debug_feature(wps_phy_t *wps_phy, phy_debug_cfg_t *phy_debug);
+void phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt);
 
 /** @brief Set the phy input signal.
  *

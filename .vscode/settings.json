@@ -6,6 +6,16 @@
   "cmake.buildDirectory": "${workspaceRoot}/build/${variant:buildType}/${variant:Application}/${variant:Target}",
   "cmake.sourceDirectory": "${workspaceFolder}",
   "C_Cpp.clang_format_style": "file",
+  "C_Cpp.files.exclude": {
+    "**/.vscode": true,
+    "**/*.micromamba*/*pkgs*": true,
+    "**/*.micromamba*/*include*": true,
+    "**/*.micromamba*/*lib*": true,
+    "**/*.micromamba*/*share*": true,
+    "**/*.micromamba*/*arm-none-eabi*/**/*c++*": true,
+  },
+  "C_Cpp.default.browse.path": [],
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "files.associations": {
     "cmath": "c",
     "*.h": "c",

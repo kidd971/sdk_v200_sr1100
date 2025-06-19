@@ -33,6 +33,8 @@ typedef struct wps_mac_stats_entry {
     wps_connection_t *connection;
     /*! Phase offset */
     uint8_t phase_offset[PHASE_OFFSET_BYTE_COUNT];
+    /*! Phase offset count */
+    uint8_t phase_offset_count;
     /*! Current channel hopping index */
     uint8_t channel_index;
     /*! Receiver signal strength indicator */

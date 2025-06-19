@@ -40,25 +40,25 @@
  * Auto ProductID layout's Bitmap:
  *   [MSB]         HID | MSC | CDC          [LSB]
  */
-#define _PID_MAP(itf, n)  ((CFG_TUD_##itf) << (n))
+#define _PID_MAP(itf, n) ((CFG_TUD_##itf) << (n))
 #ifndef TUSB_PID
-#define TUSB_PID             (0x4000 | _PID_MAP(CDC, 0) | _PID_MAP(MSC, 1) | _PID_MAP(HID, 2) | \
-                           _PID_MAP(MIDI, 3) | _PID_MAP(VENDOR, 4))
+#define TUSB_PID \
+    (0x4000 | _PID_MAP(CDC, 0) | _PID_MAP(MSC, 1) | _PID_MAP(HID, 2) | _PID_MAP(MIDI, 3) | _PID_MAP(VENDOR, 4))
 #endif
 
 #ifndef TUSB_VID
-#define TUSB_VID             0xCafe
+#define TUSB_VID 0xCafe
 #endif
 
 /* BUSB Specification Release Number in Binary-Coded Decimal. */
 #define USB_BCD 0x0200
 
 /* Configuration descriptor total length. */
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + CFG_TUD_CDC * TUD_CDC_DESC_LEN)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + CFG_TUD_CDC * TUD_CDC_DESC_LEN)
 
-#define EPNUM_CDC_0_NOTIF   0x81
-#define EPNUM_CDC_0_OUT     0x02
-#define EPNUM_CDC_0_IN      0x82
+#define EPNUM_CDC_0_NOTIF 0x81
+#define EPNUM_CDC_0_OUT   0x02
+#define EPNUM_CDC_0_IN    0x82
 
 /* Configuration Descriptor */
 enum {
@@ -71,27 +71,28 @@ enum {
 /** @brief Device descriptor.
  */
 tusb_desc_device_t const desc_device = {
-    .bLength            = sizeof(tusb_desc_device_t),
-    .bDescriptorType    = TUSB_DESC_DEVICE,
-    .bcdUSB             = USB_BCD,
+    .bLength = sizeof(tusb_desc_device_t),
+    .bDescriptorType = TUSB_DESC_DEVICE,
+    .bcdUSB = USB_BCD,
 
     /* Use Interface Association Descriptor (IAD) for CDC
-     * As required by USB Specs IAD's subclass must be common class (2) and protocol must be IAD (1)
+     * As required by USB Specs IAD's subclass must be common class (2) and protocol
+     * must be IAD (1)
      */
-    .bDeviceClass       = TUSB_CLASS_MISC,
-    .bDeviceSubClass    = MISC_SUBCLASS_COMMON,
-    .bDeviceProtocol    = MISC_PROTOCOL_IAD,
-    .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
+    .bDeviceClass = TUSB_CLASS_MISC,
+    .bDeviceSubClass = MISC_SUBCLASS_COMMON,
+    .bDeviceProtocol = MISC_PROTOCOL_IAD,
+    .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
 
-    .idVendor           = TUSB_VID,
-    .idProduct          = TUSB_PID,
-    .bcdDevice          = 0x0100,
+    .idVendor = TUSB_VID,
+    .idProduct = TUSB_PID,
+    .bcdDevice = 0x0100,
 
-    .iManufacturer      = 0x01,
-    .iProduct           = 0x02,
-    .iSerialNumber      = 0x03,
+    .iManufacturer = 0x01,
+    .iProduct = 0x02,
+    .iSerialNumber = 0x03,
 
-    .bNumConfigurations = 0x01
+    .bNumConfigurations = 0x01,
 };
 
 /** @brief Full speed device configutation.
@@ -114,15 +115,16 @@ enum {
 
 /* array of pointer to string descriptors */
 char const *string_desc_arr[] = {
-    (const char[]) { 0x09, 0x04 }, /* 0: is supported language is English (0x0409) */
-    "SPARK Microsystems Inc.",     /* 1: Manufacturer */
-    TUSB_PRODUCT_NAME,             /* 2: Product */
-    (char[]) {'0', '1', '2', '3',
-              '4', '5', '6', '7',
-              '8', '9', 'A', 'B',
-              'C', 'D', 'E', 'F',
-              '\000'},             /* 3: Serials will use unique ID if possible */
-    "TinyUSB CDC",                 /* 4: CDC Interface */
+    /* 0: is supported language is English (0x0409) */
+    (const char[]){0x09, 0x04},
+    /* 1: Manufacturer */
+    "SPARK Microsystems Inc.",
+    /* 2: Product */
+    TUSB_PRODUCT_NAME,
+    /* 3: Serials will use unique ID if possible */
+    (char[]){'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', '\000'},
+    /* 4: CDC Interface */
+    "TinyUSB CDC",
 };
 
 static uint16_t _desc_str[32 + 1];
@@ -141,17 +143,17 @@ uint8_t const desc_hs_configuration[] = {
 
 /* device qualifier is mostly similar to device descriptor since we don't change configuration based on speed */
 tusb_desc_device_qualifier_t const desc_device_qualifier = {
-    .bLength            = sizeof(tusb_desc_device_t),
-    .bDescriptorType    = TUSB_DESC_DEVICE,
-    .bcdUSB             = USB_BCD,
+    .bLength = sizeof(tusb_desc_device_t),
+    .bDescriptorType = TUSB_DESC_DEVICE,
+    .bcdUSB = USB_BCD,
 
-    .bDeviceClass       = TUSB_CLASS_MISC,
-    .bDeviceSubClass    = MISC_SUBCLASS_COMMON,
-    .bDeviceProtocol    = MISC_PROTOCOL_IAD,
+    .bDeviceClass = TUSB_CLASS_MISC,
+    .bDeviceSubClass = MISC_SUBCLASS_COMMON,
+    .bDeviceProtocol = MISC_PROTOCOL_IAD,
 
-    .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
+    .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
     .bNumConfigurations = 0x01,
-    .bReserved          = 0x00
+    .bReserved = 0x00,
 };
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -188,7 +190,7 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index)
     (void)index; /* for multiple configurations */
 
 #if TUD_OPT_HIGH_SPEED
-  /* Although we are highspeed, host may be fullspeed. */
+    /* Although we are highspeed, host may be fullspeed. */
     return (tud_speed_get() == TUSB_SPEED_HIGH) ? desc_hs_configuration : desc_fs_configuration;
 #else
     return desc_fs_configuration;
@@ -217,7 +219,7 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
         break;
 
     case STRID_SERIAL:
-        chr_count = tuh_get_serial_id((uint8_t*)_desc_str + 2, 32);
+        chr_count = tuh_get_serial_id((uint8_t *)_desc_str + 2, 32);
         break;
 
     default:
@@ -232,7 +234,7 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 
         /* Cap at max char */
         chr_count = strlen(str);
-        size_t const max_count = sizeof(_desc_str) / sizeof(_desc_str[0]) - 1; // -1 for string type
+        size_t const max_count = sizeof(_desc_str) / sizeof(_desc_str[0]) - 1;  // -1 for string type
 
         if (chr_count > max_count) {
             chr_count = max_count;

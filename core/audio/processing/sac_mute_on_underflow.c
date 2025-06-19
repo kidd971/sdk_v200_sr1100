@@ -32,7 +32,8 @@ void sac_mute_on_underflow_init(void *instance, const char *name, sac_pipeline_t
     }
 
     sac_mute_on_underflow_instance->_internal.counter = 0;
-    sac_mute_on_underflow_instance->_internal.underflow_count = sac_pipeline_get_consumer_buffer_underflow_count(pipeline);
+    sac_mute_on_underflow_instance->_internal.underflow_count = sac_pipeline_get_consumer_buffer_underflow_count(
+        pipeline);
 }
 
 uint32_t sac_mute_on_underflow_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg,
@@ -61,7 +62,7 @@ uint16_t sac_mute_on_underflow_process(void *instance, sac_pipeline_t *pipeline,
     (void)header;
     (void)data_in;
 
-    uint32_t current_underflow_count;
+    uint32_t current_underflow_count = 0;
     uint16_t return_size = 0;
     sac_mute_on_underflow_instance_t *sac_mute_on_underflow_instance = instance;
 

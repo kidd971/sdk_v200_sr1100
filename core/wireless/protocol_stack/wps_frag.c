@@ -97,28 +97,33 @@ static bool check_queue_space(wps_connection_t *connection, size_t size);
 static void wps_frag_tx_success_callback(void *conn);
 static void wps_frag_tx_dropped_callback(void *conn);
 static void wps_frag_tx_fail_callback(void *conn);
+
 /* PUBLIC FUNCTIONS ***********************************************************/
-void wps_frag_init(wps_connection_t *connection, void *meta_tx_buffer, uint32_t meta_tx_size)
+void wps_frag_init(wps_connection_t *connection, void *meta_tx_buffer, uint32_t meta_tx_size, wps_error_t *err)
 {
-    connection->frag.enabled        = true;
+    if (connection == NULL) {
+        *err = WPS_CONNECTION_NOT_ALLOCATED;
+        return;
+    }
+    connection->frag.enabled = true;
     connection->frag.fragment_index = 0;
     connection->frag.enqueued_count = 0;
     connection->frag.remaining_fragment = 0;
 
     connection->rx_queue = &connection->frag.xlayer_queue;
-    circular_queue_init(&connection->frag.meta_data_queue_tx, meta_tx_buffer, meta_tx_size,
-                        sizeof(uint16_t));
+    circular_queue_init(&connection->frag.meta_data_queue_tx, meta_tx_buffer, meta_tx_size, sizeof(uint16_t));
     xlayer_queue_init_queue(&connection->frag.xlayer_queue, connection->xlayer_queue.max_size, "frag queue");
 
-    wps_set_rx_success_callback(connection, wps_frag_read_process, (void *)connection);
-    wps_set_event_callback(connection, wps_overrun_process, (void *)connection);
+    wps_set_rx_success_callback(connection, wps_frag_read_process, (void *)connection, err);
+    wps_set_event_callback(connection, wps_overrun_process, (void *)connection, err);
+    CHECK_ERROR(err != WPS_NO_ERROR, err, WPS_FRAG_FAILED_TO_SET_CALLBACK, return);
 }
 
 void wps_frag_send(wps_connection_t *connection, const uint8_t *payload, size_t size, wps_error_t *err)
 {
     static uint8_t transaction_id;
     uint16_t fragment_number = 0;
-    uint16_t *ptr_fragment_queue;
+    uint16_t *ptr_fragment_queue = NULL;
     *err = WPS_NO_ERROR;
 
     if (check_queue_space(connection, size) == false) {
@@ -181,13 +186,13 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
 {
     frag_t *frag_connection = &connection->frag;
 
-    uint8_t *payload_tail                      = payload;
-    wps_rx_frame frame                         = wps_read(connection, err);
+    uint8_t *payload_tail = payload;
+    wps_rx_frame frame = wps_read(connection, err);
     transaction_control_t *transaction_control = (transaction_control_t *)frame.payload;
 
     wps_rx_frame frame_out = {
         .payload = payload,
-        .size    = 0,
+        .size = 0,
     };
 
     if (*err != WPS_NO_ERROR) {
@@ -207,14 +212,14 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
     }
     case NON_LAST_FRAGMENT_TRANSFER_TYPE: {
         first_fragment_t *first_fragment = (first_fragment_t *)frame.payload;
-        size_t fragment_size             = frame.size - sizeof(first_fragment_t);
+        size_t fragment_size = frame.size - sizeof(first_fragment_t);
 
         if (first_fragment->fragment_number != 0) {
             wps_read_error_flush(connection, err);
             if (*err == WPS_NO_ERROR) {
                 *err = WPS_FRAGMENT_ERROR;
             }
-            frame_out.size    = 0;
+            frame_out.size = 0;
             frame_out.payload = NULL;
             frag_connection->enqueued_count--;
             return frame_out;
@@ -227,7 +232,7 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
             if (*err == WPS_NO_ERROR) {
                 *err = WPS_WRONG_RX_SIZE_ERROR;
             }
-            frame_out.size    = 0;
+            frame_out.size = 0;
             frame_out.payload = NULL;
             frag_connection->enqueued_count--;
             return frame_out;
@@ -242,7 +247,7 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
         if (*err == WPS_NO_ERROR) {
             *err = WPS_FRAGMENT_ERROR;
         }
-        frame_out.size    = 0;
+        frame_out.size = 0;
         frame_out.payload = NULL;
         return frame_out;
         break;
@@ -254,7 +259,7 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
         frame = wps_read(connection, err);
 
         if (*err != WPS_NO_ERROR) {
-            frame_out.size    = 0;
+            frame_out.size = 0;
             frame_out.payload = NULL;
             frag_connection->enqueued_count--;
             return frame_out;
@@ -285,7 +290,7 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
             if (*err == WPS_NO_ERROR) {
                 *err = WPS_FRAGMENT_ERROR;
             }
-            frame_out.size    = 0;
+            frame_out.size = 0;
             frame_out.payload = NULL;
             frag_connection->enqueued_count--;
             return frame_out;
@@ -293,8 +298,8 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
         }
     } while (*err != WPS_QUEUE_EMPTY_ERROR);
 
-    *err              = WPS_FRAGMENT_ERROR;
-    frame_out.size    = 0;
+    *err = WPS_FRAGMENT_ERROR;
+    frame_out.size = 0;
     frame_out.payload = NULL;
     frag_connection->enqueued_count--;
     return frame_out;
@@ -302,8 +307,8 @@ wps_rx_frame wps_frag_read(wps_connection_t *connection, uint8_t *payload, size_
 
 uint16_t wps_frag_get_read_payload_size(wps_connection_t *connection, wps_error_t *err)
 {
-    frag_t *frag_connection                    = &connection->frag;
-    wps_rx_frame frame                         = wps_read(connection, err);
+    frag_t *frag_connection = &connection->frag;
+    wps_rx_frame frame = wps_read(connection, err);
     transaction_control_t *transaction_control = (transaction_control_t *)frame.payload;
 
     if (*err != WPS_NO_ERROR) {
@@ -343,44 +348,47 @@ uint16_t wps_frag_get_read_payload_size(wps_connection_t *connection, wps_error_
     }
 }
 
-void wps_frag_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_frag_set_tx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                      wps_error_t *err)
 {
-    wps_set_tx_success_callback(connection, wps_frag_tx_success_callback, (void *)connection);
-    connection->frag.tx_success_callback      = callback;
+    wps_set_tx_success_callback(connection, wps_frag_tx_success_callback, (void *)connection, err);
+    connection->frag.tx_success_callback = callback;
     connection->frag.tx_success_parg_callback = parg;
 }
 
-void wps_frag_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_frag_set_tx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                   wps_error_t *err)
 {
-    wps_set_tx_fail_callback(connection, wps_frag_tx_fail_callback, (void *)connection);
+    wps_set_tx_fail_callback(connection, wps_frag_tx_fail_callback, (void *)connection, err);
 
-    connection->frag.tx_fail_callback      = callback;
+    connection->frag.tx_fail_callback = callback;
     connection->frag.tx_fail_parg_callback = parg;
 }
 
-void wps_frag_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
+void wps_frag_set_tx_drop_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg,
+                                   wps_error_t *err)
 {
-    wps_set_tx_drop_callback(connection, wps_frag_tx_dropped_callback, (void *)connection);
+    wps_set_tx_drop_callback(connection, wps_frag_tx_dropped_callback, (void *)connection, err);
 
-    connection->frag.tx_drop_callback      = callback;
+    connection->frag.tx_drop_callback = callback;
     connection->frag.tx_drop_parg_callback = parg;
 }
 
 void wps_frag_set_rx_success_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
 {
-    connection->frag.rx_success_callback      = callback;
+    connection->frag.rx_success_callback = callback;
     connection->frag.rx_success_parg_callback = parg;
 }
 
 void wps_frag_set_rx_fail_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
 {
-    connection->frag.rx_fail_callback      = callback;
+    connection->frag.rx_fail_callback = callback;
     connection->frag.rx_fail_parg_callback = parg;
 }
 
 void wps_frag_set_event_callback(wps_connection_t *connection, void (*callback)(void *parg), void *parg)
 {
-    connection->frag.event_callback      = callback;
+    connection->frag.event_callback = callback;
     connection->frag.event_parg_callback = parg;
 }
 
@@ -403,8 +411,8 @@ uint16_t wps_frag_get_fifo_size(wps_connection_t *connection)
 static inline void send_full_frame(wps_connection_t *connection, uint8_t transaction_id, const uint8_t *payload,
                                    size_t size, wps_error_t *err)
 {
-    uint8_t *payload_in;
-    full_frame_t *fragment;
+    uint8_t *payload_in = NULL;
+    full_frame_t *fragment = NULL;
 
     wps_get_free_slot(connection, &payload_in, size + sizeof(full_frame_t), err);
     if (*err != WPS_NO_ERROR) {
@@ -412,7 +420,7 @@ static inline void send_full_frame(wps_connection_t *connection, uint8_t transac
     }
     fragment = (full_frame_t *)payload_in;
 
-    fragment->transaction_control.transfer_type  = FULL_FRAME_TRANSFER_TYPE;
+    fragment->transaction_control.transfer_type = FULL_FRAME_TRANSFER_TYPE;
     fragment->transaction_control.transaction_id = transaction_id;
 
     memcpy(payload_in + sizeof(full_frame_t), payload, size);
@@ -431,8 +439,8 @@ static inline void send_full_frame(wps_connection_t *connection, uint8_t transac
 static inline size_t send_first_fragment(wps_connection_t *connection, uint8_t transaction_id, const uint8_t **payload,
                                          size_t size, wps_error_t *err)
 {
-    uint8_t *payload_in;
-    first_fragment_t *fragment;
+    uint8_t *payload_in = NULL;
+    first_fragment_t *fragment = NULL;
     size_t fragment_size = connection->payload_size - sizeof(first_fragment_t);
 
     wps_get_free_slot(connection, &payload_in, connection->payload_size, err);
@@ -441,10 +449,10 @@ static inline size_t send_first_fragment(wps_connection_t *connection, uint8_t t
     }
     fragment = (first_fragment_t *)payload_in;
 
-    fragment->transaction_control.transfer_type  = NON_LAST_FRAGMENT_TRANSFER_TYPE;
+    fragment->transaction_control.transfer_type = NON_LAST_FRAGMENT_TRANSFER_TYPE;
     fragment->transaction_control.transaction_id = transaction_id;
-    fragment->fragment_number                    = 0;
-    fragment->total_upper_layer_frame_size       = size;
+    fragment->fragment_number = 0;
+    fragment->total_upper_layer_frame_size = size;
 
     memcpy(payload_in + sizeof(first_fragment_t), *payload, fragment_size);
     *payload += fragment_size;
@@ -468,19 +476,19 @@ static inline size_t send_first_fragment(wps_connection_t *connection, uint8_t t
 static inline size_t send_middle_fragment(wps_connection_t *connection, uint8_t transaction_id, const uint8_t **payload,
                                           size_t size, uint8_t fragment_number, wps_error_t *err)
 {
-    uint8_t *payload_in;
-    middle_fragment_t *fragment;
+    uint8_t *payload_in = NULL;
+    middle_fragment_t *fragment = NULL;
 
     wps_get_free_slot(connection, &payload_in, connection->payload_size, err);
     if (*err != WPS_NO_ERROR) {
         return size;
     }
-    fragment             = (middle_fragment_t *)payload_in;
+    fragment = (middle_fragment_t *)payload_in;
     size_t fragment_size = connection->payload_size - sizeof(middle_fragment_t);
 
-    fragment->transaction_control.transfer_type  = NON_LAST_FRAGMENT_TRANSFER_TYPE;
+    fragment->transaction_control.transfer_type = NON_LAST_FRAGMENT_TRANSFER_TYPE;
     fragment->transaction_control.transaction_id = transaction_id;
-    fragment->fragment_number                    = fragment_number;
+    fragment->fragment_number = fragment_number;
 
     memcpy(payload_in + sizeof(middle_fragment_t), *payload, fragment_size);
     wps_send(connection, payload_in, connection->payload_size, err);
@@ -503,8 +511,8 @@ static inline size_t send_middle_fragment(wps_connection_t *connection, uint8_t 
 static inline void send_last_fragment(wps_connection_t *connection, uint8_t transaction_id, const uint8_t **payload,
                                       size_t size, uint8_t fragment_number, wps_error_t *err)
 {
-    uint8_t *payload_in;
-    last_fragment_t *fragment;
+    uint8_t *payload_in = NULL;
+    last_fragment_t *fragment = NULL;
 
     wps_get_free_slot(connection, &payload_in, size + sizeof(last_fragment_t), err);
     if (*err != WPS_NO_ERROR) {
@@ -512,9 +520,9 @@ static inline void send_last_fragment(wps_connection_t *connection, uint8_t tran
     }
     fragment = (last_fragment_t *)payload_in;
 
-    fragment->transaction_control.transfer_type  = LAST_FRAGMENT_TRANSFER_TYPE;
+    fragment->transaction_control.transfer_type = LAST_FRAGMENT_TRANSFER_TYPE;
     fragment->transaction_control.transaction_id = transaction_id;
-    fragment->fragment_number                    = fragment_number;
+    fragment->fragment_number = fragment_number;
 
     memcpy(payload_in + sizeof(last_fragment_t), *payload, size);
     wps_send(connection, payload_in, size + sizeof(last_fragment_t), err);
@@ -529,8 +537,8 @@ static inline void send_last_fragment(wps_connection_t *connection, uint8_t tran
  */
 static void wps_frag_read_process(void *conn)
 {
-    wps_rx_frame frame;
-    wps_error_t err;
+    wps_rx_frame frame = {0};
+    wps_error_t err = WPS_NO_ERROR;
     wps_connection_t *connection = (wps_connection_t *)conn;
 
     frame = frag_read(connection, &err);
@@ -610,8 +618,8 @@ static void wps_frag_read_process(void *conn)
 static void wps_frag_flush_last_transaction(wps_connection_t *connection)
 {
     wps_error_t err = 0;
-    first_fragment_t *first_fragment;
-    uint8_t transaction_id_to_flush;
+    first_fragment_t *first_fragment = NULL;
+    uint8_t transaction_id_to_flush = 0;
     wps_rx_frame frame = wps_read(connection, &err);
 
     if (err == WPS_NO_ERROR) {
@@ -644,10 +652,10 @@ static void wps_frag_read_process_fail(wps_connection_t *connection, uint8_t tra
 {
     wps_error_t err = 0;
 
-    connection->frag.dropped_frame  = true;
+    connection->frag.dropped_frame = true;
     connection->frag.fragment_index = 0;
 
-    first_fragment_t *first_fragment;
+    first_fragment_t *first_fragment = NULL;
 
     do {
         wps_rx_frame frame = wps_read(connection, &err);
@@ -667,7 +675,7 @@ static void wps_frag_read_process_fail(wps_connection_t *connection, uint8_t tra
             } else if (first_fragment->transaction_control.transfer_type == NON_LAST_FRAGMENT_TRANSFER_TYPE) {
                 middle_fragment_t *middle_fragment = (middle_fragment_t *)frame.payload;
 
-                connection->frag.dropped_frame  = false;
+                connection->frag.dropped_frame = false;
                 connection->frag.transaction_id = middle_fragment->transaction_control.transaction_id;
                 connection->frag.fragment_index = 1;
             }
@@ -688,7 +696,7 @@ static void wps_frag_read_process_fail(wps_connection_t *connection, uint8_t tra
 static void wps_overrun_process(void *conn)
 {
     wps_connection_t *connection = (wps_connection_t *)conn;
-    wps_error_t err;
+    wps_error_t err = WPS_NO_ERROR;
 
     switch (connection->wps_error) {
     case WPS_RX_OVERRUN_ERROR:
@@ -718,17 +726,17 @@ static void wps_overrun_process(void *conn)
  */
 static wps_rx_frame frag_read(wps_connection_t *connection, wps_error_t *err)
 {
-    wps_rx_frame frame_out;
-    xlayer_queue_node_t *node;
-    xlayer_frame_t *frame;
+    wps_rx_frame frame_out = {0};
+    xlayer_queue_node_t *node = NULL;
+    xlayer_frame_t *frame = NULL;
 
     *err = WPS_NO_ERROR;
 
-    node  = xlayer_queue_dequeue_node(&connection->frag.xlayer_queue);
+    node = xlayer_queue_dequeue_node(&connection->frag.xlayer_queue);
     frame = &node->xlayer.frame;
 
     frame_out.payload = (frame->payload_begin_it);
-    frame_out.size    = frame->payload_end_it - frame->payload_begin_it;
+    frame_out.size = frame->payload_end_it - frame->payload_begin_it;
 
     xlayer_queue_enqueue_node(&connection->xlayer_queue, node);
 
@@ -743,8 +751,8 @@ static wps_rx_frame frag_read(wps_connection_t *connection, wps_error_t *err)
  */
 static uint16_t wps_read_error_flush(wps_connection_t *connection, wps_error_t *err)
 {
-    transaction_control_t transaction_control;
-    wps_rx_frame frame;
+    transaction_control_t transaction_control = {0};
+    wps_rx_frame frame = {0};
     uint16_t removed_frames = 0;
 
     do {
@@ -773,27 +781,34 @@ static uint16_t wps_read_error_flush(wps_connection_t *connection, wps_error_t *
 static bool check_queue_space(wps_connection_t *connection, size_t size)
 {
     uint32_t free_space = wps_get_fifo_free_space(connection);
-    uint32_t nb_fragment;
+    uint32_t nb_fragment = 0;
 
-    if (size + sizeof(middle_fragment_t) <= connection->payload_size) {
+    /* Overhead sizes for each fragment (in bytes) */
+    const size_t full_frame_overhead = sizeof(full_frame_t);
+    const size_t first_overhead = sizeof(first_fragment_t);
+    const size_t subsequent_overhead = sizeof(middle_fragment_t);
+
+    /* Compute maximum data that can be sent in the first and subsequent fragments. */
+    size_t full_frame_payload = (connection->payload_size > full_frame_overhead) ?
+                                    (connection->payload_size - full_frame_overhead) :
+                                    0;
+    size_t first_payload = (connection->payload_size > first_overhead) ? (connection->payload_size - first_overhead) :
+                                                                         0;
+    size_t subsequent_payload = (connection->payload_size > subsequent_overhead) ?
+                                    (connection->payload_size - subsequent_overhead) :
+                                    0;
+
+    /* If the message fits into the first fragment, only one fragment is needed. */
+    if (size <= full_frame_payload) {
         nb_fragment = 1;
     } else {
-        nb_fragment                = (size / connection->payload_size) + 1;
-        uint8_t last_fragment_size = (size % connection->payload_size) +
-                                     (sizeof(middle_fragment_t) + (nb_fragment * sizeof(middle_fragment_t)));
-
-        while (last_fragment_size > connection->payload_size) {
-            nb_fragment++;
-            last_fragment_size = (size % connection->payload_size) +
-                                 (sizeof(middle_fragment_t) + (nb_fragment * sizeof(middle_fragment_t)));
-        }
+        /* Calculate how many extra fragments are needed after the first one. */
+        size_t remaining = size - first_payload;
+        /* Round up division to get the number of subsequent fragments. */
+        nb_fragment = 1 + (remaining + subsequent_payload - 1) / subsequent_payload;
     }
 
-    if (free_space < nb_fragment) {
-        return false;
-    } else {
-        return true;
-    }
+    return (free_space >= nb_fragment);
 }
 
 /** @brief Set the TX success callback of a connection.
@@ -803,7 +818,7 @@ static bool check_queue_space(wps_connection_t *connection, size_t size)
 static void wps_frag_tx_success_callback(void *conn)
 {
     wps_connection_t *connection = (wps_connection_t *)conn;
-    uint16_t *ptr_fragment_queue;
+    uint16_t *ptr_fragment_queue = NULL;
 
     if (connection->frag.remaining_fragment) {
         connection->frag.remaining_fragment--;

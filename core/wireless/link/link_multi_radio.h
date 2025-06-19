@@ -41,16 +41,16 @@ typedef enum multi_radio_tx_mode {
 
 /** @brief Radio selections.
  */
-typedef enum multi_radio_select {
+typedef enum multi_radio_select_mode {
     /*! Let the multi radio algorithm select the radio. */
-    MULTI_RADIO_SELECT_ALGO,
-    /*! Select radio 1. */
-    MULTI_RADIO_SELECT_RADIO1,
-    /*! Select radio 2. */
-    MULTI_RADIO_SELECT_RADIO2,
-    /*! Radio selections count. */
-    _MULTI_RADIO_SELECT_COUNT,
-} multi_radio_select_t;
+    MULTI_RADIO_SELECT_MODE_ALGO,
+    /*! Always select radio 1. */
+    MULTI_RADIO_SELECT_MODE_RADIO1,
+    /*! Always select radio 2. */
+    MULTI_RADIO_SELECT_MODE_RADIO2,
+    /*! Radio selection mode count. */
+    _MULTI_RADIO_SELECT_MODE_COUNT,
+} multi_radio_select_mode_t;
 
 /** @brief Multi radio instance.
  */
@@ -63,10 +63,12 @@ typedef struct multi_radio {
     uint16_t avg_sample_count;
     /*! Hysteresis between radios (only for mode 0). */
     uint16_t hysteresis_tenth_db;
-    /*! Replying radio. */
-    uint8_t replying_radio;
-    /*! Radio selection for debug, 0 for algorithm, specific radio otherwise. */
-    multi_radio_select_t radio_select;
+    /*! The leading radio is the only radio that can transmit data from this device (including auto-acknowledge) and
+     *  that will forward received data to the application.
+     */
+    uint8_t leading_radio;
+    /*! Multi-Radio selection mode. 0 for algorithm, specific radio otherwise. */
+    multi_radio_select_mode_t multi_radio_select_mode;
     /*! Chosen multi radio mode. */
     multi_radio_mode_t mode;
     /*! Multi radio TX wakeup mode. */
@@ -83,12 +85,12 @@ typedef struct multi_radio {
  */
 void link_multi_radio_update(multi_radio_t *multi_radio);
 
-/** @brief Get replying radio.
+/** @brief Get leading radio.
  *
  *  @param[in] multi_radio  Multi radio object.
- *  @return Replying radio.
+ *  @return Leading radio.
  */
-uint8_t link_multi_radio_get_replying_radio(multi_radio_t *multi_radio);
+uint8_t link_multi_radio_get_leading_radio(multi_radio_t *multi_radio);
 
 #ifdef __cplusplus
 }

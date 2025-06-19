@@ -1,16 +1,13 @@
 /** @file  audio_bidirectional_facade.h
  *  @brief Facades for low-level platform-specific features required by the application example.
  *
- *  @note This header defines the interfaces for various hardware features used by
- *  the audio unidirectional example. These facades abstract the underlying
- *  platform-specific implementations of features like SPI communication,
- *  IRQ handling, timer functions, and context switching mechanisms. The actual
- *  implementations are selected at compile time based on the target platform,
- *  allowing for flexibility and portability across different hardware.
+ *  @note This header defines the interfaces for various hardware features used by the audio unidirectional example.
  *
- *  The facade is designed to be a compile-time dependency only, with no
- *  support for runtime polymorphism. This ensures tight integration with the
- *  build system and minimal overhead.
+ *  These facades abstract the underlying platform-specific implementations of features like SPI communication, IRQ
+ *  handling, timer functions, and context switching mechanisms. The actual implementations are selected at compile time
+ *  based on the target platform, allowing for flexibility and portability across different hardware. The facade is
+ *  designed to be a compile-time dependency only, with no support for runtime polymorphism. This ensures tight
+ *  integration with the build system and minimal overhead.
  *
  *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
@@ -24,7 +21,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* CONSTANTS ******************************************************************/
+/* MACROS *********************************************************************/
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+
+/* TYPES **********************************************************************/
 /** @brief Certifications modes.
  */
 typedef enum facade_certification_mode {
@@ -34,42 +34,34 @@ typedef enum facade_certification_mode {
     FACADE_CERTIF_DATA,
 } facade_certification_mode_t;
 
-/* MACROS *********************************************************************/
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-
 /** @brief Triggers a software interrupt for context switching in a bare-metal environment.
  *
- *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism.
- *  It configures and triggers a software interrupt specifically allocated for context switching purposes.
- *  The interrupt invoked by this function should be set with the lowest priority to ensure that it does
- *  not preempt more critical system operations.
+ *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism. It
+ *  configures and triggers a software interrupt specifically allocated for context switching purposes. The interrupt
+ *  invoked by this function should be set with the lowest priority to ensure that it does not preempt more critical
+ *  system operations.
  *
- *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used
- *  to perform the context switch by setting the PendSV interrupt pending bit. The actual context
- *  switching logic, including saving and restoring of contexts, is handled by the interrupt service
- *  routine (ISR) associated with the software interrupt, which should invoke
- *  `swc_connection_callbacks_processing_handler` as part of its execution.
+ *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used to perform the context
+ *  switch by setting the PendSV interrupt pending bit. The actual context switching logic, including saving and
+ *  restoring of contexts, is handled by the interrupt service routine (ISR) associated with the software interrupt,
+ *  which should invoke `swc_connection_callbacks_processing_handler` as part of its execution.
  *
  *  Usage:
- *  This function should be registered with `swc_register_context_switch_trigger` as part of the
- *  initialization process for applications that require custom context switching mechanisms,
- *  allowing the wireless core to manage task priorities and execute less critical processes seamlessly.
- *
- *  @see swc_register_context_switch_trigger
+ *  This function should be registered with `swc_init` as part of the initialization process for applications that
+ *  require custom context switching mechanisms, allowing the wireless core to manage task priorities and execute less
+ *  critical processes seamlessly.
  */
 void facade_context_switch_trigger(void);
 
-/**
- *  @brief Registers a callback function to be invoked by the context switch IRQ handler.
+/** @brief Registers a callback function to be invoked by the context switch IRQ handler.
  *
- *  @note The primary use case involves registering the `swc_connection_callbacks_processing_handler`
- *  provided by the SWC API. This handler is then called within the context switch IRQ handler.
+ *  @note The primary use case involves registering the `swc_connection_callbacks_processing_handler` provided by the
+ *  SWC API. This handler is then called within the context switch IRQ handler.
  *
  *  Example usage:
  *  @code
@@ -151,29 +143,17 @@ void facade_rx_data_conn_status(void);
  */
 void facade_fallback_status(bool on);
 
-/** @brief Initialize and set the audio process of the main channel timer period.
+/** @brief Initialize the timer of the main channel audio process.
  *
- *  @param[in] period_us  Timer period in us.
+ *  @param[in] callback  Callback function to execute on timer event.
  */
-void facade_audio_process_main_channel_timer_init(uint32_t period_us);
+void facade_audio_process_main_channel_timer_init(void (*callback)(void));
 
-/** @brief Initialize and set the audio process of the back channel timer period.
+/** @brief Initialize the timer of the back channel audio process.
  *
- *  @param[in] period_us  Timer period in us.
+ *  @param[in] callback  Callback function to execute on timer event.
  */
-void facade_audio_process_back_channel_timer_init(uint32_t period_us);
-
-/** @brief Set the audio process of the main channel timer callback.
- *
- *  @param[in] callback  Callback when timer expires.
- */
-void facade_audio_process_main_channel_set_timer_callback(void (*callback)(void));
-
-/** @brief Set the audio process of the back channel timer callback.
- *
- *  @param[in] callback  Callback when timer expires.
- */
-void facade_audio_process_back_channel_set_timer_callback(void (*callback)(void));
+void facade_audio_process_back_channel_timer_init(void (*callback)(void));
 
 /** @brief Start the audio process of the main channel timer.
  */
@@ -182,6 +162,14 @@ void facade_audio_process_main_channel_timer_start(void);
 /** @brief Start the audio process of the back channel timer.
  */
 void facade_audio_process_back_channel_timer_start(void);
+
+/** @brief Generate an event for the audio process of the main channel timer.
+ */
+void facade_audio_process_main_channel_timer_trigger(void);
+
+/** @brief Generate an event for the audio process of the back channel timer.
+ */
+void facade_audio_process_back_channel_timer_trigger(void);
 
 /** @brief Stop the audio process of the main channel timer.
  */
@@ -246,6 +234,12 @@ void facade_led_all_off(void);
  *  @return The current millisecond system tick value.
  */
 uint32_t facade_get_tick_ms(void);
+
+/** @brief Read the state of the button that will set the other device's LED state.
+ *
+ *  @return Returns true if the button is pressed, false otherwise.
+ */
+bool facade_read_button_state(void);
 
 #ifdef __cplusplus
 }

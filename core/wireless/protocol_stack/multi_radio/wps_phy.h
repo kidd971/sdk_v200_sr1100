@@ -68,11 +68,17 @@ void wps_phy_connect(wps_phy_t *wps_phy);
  */
 void wps_phy_disconnect(wps_phy_t *wps_phy);
 
-/** @brief Select radio to use.
+/** @brief Set the Multi-Radio selection mode to use.
  *
- *  @param[in] radio_select  Radio selection.
+ *  @param[in] multi_radio_select_mode  Multi-Radio selection mode.
  */
-void wps_phy_set_radio_select(multi_radio_select_t radio_select);
+void wps_phy_set_multi_radio_select_mode(multi_radio_select_mode_t multi_radio_select_mode);
+
+/** @brief Get the Multi-Radio selection mode.
+ *
+ *  @return Multi-Radio Selection mode.
+ */
+multi_radio_select_mode_t wps_phy_get_multi_radio_select_mode(void);
 
 /** @brief Set syncing RX period duration.
  *
@@ -144,8 +150,7 @@ void wps_multi_radio_set_tx_wakeup_mode(multi_radio_tx_wakeup_mode_t tx_wakeup_m
  *  @param[in] data          Byte to send.
  *  @param[in] cfg           Write config.
  */
-void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data,
-                            reg_write_cfg_t cfg);
+void wps_phy_write_register(wps_phy_t *wps_phy, uint8_t starting_reg, uint16_t data, reg_write_cfg_t cfg);
 
 /** @brief Clear periodic register write.
  *
@@ -160,8 +165,7 @@ void wps_phy_clear_write_register(wps_phy_t *wps_phy);
  *  @param[out] rx_buffer        Buffer containing register data.
  *  @param[out] xfer_cmplt       Flag to notify transfer complete.
  */
-void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer,
-                           bool *xfer_cmplt);
+void wps_phy_read_register(wps_phy_t *wps_phy, uint8_t target_register, uint16_t *rx_buffer, volatile bool *xfer_cmplt);
 
 /** @brief Process the phy Layer state machine of the wireless protocol stack.
  *
@@ -216,18 +220,7 @@ static inline void wps_phy_multi_set_current_radio_idx(uint8_t radio_idx)
     wps_phy_multi.current_radio_idx = radio_idx;
 }
 
-/** @brief Enable the debug feature of the radio.
- *
- *  @note Use for experimental feature located in
- *        the radio, like interleav, preamble / syncword
- *        detection etc.
- *
- *  @param[in] phy_debug  PHY debugging features configuration.
- */
-void wps_phy_enable_debug_feature(wps_phy_t *wps_phy, phy_debug_cfg_t *phy_debug);
-
-/** @brief Enable the debug feature of the radio. */
-uint8_t wps_phy_multi_get_replying_radio(void);
+uint8_t wps_phy_multi_get_leading_radio(void);
 
 /** @brief Get the multi radio TX wakeup mode.
  *

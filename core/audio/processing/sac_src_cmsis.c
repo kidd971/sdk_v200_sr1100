@@ -101,21 +101,21 @@ void sac_src_cmsis_init(void *instance, const char *name, sac_pipeline_t *pipeli
     (void)pipeline;
     (void)name;
 
-    int32_t *fir_state;
-    const int32_t *fir_coeff_decimation;
-    const int32_t *fir_coeff_interpolation;
+    int32_t *fir_state = NULL;
+    const int32_t *fir_coeff_decimation = NULL;
+    const int32_t *fir_coeff_interpolation = NULL;
     src_cmsis_instance_t *src_instance = instance;
-    fir_decimate_instance_t *decimate_instance;
-    fir_interpolate_instance_t *interpolate_instance;
-    fir_sample_format_t *input_format;
-    fir_sample_format_t *output_format;
-    uint8_t input_sample_size_byte;
-    uint8_t output_sample_size_byte;
-    uint32_t block_size;
-    uint32_t allocation_size;
-    uint16_t discard_accumulator_size;
-    uint8_t bit_depth;
-    filtering_functions_error_t fir_err;
+    fir_decimate_instance_t *decimate_instance = NULL;
+    fir_interpolate_instance_t *interpolate_instance = NULL;
+    fir_sample_format_t *input_format = NULL;
+    fir_sample_format_t *output_format = NULL;
+    uint8_t input_sample_size_byte = 0;
+    uint8_t output_sample_size_byte = 0;
+    uint32_t block_size = 0;
+    uint32_t allocation_size = 0;
+    uint16_t discard_accumulator_size = 0;
+    uint8_t bit_depth = 0;
+    filtering_functions_error_t fir_err = FILTERING_FUNCTION_ERR_NONE;
 
     *status = SAC_OK;
 
@@ -366,9 +366,9 @@ void sac_src_cmsis_discard_init(void *instance, const char *name, sac_pipeline_t
     (void)name;
     (void)pipeline;
 
-    int16_t discard_accumulator_size;
+    int16_t discard_accumulator_size = 0;
     src_cmsis_instance_t *src_instance = instance;
-    uint8_t input_sample_size_byte;
+    uint8_t input_sample_size_byte = 0;
 
     if (src_instance->cfg.input_sample_format.sample_encoding == SAC_SAMPLE_PACKED) {
         input_sample_size_byte = src_instance->cfg.input_sample_format.bit_depth / SAC_BYTE_SIZE_BITS;
@@ -402,14 +402,14 @@ uint16_t sac_src_cmsis_process(void *instance, sac_pipeline_t *pipeline, sac_hea
     uint16_t sample_count_in = 0;
     uint16_t sample_count_out = 0;
     uint16_t accumulator_sample_count = 0;
-    uint16_t expected_discard_input_size;
+    uint16_t expected_discard_input_size = 0;
     src_cmsis_instance_t *src_instance = instance;
-    uint8_t input_sample_size_byte;
-    uint8_t output_sample_size_byte;
-    uint16_t data_in_idx;
-    uint16_t data_out_idx;
-    uint8_t *audio_in;
-    uint8_t *audio_out;
+    uint8_t input_sample_size_byte = 0;
+    uint8_t output_sample_size_byte = 0;
+    uint16_t data_in_idx = 0;
+    uint16_t data_out_idx = 0;
+    uint8_t *audio_in = NULL;
+    uint8_t *audio_out = NULL;
 
     *status = SAC_OK;
 

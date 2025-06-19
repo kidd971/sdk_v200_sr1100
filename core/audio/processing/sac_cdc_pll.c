@@ -25,7 +25,7 @@
 #define CDC_DEFAULT_EXTRA_QUEUE_SIZE 3
 /* Queue level thresholds. */
 #define CDC_QUEUE_HIGH_LEVEL_THRESHOLD(queue_limit) ((queue_limit) - 2)
-#define CDC_QUEUE_LOW_LEVEL_THRESHOLD 1
+#define CDC_QUEUE_LOW_LEVEL_THRESHOLD               1
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void adjust_latency(sac_cdc_pll_instance_t *cdc);
@@ -132,7 +132,7 @@ uint16_t sac_cdc_pll_process(void *instance, sac_pipeline_t *pipeline, sac_heade
     static uint8_t tx_queue_level_high_count;
     static int32_t error_accumulator;
     sac_cdc_pll_instance_t *cdc = instance;
-    uint32_t current_pll_fracn;
+    uint32_t current_pll_fracn = 0;
 
     *status = SAC_OK;
     current_pll_fracn = cdc->cdc_pll_hal.get_fracn();
@@ -236,9 +236,9 @@ int sac_cdc_pll_format_stats(sac_cdc_pll_instance_t *cdc, char *buffer, uint16_t
  */
 static void adjust_latency(sac_cdc_pll_instance_t *cdc)
 {
-    int16_t current_pll_fracn_offset;
-    int16_t adjust_pll_fracn_offset;
-    uint32_t current_pll_fracn;
+    int16_t current_pll_fracn_offset = 0;
+    int16_t adjust_pll_fracn_offset = 0;
+    uint32_t current_pll_fracn = 0;
 
     /* Save the current offset. */
     current_pll_fracn_offset = cdc->_internal.pll_fracn_offset;

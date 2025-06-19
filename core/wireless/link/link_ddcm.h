@@ -63,13 +63,13 @@ static inline void link_ddcm_init(link_ddcm_t *instance, uint16_t max_timeslot_o
         return;
     }
 
-    instance->target_offset              = 0;
-    instance->max_timeslot_offset        = max_timeslot_offset;
-    instance->enabled                    = (max_timeslot_offset != DDCM_DISABLE);
+    instance->target_offset = 0;
+    instance->max_timeslot_offset = max_timeslot_offset;
+    instance->enabled = (max_timeslot_offset != DDCM_DISABLE);
     instance->sync_loss_max_duration_pll = sync_loss_max_duration_pll;
-    instance->pll_cycles_since_tx        = 0;
-    instance->sync_loss_duration_pll     = 0;
-    instance->last_tx_successful         = false;
+    instance->pll_cycles_since_tx = 0;
+    instance->sync_loss_duration_pll = 0;
+    instance->last_tx_successful = false;
 }
 
 /** @brief Update the PLL cycles elapsed since the last post TX update.
@@ -87,15 +87,15 @@ static inline void link_ddcm_pll_cycles_update(link_ddcm_t *instance, uint32_t p
     instance->pll_cycles_since_tx += pll_cycles;
 }
 
-/** @brief Update the distributed desync instance after a transmission.
+/** @brief Update the distributed desync instance after a CCA event.
  *
  *  @param[in] instance             Distributed desync module instance.
- *  @param[in] cca_try_count        Number of CCA failures in the last transmission.
+ *  @param[in] cca_try_count        Number of CCA failures event in the last transmission.
  *  @param[in] cca_retry_time       Delay in pll cycles for each CCA failure.
  *  @param[in] is_tx_event_success  Wether the last transmission was successful.
  */
-static inline void link_ddcm_post_tx_update(link_ddcm_t *instance, uint8_t cca_try_count,
-                                            uint16_t cca_retry_time, bool is_tx_event_success)
+static inline void link_ddcm_cca_event_update(link_ddcm_t *instance, uint8_t cca_try_count, uint16_t cca_retry_time,
+                                              bool is_tx_event_success)
 {
     if ((instance == NULL) || !instance->enabled) {
         return;
@@ -112,15 +112,14 @@ static inline void link_ddcm_post_tx_update(link_ddcm_t *instance, uint8_t cca_t
         if (instance->target_offset == 0) {
             /* Update the target offset once the previous target was achieved. */
             if (cca_try_count > 0) {
-                instance->target_offset = (cca_try_count - 1) * cca_retry_time +
-                                          instance->max_timeslot_offset;
+                instance->target_offset = (cca_try_count - 1) * cca_retry_time + instance->max_timeslot_offset;
             } else {
                 instance->target_offset = 0;
             }
         }
     }
     instance->pll_cycles_since_tx = 0;
-    instance->last_tx_successful  = is_tx_event_success;
+    instance->last_tx_successful = is_tx_event_success;
 }
 
 /** @brief Get the distributed desync offset to apply to the current timeslot.
@@ -140,7 +139,7 @@ static inline uint16_t link_ddcm_get_offset(link_ddcm_t *instance)
     if (instance->sync_loss_duration_pll >= instance->sync_loss_max_duration_pll) {
         /* Apply a bigger offset when unable to transmit to try to find a free air time slot. */
         instance->sync_loss_duration_pll = 0;
-        instance->target_offset          = 0;
+        instance->target_offset = 0;
         return UNSYNC_TX_OFFSET_PLL_CYCLES;
     }
 

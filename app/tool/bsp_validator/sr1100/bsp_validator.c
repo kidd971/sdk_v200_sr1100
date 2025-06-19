@@ -52,12 +52,12 @@ typedef enum bsp_radio {
 } bsp_radio_t;
 
 /* PRIVATE GLOBALS ************************************************************/
-static const uint8_t DEFAULT_SYNCWORD[] = {0x1D, 0xC1, 0xA6, 0x5E};
-static const uint8_t SYNCWORD_REGISTER = 0x30;
+static const uint8_t DEFAULT_SFD[] = {0x1D, 0xC1, 0xA6, 0x5E};
+static const uint8_t SFD_REGISTER = 0x30;
 static const uint8_t INTERRUPT_FLAG_REGISTER = 0x10;
 static const uint8_t SLEEP_CONFIG_REGISTER = 0x0F;
 static const uint8_t MAIN_COMMAND_REGISTER = 0x3B;
-static const uint8_t SYNCWORD_LENGTH = 4;
+static const uint8_t SFD_LENGTH = 4;
 
 static const char *const LOG_LEVEL_STR[] = {"DBG : ", "INF : ", "ERR : "};
 static const char TEST_RUN_STRING[] = "[ RUN      ] ";
@@ -118,8 +118,8 @@ static void validate_critical_section_context_switch(void);
 
 /* Other functions */
 static void reset_transceiver(bsp_radio_t radio_index);
-static void read_syncword(bsp_radio_t radio_index, uint8_t *syncword);
-static void write_syncword(bsp_radio_t radio_index, uint8_t *syncword);
+static void read_sfd(bsp_radio_t radio_index, uint8_t *sfd);
+static void write_sfd(bsp_radio_t radio_index, uint8_t *sfd);
 static bool compare_reg_value(const uint8_t *buffer1, const uint8_t *buffer2, size_t size);
 static void mocked_radio_1_irq_callback(void);
 static void mocked_radio_2_irq_callback(void);
@@ -191,7 +191,7 @@ int main(void)
  *   and behave has expected by the transceiver.
  *
  *   Scenario :
- *   Use the SPI blocking method to read the SR10x0 syncword register and
+ *   Use the SPI blocking method to read the SR10x0 SFD register and
  *   compare the read value with the known default value.
  *
  *  @param[in] radio_index  Selected radio index.
@@ -204,11 +204,11 @@ static void validate_spi_blocking(bsp_radio_t radio_index)
     print_log(LOG_LEVEL_INFO, "%s %s", TEST_RUN_STRING, TEST_NAME_STRING);
     reset_transceiver(radio_index);
 
-    /* Read Syncword in blocking mode. */
-    read_syncword(radio_index, rx_data);
+    /* Read SFD in blocking mode. */
+    read_sfd(radio_index, rx_data);
 
-    /* Validate that the SYNCWORD is equal to the DEFAULT one. */
-    if (compare_reg_value(&rx_data[1], DEFAULT_SYNCWORD, SYNCWORD_LENGTH)) {
+    /* Validate that the SFD is equal to the DEFAULT one. */
+    if (compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH)) {
         print_log(LOG_LEVEL_INFO, "%s %s", TEST_OK_STRING, TEST_NAME_STRING);
     } else {
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
@@ -222,11 +222,11 @@ static void validate_spi_blocking(bsp_radio_t radio_index)
  *   and validate that the SPI succeeds when the CS Pin is manually toggled.
  *
  *   Scenario :
- *   Use the SPI blocking method to read the syncword register and compare
+ *   Use the SPI blocking method to read the SFD register and compare
  *   the read value with the known default to make sure the operation works.
- *   Using SPI blocking method again to read back the syncword register without
+ *   Using SPI blocking method again to read back the SFD register without
  *   driving the CS low and making sure the output is not equal to the default
- *   syncword value.
+ *   SFD value.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -234,29 +234,29 @@ static void validate_cs(bsp_radio_t radio_index)
 {
     static const char TEST_NAME_STRING[] = "SPI chip select";
     uint8_t rx_data[5] = {0};
-    uint8_t tx_data[5] = {SYNCWORD_REGISTER | REG_READ_BURST, 0, 0, 0, 0};
+    uint8_t tx_data[5] = {SFD_REGISTER | REG_READ_BURST, 0, 0, 0, 0};
     uint8_t empty_payload[4] = {0};
 
     print_log(LOG_LEVEL_INFO, "%s %s", TEST_RUN_STRING, TEST_NAME_STRING);
     reset_transceiver(radio_index);
 
-    /* Read Syncword in blocking mode. */
-    read_syncword(radio_index, rx_data);
+    /* Read SFD in blocking mode. */
+    read_sfd(radio_index, rx_data);
 
-    /* Validate that the SYNCWORD is equal to the writen one. */
+    /* Validate that the SFD is equal to the writen one. */
     /* This validate that the SPI works as intended in normal operation. */
-    if (compare_reg_value(&rx_data[1], DEFAULT_SYNCWORD, SYNCWORD_LENGTH) == 0) {
-        print_log(LOG_LEVEL_DEBUG, "             Error during read syncword operation");
+    if (compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH) == 0) {
+        print_log(LOG_LEVEL_DEBUG, "             Error during read SFD operation");
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
         return; /* Abort Scenario. */
     }
 
-    /* Read Syncword without reseting the CS pin. */
+    /* Read SFD without reseting the CS pin. */
     swc_hal[radio_index].transfer_full_duplex_blocking(tx_data, rx_data, 5);
 
-    /* Validate that the latest SYNCWORD read equal to 0x0000. */
+    /* Validate that the latest SFD read equal to 0x0000. */
     /* This validate that the CS BEHAVIOUR works as intended. */
-    if (compare_reg_value(&rx_data[1], empty_payload, (size_t)SYNCWORD_LENGTH)) {
+    if (compare_reg_value(&rx_data[1], empty_payload, (size_t)SFD_LENGTH)) {
         print_log(LOG_LEVEL_INFO, "%s %s", TEST_OK_STRING, TEST_NAME_STRING);
     } else {
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
@@ -270,7 +270,7 @@ static void validate_cs(bsp_radio_t radio_index)
  *   and behave as the transceiver is expecting it.
  *
  *   Scenario :
- *   Write a custom syncword value to the transceiver register using the
+ *   Write a custom SFD value to the transceiver register using the
  *   SPI Blocking method. Then read back these register to make sure that the
  *   operation works. Finally, reset the transceiver, then read the sycnword
  *   register and compare the value with the expected default one.
@@ -286,14 +286,14 @@ static void validate_reset_pin(bsp_radio_t radio_index)
     print_log(LOG_LEVEL_INFO, "%s %s", TEST_RUN_STRING, TEST_NAME_STRING);
     reset_transceiver(radio_index);
 
-    /* Write Syncword in blocking mode. */
-    write_syncword(radio_index, tx_data);
+    /* Write SFD in blocking mode. */
+    write_sfd(radio_index, tx_data);
 
-    /* Read Syncword in blocking mode. */
-    read_syncword(radio_index, rx_data);
+    /* Read SFD in blocking mode. */
+    read_sfd(radio_index, rx_data);
 
-    if (!compare_reg_value(&rx_data[1], tx_data, SYNCWORD_LENGTH)) {
-        print_log(LOG_LEVEL_DEBUG, "             Error during Write or Read custom syncword operation");
+    if (!compare_reg_value(&rx_data[1], tx_data, SFD_LENGTH)) {
+        print_log(LOG_LEVEL_DEBUG, "             Error during Write or Read custom SFD operation");
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
         return; /* Abort Scenario. */
     }
@@ -301,10 +301,10 @@ static void validate_reset_pin(bsp_radio_t radio_index)
     /* Reset Transceiver. */
     reset_transceiver(radio_index);
 
-    /* Read Syncword in blocking mode. */
-    read_syncword(radio_index, rx_data);
+    /* Read SFD in blocking mode. */
+    read_sfd(radio_index, rx_data);
 
-    if (compare_reg_value(&rx_data[1], DEFAULT_SYNCWORD, SYNCWORD_LENGTH)) {
+    if (compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH)) {
         print_log(LOG_LEVEL_INFO, "%s %s", TEST_OK_STRING, TEST_NAME_STRING);
     } else {
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
@@ -426,7 +426,7 @@ static void validate_transceiver_irq_pin(bsp_radio_t radio_index)
  *
  *   Scenario :
  *   Set and enable the SPI DMA complete callback. Use the SPI DMA method
- *   to read the syncword register. Wait 1ms and then validate that the
+ *   to read the SFD register. Wait 1ms and then validate that the
  *   SPI DMA complete callback was triggered and compare the read value with
  *   the known default.
  *
@@ -435,7 +435,7 @@ static void validate_transceiver_irq_pin(bsp_radio_t radio_index)
 static void validate_spi_dma(bsp_radio_t radio_index)
 {
     static const char TEST_NAME_STRING[] = "SPI DMA and transfer complete event";
-    uint8_t tx_data[5] = {SYNCWORD_REGISTER | REG_READ_BURST};
+    uint8_t tx_data[5] = {SFD_REGISTER | REG_READ_BURST};
     uint8_t rx_data[5] = {0};
 
     print_log(LOG_LEVEL_INFO, "%s %s", TEST_RUN_STRING, TEST_NAME_STRING);
@@ -457,7 +457,7 @@ static void validate_spi_dma(bsp_radio_t radio_index)
         mocked_radio_2_dma_rx_flag = false;
     }
 
-    if (mocked_dma_rx_flag && compare_reg_value(&rx_data[1], DEFAULT_SYNCWORD, SYNCWORD_LENGTH)) {
+    if (mocked_dma_rx_flag && compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH)) {
         print_log(LOG_LEVEL_DEBUG, "             Callback status was %d", mocked_dma_rx_flag);
         print_log(LOG_LEVEL_INFO, "%s %s", TEST_OK_STRING, TEST_NAME_STRING);
     } else {
@@ -579,7 +579,7 @@ static void validate_disable_transceiver_irq(bsp_radio_t radio_index)
  *
  *   Scenario :
  *   Set and disable the SPI DMA complete callback. Use the SPI DMA method
- *   to read the syncword register. Wait 1ms and then validate that the
+ *   to read the SFD register. Wait 1ms and then validate that the
  *   SPI DMA complete callback was not triggered and compare the read value with
  *   the known default.
  *
@@ -588,7 +588,7 @@ static void validate_disable_transceiver_irq(bsp_radio_t radio_index)
 static void validate_disable_dma_irq(bsp_radio_t radio_index)
 {
     static const char TEST_NAME_STRING[] = "Disabling SPI DMA complete IRQ event";
-    uint8_t tx_data[5] = {SYNCWORD_REGISTER | REG_READ_BURST};
+    uint8_t tx_data[5] = {SFD_REGISTER | REG_READ_BURST};
     uint8_t rx_data[5] = {0};
 
     print_log(LOG_LEVEL_INFO, "%s %s", TEST_RUN_STRING, TEST_NAME_STRING);
@@ -858,39 +858,39 @@ static void reset_transceiver(bsp_radio_t radio_index)
     facade_time_delay(50);
 }
 
-/** @brief Read the syncword register.
+/** @brief Read the SFD register.
  *
- *   Read the syncword register with SPI blocking mode. The CS pin is reset/set
+ *   Read the SFD register with SPI blocking mode. The CS pin is reset/set
  *   for this operation.
  *
  *  @param[in]  radio_index  Selected radio index.
- *  @param[out] syncword     Pointer to the syncword value.
+ *  @param[out] sfd          Pointer to the SFD value.
  */
-void read_syncword(bsp_radio_t radio_index, uint8_t *syncword)
+void read_sfd(bsp_radio_t radio_index, uint8_t *sfd)
 {
-    uint8_t tx_data[5] = {SYNCWORD_REGISTER | REG_READ_BURST, 0, 0, 0, 0};
+    uint8_t tx_data[5] = {SFD_REGISTER | REG_READ_BURST, 0, 0, 0, 0};
 
-    /* Read Syncword. */
+    /* Read SFD. */
     swc_hal[radio_index].reset_cs();
-    swc_hal[radio_index].transfer_full_duplex_blocking(tx_data, syncword, 5);
+    swc_hal[radio_index].transfer_full_duplex_blocking(tx_data, sfd, 5);
     swc_hal[radio_index].set_cs();
 }
 
-/** @brief Write to the syncword register.
+/** @brief Write to the SFD register.
  *
- *   Write to the syncword register with SPI blocking mode. The CS pin is reset/set
+ *   Write to the SFD register with SPI blocking mode. The CS pin is reset/set
  *   for this operation.
  *
  *  @param[in]  radio_index  Selected radio index.
- *  @param[out] syncword     Pointer to the syncword value.
+ *  @param[out] sfd          Pointer to the SFD value.
  */
-void write_syncword(bsp_radio_t radio_index, uint8_t *syncword)
+void write_sfd(bsp_radio_t radio_index, uint8_t *sfd)
 {
-    uint8_t tx_data[5];
-    uint8_t rx_data[5];
+    uint8_t tx_data[5] = {0};
+    uint8_t rx_data[5] = {0};
 
-    tx_data[0] = (SYNCWORD_REGISTER | REG_WRITE_BURST);
-    memcpy(&tx_data[1], syncword, SYNCWORD_LENGTH);
+    tx_data[0] = (SFD_REGISTER | REG_WRITE_BURST);
+    memcpy(&tx_data[1], sfd, SFD_LENGTH);
 
     swc_hal[radio_index].reset_cs();
     swc_hal[radio_index].transfer_full_duplex_blocking(tx_data, rx_data, 5);

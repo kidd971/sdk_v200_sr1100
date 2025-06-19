@@ -17,11 +17,11 @@ extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-#define FIR_MASK_16BITS 0x0000FFFF
-#define FIR_MASK_24BITS 0x00FFFFFF
+#define FIR_MASK_16BITS     0x0000FFFF
+#define FIR_MASK_24BITS     0x00FFFFFF
 
-#define FIR_BITSHIFT_16BITS      16
-#define FIR_BITSHIFT_24BITS      8
+#define FIR_BITSHIFT_16BITS 16
+#define FIR_BITSHIFT_24BITS 8
 
 /* TYPES **********************************************************************/
 /** @brief Error status returned by init functions in the library.

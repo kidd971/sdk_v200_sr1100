@@ -12,8 +12,6 @@
 /* CONSTANTS ******************************************************************/
 /* Specifies the device's network role as the Coordinator. */
 #define NETWORK_ROLE SWC_ROLE_COORDINATOR
-/* Define the PAN ID used for network identification. */
-#define PAN_ID 0xBBB
 
 /* The device roles are used for the pairing discovery list. */
 #define DEVICE_ROLE_COORDINATOR 0
@@ -66,8 +64,14 @@
     }
 // clang-format on
 
-/* Defines the channels frequency band. */
-#define CHANNEL_FREQ {164, 174, 184, 194}
+/* Channels */
+#define CHANNEL_FREQ     {164, 174, 184, 194}
 #define CHANNEL_SEQUENCE {0, 1, 2, 3}
+
+/* CCA settings */
+#define SWC_CCA_RETRY_TIME          204 /* 9.96 us CCA intervals. */
+#define SWC_CCA_AUDIO_TRY_COUNT     7   /* 59.77 us total CCA time. */
+#define SWC_CCA_AUDIO_FBK_TRY_COUNT 12  /* 109.57 us total CCA time. */
+#define SWC_CCA_DATA_TRY_COUNT      12  /* 109.57 us total CCA time. */
 
 #endif /* SWC_CFG_COORD_H_ */

@@ -19,6 +19,9 @@ extern "C" {
 #endif
 
 /* TYPES **********************************************************************/
+/* A connection is considered connected when the communication medium is established AND
+ * there is application data being transfered.
+ */
 typedef enum connect_status {
     /*! Connected status */
     CONNECT_STATUS_CONNECTED,
@@ -56,13 +59,19 @@ void link_connect_status_init(link_connect_status_t *link_connect_status, connec
 
 /** @brief Update the link connection status module.
  *
- *  @param[in] link_connect_status link connection status module instance.
- *  @param[in] frame_outcome       Frame outcome.
- *  @param[in] ack_enabled         Acknowledge enabled.
+ *  @param[in] link_connect_status  link connection status module instance.
+ *  @param[in] frame_outcome        Frame outcome.
+ *  @param[in] always_connected     Status always connected flag.
  *  @return True if the connection status changed.
  */
 bool link_update_connect_status(link_connect_status_t *link_connect_status, frame_outcome_t frame_outcome,
-                                bool sync_status, bool ack_enabled);
+                                bool sync_status, bool always_connected);
+
+/** @brief Reset the link connection status module.
+ *
+ *  @param[in] link_connect_status  link connection status module instance.
+ */
+void link_connect_status_reset(link_connect_status_t *link_connect_status);
 
 #ifdef __cplusplus
 }

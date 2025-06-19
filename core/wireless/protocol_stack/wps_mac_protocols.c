@@ -27,7 +27,7 @@ static bool is_phase_data_valid(wps_phase_info_t *phase_data);
 void wps_mac_send_channel_index(void *wps_mac, uint8_t *index)
 {
     wps_mac_t *mac = wps_mac;
-    *index         = link_channel_hopping_get_seq_index(&mac->channel_hopping);
+    *index = link_channel_hopping_get_seq_index(&mac->channel_hopping);
 }
 
 void wps_mac_receive_channel_index(void *wps_mac, uint8_t *index)
@@ -59,7 +59,7 @@ void wps_mac_send_timeslot_id_saw(void *wps_mac, uint8_t *timeslot_id_saw)
 void wps_mac_receive_timeslot_id_saw(void *wps_mac, uint8_t *timeslot_id_saw)
 {
     wps_mac_t *mac = wps_mac;
-    uint8_t time_slot_id;
+    uint8_t time_slot_id = 0;
 
     if (mac->node_role == NETWORK_NODE) {
         time_slot_id = MASK2VAL(*timeslot_id_saw, HEADER_BYTE0_TIME_SLOT_ID_MASK);
@@ -101,7 +101,9 @@ void wps_mac_receive_rdo(void *wps_mac, uint8_t *rdo)
 {
     wps_mac_t *mac = wps_mac;
 
-    link_rdo_set_offset(&mac->link_rdo, rdo);
+    if (mac->node_role == NETWORK_NODE) {
+        link_rdo_set_offset(&mac->link_rdo, rdo);
+    }
 }
 
 uint8_t wps_mac_get_rdo_proto_size(void *wps_mac)
@@ -157,10 +159,8 @@ uint8_t wps_mac_get_ranging_phases_proto_size(void *wps_mac)
 {
     wps_mac_t *mac = wps_mac;
 
-    return sizeof(mac->phase_data.local_phases_count) +
-           sizeof(mac->phase_data.local_phases_info.phase1) +
-           sizeof(mac->phase_data.local_phases_info.phase2) +
-           sizeof(mac->phase_data.local_phases_info.phase3) +
+    return sizeof(mac->phase_data.local_phases_count) + sizeof(mac->phase_data.local_phases_info.phase1) +
+           sizeof(mac->phase_data.local_phases_info.phase2) + sizeof(mac->phase_data.local_phases_info.phase3) +
            sizeof(mac->phase_data.local_phases_info.phase4);
 }
 
@@ -190,8 +190,7 @@ void wps_mac_send_connection_id(void *wps_mac, uint8_t *connection_id)
 {
     wps_mac_t *mac = wps_mac;
 
-    if ((mac->auto_connection != NULL) &&
-        (mac->auto_connection->source_address == mac->local_address)) {
+    if ((mac->auto_connection != NULL) && (mac->auto_connection->cfg.source_address == mac->local_address)) {
         *connection_id = mac->auto_connection_id;
     } else {
         *connection_id = mac->main_connection_id;
@@ -201,16 +200,15 @@ void wps_mac_send_connection_id(void *wps_mac, uint8_t *connection_id)
 void wps_mac_receive_connection_id(void *wps_mac, uint8_t *connection_id)
 {
     wps_mac_t *mac = wps_mac;
-    uint8_t connection_count;
-    uint8_t *conn_id;
+    uint8_t connection_count = 0;
+    uint8_t *conn_id = NULL;
 
-    if ((mac->auto_connection != NULL) &&
-        !(mac->auto_connection->source_address == mac->local_address)) {
+    if ((mac->auto_connection != NULL) && !(mac->auto_connection->cfg.source_address == mac->local_address)) {
         connection_count = mac->timeslot->auto_connection_count;
-        conn_id          = &mac->auto_connection_id;
+        conn_id = &mac->auto_connection_id;
     } else {
         connection_count = mac->timeslot->main_connection_count;
-        conn_id          = &mac->main_connection_id;
+        conn_id = &mac->main_connection_id;
     }
     if (connection_count > 1) {
         if (*connection_id < connection_count) {
@@ -319,6 +317,155 @@ void wps_mac_receive_credit_flow_control_header_acknowledge(void *wps_mac, uint8
     connection->credit_flow_ctrl.credits_count = *credit_fc;
 }
 
+void wps_mac_send_phy_mode(void *wps_mac, uint8_t *phy_mode)
+{
+    wps_mac_t *mac = wps_mac;
+    chip_rate_cfg_t chip_rate;
+    isi_mitig_t isi_mitig;
+
+    if (mac->phy_mode_swap_count_down != CHIP_RATE_COUNT_DOWN_INACTIVE) {
+        mac->phy_mode_swap_count_down--;
+        if (mac->phy_mode_swap_count_down > CHIP_RATE_COUNT_DOWN_VAL) {
+            mac->phy_mode_swap_count_down = 0;
+        }
+    }
+
+    *phy_mode = ((mac->phy_mode_swap_count_down << 4) & 0xF0) | mac->requested_phy_mode;
+
+    if (mac->phy_mode_swap_count_down == 0) {
+        switch (mac->requested_phy_mode) {
+        case CHIP_RATE_20_48_ISI_2:
+            chip_rate = CHIP_RATE_20_48_MHZ;
+            isi_mitig = ISI_MITIG_2;
+            break;
+        case CHIP_RATE_27_30_ISI_2:
+            chip_rate = CHIP_RATE_27_30_MHZ;
+            isi_mitig = ISI_MITIG_2;
+            break;
+        case CHIP_RATE_20_48_ISI_1:
+            chip_rate = CHIP_RATE_20_48_MHZ;
+            isi_mitig = ISI_MITIG_1;
+            break;
+        case CHIP_RATE_27_30_ISI_1:
+            chip_rate = CHIP_RATE_27_30_MHZ;
+            isi_mitig = ISI_MITIG_1;
+            break;
+        case CHIP_RATE_40_96_ISI_1:
+            chip_rate = CHIP_RATE_40_96_MHZ;
+            isi_mitig = ISI_MITIG_1;
+            break;
+        default:
+            chip_rate = CHIP_RATE_20_48_MHZ;
+            isi_mitig = ISI_MITIG_1;
+            break;
+        }
+        mac->next_chip_rate = chip_rate;
+        mac->next_isi_mitig = isi_mitig;
+        mac->current_phy_mode = mac->requested_phy_mode;
+        mac->phy_mode_swap_count_down = CHIP_RATE_COUNT_DOWN_INACTIVE;
+    }
+}
+
+void wps_mac_receive_phy_mode(void *wps_mac, uint8_t *phy_mode)
+{
+    wps_mac_t *mac = wps_mac;
+    chip_rate_cfg_t chip_rate;
+    isi_mitig_t isi_mitig;
+
+    mac->phy_mode_swap_count_down = (*phy_mode >> 4) & 0x0F;
+
+    mac->requested_phy_mode = *phy_mode & 0x0F;
+
+    switch (*phy_mode & 0x0F) {
+    case CHIP_RATE_20_48_ISI_2:
+        chip_rate = CHIP_RATE_20_48_MHZ;
+        isi_mitig = ISI_MITIG_2;
+        break;
+    case CHIP_RATE_27_30_ISI_2:
+        chip_rate = CHIP_RATE_27_30_MHZ;
+        isi_mitig = ISI_MITIG_2;
+        break;
+    case CHIP_RATE_20_48_ISI_1:
+        chip_rate = CHIP_RATE_20_48_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    case CHIP_RATE_27_30_ISI_1:
+        chip_rate = CHIP_RATE_27_30_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    case CHIP_RATE_40_96_ISI_1:
+        chip_rate = CHIP_RATE_40_96_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    default:
+        chip_rate = CHIP_RATE_20_48_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    }
+
+    if (mac->phy_mode_swap_count_down == 0) {
+        mac->next_chip_rate = chip_rate;
+        mac->next_isi_mitig = isi_mitig;
+        mac->current_phy_mode = mac->requested_phy_mode;
+        mac->phy_mode_swap_count_down = CHIP_RATE_COUNT_DOWN_INACTIVE;
+    }
+}
+
+void wps_mac_handle_missing_phy_mode(void *wps_mac)
+{
+    wps_mac_t *mac = wps_mac;
+    chip_rate_cfg_t chip_rate;
+    isi_mitig_t isi_mitig;
+
+    switch (mac->requested_phy_mode) {
+    case CHIP_RATE_20_48_ISI_2:
+        chip_rate = CHIP_RATE_20_48_MHZ;
+        isi_mitig = ISI_MITIG_2;
+        break;
+    case CHIP_RATE_27_30_ISI_2:
+        chip_rate = CHIP_RATE_27_30_MHZ;
+        isi_mitig = ISI_MITIG_2;
+        break;
+    case CHIP_RATE_20_48_ISI_1:
+        chip_rate = CHIP_RATE_20_48_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    case CHIP_RATE_27_30_ISI_1:
+        chip_rate = CHIP_RATE_27_30_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    case CHIP_RATE_40_96_ISI_1:
+        chip_rate = CHIP_RATE_40_96_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    default:
+        chip_rate = CHIP_RATE_20_48_MHZ;
+        isi_mitig = ISI_MITIG_1;
+        break;
+    }
+
+    if (mac->phy_mode_swap_count_down != CHIP_RATE_COUNT_DOWN_INACTIVE) {
+        mac->phy_mode_swap_count_down--;
+        if (mac->phy_mode_swap_count_down > CHIP_RATE_COUNT_DOWN_VAL) {
+            mac->phy_mode_swap_count_down = 0;
+        }
+    }
+
+    if (mac->phy_mode_swap_count_down == 0) {
+        mac->next_chip_rate = chip_rate;
+        mac->next_isi_mitig = isi_mitig;
+        mac->current_phy_mode = mac->requested_phy_mode;
+        mac->phy_mode_swap_count_down = CHIP_RATE_COUNT_DOWN_INACTIVE;
+    }
+}
+
+uint8_t wps_mac_get_phy_mode_proto_size(void *wps_mac)
+{
+    (void)wps_mac;
+
+    return sizeof(uint8_t);
+}
+
 /* PRIVATE FUNCTIONS ***********************************************************/
 /** @brief Update phases data.
  *
@@ -327,10 +474,10 @@ void wps_mac_receive_credit_flow_control_header_acknowledge(void *wps_mac, uint8
  */
 static void update_phases_data(wps_phase_info_t *phase_data, uint16_t rx_wait_time)
 {
-    phase_data->last_local_phases_info.phase1     = phase_data->local_phases_info.phase1;
-    phase_data->last_local_phases_info.phase2     = phase_data->local_phases_info.phase2;
-    phase_data->last_local_phases_info.phase3     = phase_data->local_phases_info.phase3;
-    phase_data->last_local_phases_info.phase4     = phase_data->local_phases_info.phase4;
+    phase_data->last_local_phases_info.phase1 = phase_data->local_phases_info.phase1;
+    phase_data->last_local_phases_info.phase2 = phase_data->local_phases_info.phase2;
+    phase_data->last_local_phases_info.phase3 = phase_data->local_phases_info.phase3;
+    phase_data->last_local_phases_info.phase4 = phase_data->local_phases_info.phase4;
     phase_data->last_local_phases_info.rx_waited0 = rx_wait_time & 0x00ff;
     phase_data->last_local_phases_info.rx_waited1 = (rx_wait_time & 0x7f00) >> 8;
     phase_data->local_phases_count++;

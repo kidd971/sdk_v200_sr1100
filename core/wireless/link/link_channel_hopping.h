@@ -48,8 +48,8 @@ typedef struct channel_hopping {
  *  @param[in] random_sequence_enabled  Random sequence enable flag.
  *  @param[in] random_sequence_seed     Random sequence seed.
  */
-void link_channel_hopping_init(channel_hopping_t *channel_hopping, channel_sequence_t *channel_sequence, bool random_sequence_enabled,
-                               uint8_t random_sequence_seed);
+void link_channel_hopping_init(channel_hopping_t *channel_hopping, channel_sequence_t *channel_sequence,
+                               bool random_sequence_enabled, uint8_t random_sequence_seed);
 
 /** @brief Increment channel hopping sequence index.
  *
@@ -57,7 +57,8 @@ void link_channel_hopping_init(channel_hopping_t *channel_hopping, channel_seque
  */
 static inline void link_channel_hopping_increment_sequence(channel_hopping_t *channel_hopping, uint8_t increment)
 {
-    channel_hopping->hop_seq_index = (channel_hopping->hop_seq_index + increment) % channel_hopping->channel_sequence->sequence_size;
+    channel_hopping->hop_seq_index = (channel_hopping->hop_seq_index + increment) %
+                                     channel_hopping->channel_sequence->sequence_size;
 }
 
 /** @brief Set current channel hopping sequence index.
@@ -87,7 +88,9 @@ static inline uint8_t link_channel_hopping_get_seq_index(channel_hopping_t *chan
  */
 static inline uint32_t link_channel_hopping_get_channel(channel_hopping_t *channel_hopping)
 {
-    return channel_hopping->channel_lookup_table[channel_hopping->channel_sequence->channel[channel_hopping->hop_seq_index]];
+    uint32_t channel = channel_hopping->channel_sequence->channel[channel_hopping->hop_seq_index];
+
+    return channel_hopping->channel_lookup_table[channel];
 }
 
 #ifdef __cplusplus

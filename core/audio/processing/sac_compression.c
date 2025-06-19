@@ -8,8 +8,8 @@
  */
 
 /* INCLUDES *******************************************************************/
-#include <string.h>
 #include "sac_compression.h"
+#include <string.h>
 
 /* MACROS *********************************************************************/
 #define BYTE_TO_BITS(byte) ((byte) * SAC_BYTE_SIZE_BITS)
@@ -61,7 +61,8 @@ void sac_compression_init(void *instance, const char *name, sac_pipeline_t *pipe
     case SAC_COMPRESSION_UNPACK_STEREO:
     case SAC_COMPRESSION_UNPACK_MONO:
         compress_inst->_internal.msb_position = compress_inst->sample_format.bit_depth - 1;
-        compress_inst->_internal.extend_size  = compress_inst->_internal.sample_size_bit - compress_inst->sample_format.bit_depth;
+        compress_inst->_internal.extend_size = compress_inst->_internal.sample_size_bit -
+                                               compress_inst->sample_format.bit_depth;
         break;
     default:
         *status = SAC_ERR_PROCESSING_STAGE_INIT;
@@ -146,10 +147,10 @@ uint16_t sac_compression_process_discard(void *instance, sac_pipeline_t *pipelin
 static uint16_t pack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint8_t *input_buffer = (uint8_t *)buffer_in;
-    uint16_t pcm_sample_count;
-    uint8_t left_code;
-    uint8_t right_code;
-    int16_t sample;
+    uint16_t pcm_sample_count = 0;
+    uint8_t left_code = 0;
+    uint8_t right_code = 0;
+    int16_t sample = 0;
     sac_compression_instance_t *compress_inst = instance;
 
     pcm_sample_count = (BYTE_TO_BITS(buffer_in_size) / compress_inst->_internal.sample_size_bit) / 2;
@@ -169,7 +170,7 @@ static uint16_t pack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffer_
     for (uint8_t i = 0; i < pcm_sample_count; i++) {
         /* Left Channel. */
         sample = (*((int32_t *)input_buffer) >> compress_inst->_internal.bit_shift_16bits) & 0xFFFF;
-        left_code  = adpcm_encode(sample, &(compress_inst->_internal.adpcm_left_state));
+        left_code = adpcm_encode(sample, &(compress_inst->_internal.adpcm_left_state));
         input_buffer += compress_inst->_internal.sample_size_byte;
         /* Right Channel. */
         sample = (*((int32_t *)input_buffer) >> compress_inst->_internal.bit_shift_16bits) & 0xFFFF;
@@ -194,7 +195,7 @@ static uint16_t pack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffer_
 static uint16_t unpack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint8_t *output_buffer = (uint8_t *)buffer_out;
-    uint16_t pcm_sample_count;
+    uint16_t pcm_sample_count = 0;
     sac_compression_instance_t *compress_inst = instance;
 
     /* Get left ADPCM status. */
@@ -211,14 +212,15 @@ static uint16_t unpack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffe
      * samples at the same time (left and right samples).
      */
     for (uint8_t i = 0; i < pcm_sample_count / 2; i++) {
-        *(int32_t *)output_buffer = (adpcm_decode(*buffer_in & 0x0F, &(compress_inst->_internal.adpcm_left_state)) <<
-                                    compress_inst->_internal.bit_shift_16bits);
+        *(int32_t *)output_buffer = (adpcm_decode(*buffer_in & 0x0F, &(compress_inst->_internal.adpcm_left_state))
+                                     << compress_inst->_internal.bit_shift_16bits);
         if (compress_inst->_internal.extend_size > 0) {
             extend_msb_to_32bits(instance, (uint32_t *)output_buffer);
         }
         output_buffer += compress_inst->_internal.sample_size_byte;
-        *(int32_t *)output_buffer = (adpcm_decode((*buffer_in++ >> 4) & 0x0F, &(compress_inst->_internal.adpcm_right_state)) <<
-                                    compress_inst->_internal.bit_shift_16bits);
+        *(int32_t *)output_buffer =
+            (adpcm_decode((*buffer_in++ >> 4) & 0x0F, &(compress_inst->_internal.adpcm_right_state))
+             << compress_inst->_internal.bit_shift_16bits);
         if (compress_inst->_internal.extend_size > 0) {
             extend_msb_to_32bits(instance, (uint32_t *)output_buffer);
         }
@@ -238,9 +240,9 @@ static uint16_t unpack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffe
 static uint16_t pack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint8_t *input_buffer = (uint8_t *)buffer_in;
-    uint16_t pcm_sample_count;
-    uint16_t compressed_byte_count;
-    int16_t sample;
+    uint16_t pcm_sample_count = 0;
+    uint16_t compressed_byte_count = 0;
+    int16_t sample = 0;
     sac_compression_instance_t *compress_inst = instance;
 
     pcm_sample_count = (BYTE_TO_BITS(buffer_in_size) / compress_inst->_internal.sample_size_bit);
@@ -263,7 +265,7 @@ static uint16_t pack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_in
     /* Manage odd number of samples */
     if (pcm_sample_count & 0x01) {
         sample = (*((int32_t *)input_buffer) >> compress_inst->_internal.bit_shift_16bits) & 0xFFFF;
-        *buffer_out  = adpcm_encode(sample, &(compress_inst->_internal.adpcm_left_state)) & 0x0F;
+        *buffer_out = adpcm_encode(sample, &(compress_inst->_internal.adpcm_left_state)) & 0x0F;
     }
 
     return (compressed_byte_count + (pcm_sample_count & 0x01)) * sizeof(uint8_t) + sizeof(state_variable_t);
@@ -280,7 +282,7 @@ static uint16_t pack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_in
 static uint16_t unpack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint8_t *output_buffer = (uint8_t *)buffer_out;
-    uint16_t pcm_sample_count;
+    uint16_t pcm_sample_count = 0;
     sac_compression_instance_t *compress_inst = instance;
 
     /* Get left ADPCM status. */
@@ -295,14 +297,15 @@ static uint16_t unpack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_
      * samples at the same time.
      */
     for (uint8_t i = 0; i < pcm_sample_count / 2; i++) {
-        *(int32_t *)output_buffer = (adpcm_decode((*buffer_in & 0x0F), &(compress_inst->_internal.adpcm_left_state)) <<
-                                    compress_inst->_internal.bit_shift_16bits);
+        *(int32_t *)output_buffer = (adpcm_decode((*buffer_in & 0x0F), &(compress_inst->_internal.adpcm_left_state))
+                                     << compress_inst->_internal.bit_shift_16bits);
         if (compress_inst->_internal.extend_size > 0) {
             extend_msb_to_32bits(instance, (uint32_t *)output_buffer);
         }
         output_buffer += compress_inst->_internal.sample_size_byte;
-        *(int32_t *)output_buffer = (adpcm_decode((*buffer_in++ >> 4) & 0x0F, &(compress_inst->_internal.adpcm_left_state)) <<
-                                    compress_inst->_internal.bit_shift_16bits);
+        *(int32_t *)output_buffer =
+            (adpcm_decode((*buffer_in++ >> 4) & 0x0F, &(compress_inst->_internal.adpcm_left_state))
+             << compress_inst->_internal.bit_shift_16bits);
         if (compress_inst->_internal.extend_size > 0) {
             extend_msb_to_32bits(instance, (uint32_t *)output_buffer);
         }
@@ -319,7 +322,7 @@ static void extend_msb_to_32bits(void *instance, uint32_t *value)
 {
     sac_compression_instance_t *compress_inst = instance;
     uint32_t msb_value = ((*value) & (1 << compress_inst->_internal.msb_position));
-    uint8_t i;
+    uint8_t i = 0;
 
     for (i = 0; i < compress_inst->_internal.extend_size; i++) {
         if (msb_value) {
@@ -337,11 +340,8 @@ static void extend_msb_to_32bits(void *instance, uint32_t *value)
  */
 static void validate_sac_bit_depth(sac_bit_depth_t bit_depth, sac_status_t *status)
 {
-    if ((bit_depth != SAC_16BITS) &&
-        (bit_depth != SAC_18BITS) &&
-        (bit_depth != SAC_20BITS) &&
-        (bit_depth != SAC_24BITS) &&
-        (bit_depth != SAC_32BITS)) {
+    if ((bit_depth != SAC_16BITS) && (bit_depth != SAC_18BITS) && (bit_depth != SAC_20BITS) &&
+        (bit_depth != SAC_24BITS) && (bit_depth != SAC_32BITS)) {
         *status = SAC_ERR_BIT_DEPTH;
     }
 }

@@ -17,9 +17,9 @@
 #include "sac_api.h"
 #include "sac_cdc.h"
 #include "sac_compression.h"
+#include "sac_endpoint_swc.h"
 #include "sac_fallback.h"
 #include "sac_fallback_gate.h"
-#include "sac_endpoint_swc.h"
 #include "sac_hal_facade.h"
 #include "sac_mute_on_underflow.h"
 #include "sac_packing.h"
@@ -58,8 +58,6 @@
 #define MAX_DATA_PAYLOAD_SIZE 16
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3200
-/* Period for audio processing timer in us. */
-#define AUDIO_PROCESS_PERIOD_US 100
 /* Period for data transmission timer in ms. */
 #define DATA_TX_PERIOD_MS 10
 /* Period for statistics print timer in ms. */
@@ -73,8 +71,6 @@
 /* A header is added to compressed audio samples during fallback. */
 #define SAC_BACK_CHANNEL_FALLBACK_HEADER_SIZE \
     (sizeof(sac_header_t) + SAC_COMPRESSION_HEADER_SIZE(SAC_BACK_CHANNEL_COUNT))
-/* Number of attempts for CCA during fallback mode. */
-#define FALLBACK_CCA_TRY_COUNT 3
 
 /* TYPES **********************************************************************/
 /** @brief Enumeration representing device pairing states.
@@ -97,10 +93,10 @@ typedef enum connection_priority {
     DATA_CONNECTION_PRIORITY = 1,
 } connection_priority_t;
 
-/** @brief Data used for sending and receiving link margin and button state.
+/** @brief Data used for transmitting and receiving link margin and button state.
  */
 typedef struct user_data {
-    /*! A boolean indicating the button's state, toggling with each press of SW2. */
+    /*! A boolean indicating the button's state. */
     bool button_state;
     /*! The link margin to monitor link quality. */
     uint8_t link_margin;
@@ -188,8 +184,6 @@ static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 /* Flag that allows display every second. */
 static volatile bool print_stats_now;
-/* Variable that stores the link margin and the button state to be sent to the Coordinator. */
-static user_data_t transmitted_user_data = {0};
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
 static void app_init(void);
@@ -227,7 +221,6 @@ static void app_audio_core_compression_discard_interface_init(sac_processing_int
 /* **** Button Actions **** */
 static void volume_up(void);
 static void volume_down(void);
-static void toggle_button_state(void);
 static void enter_pairing_mode(void);
 static void unpair_device(void);
 static void abort_pairing_procedure(void);
@@ -248,11 +241,9 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
-    /* Timers that trigger the audio process every 100 us. */
-    facade_audio_process_main_channel_timer_init(AUDIO_PROCESS_PERIOD_US);
-    facade_audio_process_main_channel_set_timer_callback(audio_process_main_channel_callback);
-    facade_audio_process_back_channel_timer_init(AUDIO_PROCESS_PERIOD_US);
-    facade_audio_process_back_channel_set_timer_callback(audio_process_back_channel_callback);
+    /* Audio process timer initialization. */
+    facade_audio_process_main_channel_timer_init(audio_process_main_channel_callback);
+    facade_audio_process_back_channel_timer_init(audio_process_back_channel_callback);
 
     /* Timer that updates statistics display every second and transmits button state to the Node every 10 ms. */
     facade_data_timer_init(DATA_TX_PERIOD_MS);
@@ -271,10 +262,13 @@ int main(void)
                 print_stats();
                 print_stats_now = false;
             }
-        };
+        }
     }
 
     device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    enter_pairing_mode();
 
     while (1) {
         if (device_pairing_state == DEVICE_UNPAIRED) {
@@ -283,7 +277,7 @@ int main(void)
         } else if (device_pairing_state == DEVICE_PAIRED) {
             /* When the device is paired, normal operations are executed. */
             fallback_led_handler();
-            facade_button_handling(unpair_device, toggle_button_state, volume_up, volume_down);
+            facade_button_handling(unpair_device, NULL, volume_up, volume_down);
         }
 
         /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
@@ -307,7 +301,7 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
     uint16_t local_address = pairing_assigned_address->node_address;
     uint16_t remote_address = pairing_assigned_address->coordinator_address;
     uint8_t fallback_thresholds[] = {SAC_BACK_CHANNEL_FALLBACK_PAYLOAD_SIZE + SAC_BACK_CHANNEL_FALLBACK_HEADER_SIZE};
-    uint8_t fallback_cca_try_count[] = {FALLBACK_CCA_TRY_COUNT};
+    uint8_t fallback_cca_try_count[] = {SWC_CCA_AUDIO_FBK_TRY_COUNT};
 
     if (certification_mode > FACADE_CERTIF_NONE) {
         pairing_assigned_address->coordinator_address = 0x1;
@@ -349,6 +343,13 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
         return;
     }
 
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_module_init(node, SWC_RADIO_ID_2, true, swc_err);
+    if (*swc_err != SWC_ERR_NONE) {
+        return;
+    }
+#endif
+
     /* **** RX Connections **** */
     /* ** Main Channel: RX Audio Connection ** */
     swc_connection_cfg_t rx_audio_conn_cfg = {
@@ -367,8 +368,8 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
 
     swc_connection_concurrency_cfg_t rx_audio_concurrency_cfg = {
         .enabled = true,
-        .try_count = 2,
-        .retry_time = 512, /* 25 us */
+        .try_count = SWC_CCA_AUDIO_FBK_TRY_COUNT, /* Use maximum CCA try count on this connection. */
+        .retry_time = SWC_CCA_RETRY_TIME,
         .fail_action = SWC_CCA_ABORT_TX,
     };
 
@@ -418,8 +419,8 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
 
     swc_connection_concurrency_cfg_t rx_data_concurrency_cfg = {
         .enabled = true,
-        .try_count = 2,
-        .retry_time = 512, /* 25 us */
+        .try_count = SWC_CCA_DATA_TRY_COUNT,
+        .retry_time = SWC_CCA_RETRY_TIME,
         .fail_action = SWC_CCA_ABORT_TX,
     };
 
@@ -519,8 +520,8 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
 
     swc_connection_concurrency_cfg_t tx_audio_concurrency_cfg = {
         .enabled = true,
-        .try_count = 2,
-        .retry_time = 512, /* 25 us */
+        .try_count = SWC_CCA_AUDIO_TRY_COUNT,
+        .retry_time = SWC_CCA_RETRY_TIME,
         .fail_action = SWC_CCA_ABORT_TX,
     };
 
@@ -575,8 +576,8 @@ static void app_swc_core_init(pairing_assigned_address_t *pairing_assigned_addre
 
     swc_connection_concurrency_cfg_t tx_data_concurrency_cfg = {
         .enabled = true,
-        .try_count = 2,
-        .retry_time = 512, /* 25 us */
+        .try_count = SWC_CCA_DATA_TRY_COUNT,
+        .retry_time = SWC_CCA_RETRY_TIME,
         .fail_action = SWC_CCA_ABORT_TX,
     };
 
@@ -628,6 +629,9 @@ static void conn_rx_audio_success_callback(void *conn)
     /* The SWC produces audio samples upon receiving them from the Coordinator. */
     sac_pipeline_produce(main_channel_sac_pipeline, &sac_status);
     status_handler_sac(sac_status);
+
+    /* Trigger main channel process. */
+    facade_audio_process_main_channel_timer_trigger();
 }
 
 /** @brief Callback function when a previously sent data frame has been ACK'd.
@@ -647,9 +651,9 @@ static void conn_tx_data_success_callback(void *conn)
  */
 static void conn_rx_data_success_callback(void *conn)
 {
-    user_data_t received_user_data = {0};
     sac_status_t sac_status = SAC_OK;
     swc_error_t swc_err = SWC_ERR_NONE;
+    user_data_t received_user_data = {0};
 
     (void)conn;
 
@@ -677,6 +681,9 @@ static void conn_tx_audio_success_callback(void *conn)
     (void)conn;
 
     facade_tx_audio_conn_status();
+
+    /* Trigger back channel process. */
+    facade_audio_process_back_channel_timer_trigger();
 }
 
 /** @brief Initialize the Audio Core.
@@ -686,21 +693,21 @@ static void app_audio_core_init(void)
     sac_status_t sac_status = SAC_OK;
 
     /* ** Endpoint Interfaces ** */
-    sac_endpoint_interface_t main_channel_i2s_consumer_iface;
-    sac_endpoint_interface_t main_channel_swc_producer_iface;
-    sac_endpoint_interface_t back_channel_i2s_producer_iface;
-    sac_endpoint_interface_t back_channel_swc_consumer_iface;
+    sac_endpoint_interface_t main_channel_i2s_consumer_iface = {0};
+    sac_endpoint_interface_t main_channel_swc_producer_iface = {0};
+    sac_endpoint_interface_t back_channel_i2s_producer_iface = {0};
+    sac_endpoint_interface_t back_channel_swc_consumer_iface = {0};
 
     /* ** Processing Stages Interfaces ** */
-    sac_processing_interface_t fallback_iface;
-    sac_processing_interface_t main_channel_unpacking_iface;
-    sac_processing_interface_t main_channel_decompression_iface;
-    sac_processing_interface_t main_channel_volume_iface;
-    sac_processing_interface_t main_channel_mute_on_underflow_iface;
-    sac_processing_interface_t back_channel_packing_iface;
-    sac_processing_interface_t back_channel_compression_iface;
-    sac_processing_interface_t back_channel_compression_discard_iface;
-    sac_processing_interface_t back_channel_downsampling_iface;
+    sac_processing_interface_t fallback_iface = {0};
+    sac_processing_interface_t main_channel_unpacking_iface = {0};
+    sac_processing_interface_t main_channel_decompression_iface = {0};
+    sac_processing_interface_t main_channel_volume_iface = {0};
+    sac_processing_interface_t main_channel_mute_on_underflow_iface = {0};
+    sac_processing_interface_t back_channel_packing_iface = {0};
+    sac_processing_interface_t back_channel_compression_iface = {0};
+    sac_processing_interface_t back_channel_compression_discard_iface = {0};
+    sac_processing_interface_t back_channel_downsampling_iface = {0};
 
     sac_facade_hal_init(&sac_hal);
     sac_endpoint_swc_init(&main_channel_swc_producer_iface, &back_channel_swc_consumer_iface);
@@ -892,7 +899,7 @@ static void app_audio_core_init(void)
     back_channel_fallback_instance = sac_fallback_get_defaults();
     back_channel_fallback_instance.connection = tx_audio_conn;
     back_channel_fallback_instance.is_tx_device = true;
-    back_channel_fallback_instance.cca_max_try_count = FALLBACK_CCA_TRY_COUNT;
+    back_channel_fallback_instance.cca_max_try_count = SWC_CCA_AUDIO_FBK_TRY_COUNT;
     back_channel_fallback_instance.get_tick = facade_get_tick_ms;
     back_channel_fallback_instance.tick_frequency_hz = 1000;
     back_channel_fallback_processing = sac_processing_stage_init(&back_channel_fallback_instance,
@@ -1140,6 +1147,9 @@ static void i2s_rx_audio_complete_callback(void)
     /* The codec produces audio samples when it receives input audio. */
     sac_pipeline_produce(back_channel_sac_pipeline, &sac_status);
     status_handler_sac(sac_status);
+
+    /* Trigger back channel process. */
+    facade_audio_process_back_channel_timer_trigger();
 }
 
 /** @brief Callback handling the audio process that triggers with the app timer.
@@ -1159,12 +1169,17 @@ static void audio_process_back_channel_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
 
-    /* Processing stages of the back channel pipeline are executed. */
-    sac_pipeline_process(back_channel_sac_pipeline, &sac_status);
-    status_handler_sac(sac_status);
-    /* The SWC consumes audio samples produced by the codec. */
-    sac_pipeline_consume(back_channel_sac_pipeline, &sac_status);
-    status_handler_sac(sac_status);
+    if (sac_pipeline_get_producer_buffer_load(back_channel_sac_pipeline) > 0) {
+        /* Processing stages of the back channel pipeline are executed. */
+        sac_pipeline_process(back_channel_sac_pipeline, &sac_status);
+        status_handler_sac(sac_status);
+    }
+
+    if (sac_pipeline_get_consumer_buffer_load(back_channel_sac_pipeline) > 0) {
+        /* The SWC consumes audio samples produced by the codec. */
+        sac_pipeline_consume(back_channel_sac_pipeline, &sac_status);
+        status_handler_sac(sac_status);
+    }
 }
 
 /** @brief Print the audio and wireless statistics.
@@ -1179,6 +1194,8 @@ static void print_stats(void)
     const char *audio_stats_str = "\n<<  Audio Core Statistics  >>\n\r";
     const char *fallback_stats_str = "\n<<  Fallback Statistics  >>\n\r";
     const char *wireless_stats_str = "\n<<  Wireless Core Statistics  >>\n\r";
+
+    memset(stats_string, 0, sizeof(stats_string));
 
     /* ** Device Prelude ** */
     string_length = snprintf(stats_string, sizeof(stats_string), device_str);
@@ -1237,7 +1254,8 @@ static void data_callback(void)
 {
     static uint8_t counter;
     swc_error_t swc_err = SWC_ERR_NONE;
-    swc_fallback_info_t fallback_info;
+    swc_fallback_info_t fallback_info = {0};
+    user_data_t transmitted_user_data = {0};
 
     /* Every second, the statistics are displayed. */
     if (counter >= (STATS_PRINT_PERIOD_MS / DATA_TX_PERIOD_MS)) {
@@ -1246,9 +1264,10 @@ static void data_callback(void)
     }
     counter++;
 
-    /* Update the link margin. */
+    /* Update the link margin and the button state. */
     fallback_info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
     transmitted_user_data.link_margin = fallback_info.link_margin;
+    transmitted_user_data.button_state = facade_read_button_state();
 
     /* Send the button state to the Coordinator. */
     wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);
@@ -1260,8 +1279,7 @@ static void enter_pairing_mode(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
-
-    pairing_event_t pairing_event;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
 
     facade_notify_enter_pairing();
 
@@ -1367,17 +1385,6 @@ static void abort_pairing_procedure(void)
     pairing_abort();
 }
 
-/** @brief Toggles the button state request.
- */
-static void toggle_button_state(void)
-{
-    if (transmitted_user_data.button_state != false) {
-        transmitted_user_data.button_state = false;
-    } else {
-        transmitted_user_data.button_state = true;
-    }
-}
-
 /** @brief Send data with a specific connection.
  *
  *  @param[in] transmitted_data  Data to be sent over the air.
@@ -1386,10 +1393,10 @@ static void toggle_button_state(void)
  */
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err)
 {
-    uint8_t *buffer;
+    uint8_t *buffer = NULL;
 
     /* Get buffer from queue to hold data. */
-    swc_connection_allocate_payload_buffer(tx_data_conn, &buffer, MAX_DATA_PAYLOAD_SIZE, swc_err);
+    swc_connection_get_payload_buffer(tx_data_conn, &buffer, swc_err);
     if ((*swc_err != SWC_ERR_NONE) || (buffer == NULL)) {
         return;
     }
@@ -1414,15 +1421,11 @@ static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err)
 {
     uint8_t *payload = NULL;
-    uint16_t payload_size;
+    uint16_t payload_size = 0;
 
     /* Read received data. */
     payload_size = swc_connection_receive(rx_data_conn, &payload, swc_err);
-    if (*swc_err != SWC_ERR_NONE) {
-        return 0;
-    }
-
-    if (payload_size > size) {
+    if (*swc_err != SWC_ERR_NONE || payload_size > size) {
         return 0;
     }
 
@@ -1464,24 +1467,27 @@ static void app_init(void)
     if (swc_err != SWC_ERR_NONE) {
         while (1) {};
     }
-    /* Initialize Audio Core. */
-    app_audio_core_init();
-    /* Initialize GPIOs and peripherals for audio operations. */
-    facade_audio_node_init();
     /* Connect the Wireless Core. */
     swc_connect(&swc_err);
     if (swc_err != SWC_ERR_NONE) {
         while (1) {};
     }
-    /* Start the main channel audio pipeline. */
+
+    /* Initialize Audio Core. */
+    app_audio_core_init();
+    /* Initialize GPIOs and peripherals for audio operations. */
+    facade_audio_node_init();
+
+    /* Start audio pipelines. */
     sac_pipeline_start(main_channel_sac_pipeline, &sac_status);
     status_handler_sac(sac_status);
-    /* Start the back channel audio pipeline. */
     sac_pipeline_start(back_channel_sac_pipeline, &sac_status);
     status_handler_sac(sac_status);
+
     /* Start timers used for audio processes. */
     facade_audio_process_main_channel_timer_start();
     facade_audio_process_back_channel_timer_start();
+
     /* Start data and statistics timer. */
     facade_data_timer_start();
 }
