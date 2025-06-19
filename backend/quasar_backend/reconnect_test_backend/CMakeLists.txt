@@ -1,0 +1,2 @@
+target_link_libraries(reconnect_test_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(reconnect_test_backend PRIVATE reconnect_test_backend.c)

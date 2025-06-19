@@ -1,0 +1,11 @@
+
+if (APP STREQUAL "BSP-validator")
+    add_subdirectory(bsp_validator)
+elseif (APP STREQUAL "Profiler")
+    add_subdirectory(profiler)
+elseif (APP STREQUAL "All")
+    if (NOT RTOS_ENABLED)
+        add_subdirectory(bsp_validator)
+        add_subdirectory(profiler)
+    endif()
+endif()

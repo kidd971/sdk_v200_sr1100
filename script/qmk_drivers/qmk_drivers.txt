@@ -1,0 +1,6 @@
+# The format is
+# driver,desc,vid,pid,guid
+# Use a comma as a separator without spaces
+# Driver can be one of winusb,libusb,libusbk
+# Use Windows Powershell and type [guid]::NewGuid() to generate guids
+winusb,STM32 Bootloader,0483,DF11,6d98a87f-4ecf-464d-89ed-8c684d857a75
