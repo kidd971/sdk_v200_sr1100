@@ -1,7 +1,7 @@
 /** @file  wps_mac_statistics.c
  *  @brief Wireless Protocol Stack MAC statistics.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -20,10 +20,11 @@
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 #if WPS_ENABLE_STATS_USED_TIMESLOTS || WPS_ENABLE_PHY_STATS || WPS_ENABLE_PHY_STATS_PER_BANDS
-static inline void wps_mac_statistics_store_process_data(wps_mac_stats_entry_t *stats_data,
-                                                         wps_mac_t *mac,
-                                                         wps_connection_t *connection,
-                                                         frame_outcome_t frame_outcome);
+static inline void wps_mac_statistics_store_process_data(wps_mac_stats_entry_t *stats_data, wps_mac_t *mac,
+                                                         wps_connection_t *connection, frame_outcome_t frame_outcome);
+#endif
+#if WPS_ENABLE_LINK_STATS
+static void wps_mac_update_stats(wps_mac_t *mac);
 #endif
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -48,8 +49,7 @@ void wps_mac_statistics_update_main_conn(void *wps_mac)
         return;
     }
 
-    wps_mac_statistics_store_process_data(stats_data, mac, mac->main_connection,
-                                          mac->main_xlayer->frame.frame_outcome);
+    wps_mac_statistics_store_process_data(stats_data, mac, mac->main_connection, mac->main_xlayer->frame.frame_outcome);
     stats_data->empty_frame = false;
 }
 
@@ -65,8 +65,7 @@ void wps_mac_statistics_update_auto_conn(void *wps_mac)
         return;
     }
 
-    wps_mac_statistics_store_process_data(stats_data, mac, mac->auto_connection,
-                                          mac->auto_xlayer->frame.frame_outcome);
+    wps_mac_statistics_store_process_data(stats_data, mac, mac->auto_connection, mac->auto_xlayer->frame.frame_outcome);
     stats_data->empty_frame = false;
 }
 
@@ -82,8 +81,7 @@ void wps_mac_statistics_update_main_conn_empty_frame(void *wps_mac)
         return;
     }
 
-    wps_mac_statistics_store_process_data(stats_data, mac, mac->main_connection,
-                                          mac->main_xlayer->frame.frame_outcome);
+    wps_mac_statistics_store_process_data(stats_data, mac, mac->main_connection, mac->main_xlayer->frame.frame_outcome);
     stats_data->empty_frame = true;
 }
 
@@ -103,8 +101,7 @@ void wps_mac_statistics_update_auto_conn_empty_frame(void *wps_mac)
         return;
     }
 
-    wps_mac_statistics_store_process_data(stats_data, mac, mac->auto_connection,
-                                          mac->auto_xlayer->frame.frame_outcome);
+    wps_mac_statistics_store_process_data(stats_data, mac, mac->auto_connection, mac->auto_xlayer->frame.frame_outcome);
     stats_data->empty_frame = true;
 }
 
@@ -123,27 +120,27 @@ void wps_mac_statistics_process_data(wps_mac_stats_t *stats_process_data)
             link_lqi_update(&stats_entry->connection->used_frame_lqi,
                             link_gain_loop_get_gain_index(
                                 stats_entry->connection->gain_loop[stats_entry->channel_index]),
-                            stats_entry->frame_outcome, stats_entry->rssi, stats_entry->rnsi,
-                            stats_entry->phase_offset);
+                            stats_entry->frame_outcome, stats_entry->rssi, stats_entry->rnsi, stats_entry->phase_offset,
+                            stats_entry->phase_offset_count);
         }
 #endif
 
 #if WPS_ENABLE_PHY_STATS
         link_lqi_update(&stats_entry->connection->lqi,
-                        link_gain_loop_get_gain_index(
-                            stats_entry->connection->gain_loop[stats_entry->channel_index]),
-                        stats_entry->frame_outcome, stats_entry->rssi, stats_entry->rnsi,
-                        stats_entry->phase_offset);
+                        link_gain_loop_get_gain_index(stats_entry->connection->gain_loop[stats_entry->channel_index]),
+                        stats_entry->frame_outcome, stats_entry->rssi, stats_entry->rnsi, stats_entry->phase_offset,
+                        stats_entry->phase_offset_count);
 
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
         link_lqi_update(&stats_entry->connection->channel_lqi[stats_entry->channel_index],
-                        link_gain_loop_get_gain_index(
-                            stats_entry->connection->gain_loop[stats_entry->channel_index]),
-                        stats_entry->frame_outcome, stats_entry->rssi, stats_entry->rnsi,
-                        stats_entry->phase_offset);
+                        link_gain_loop_get_gain_index(stats_entry->connection->gain_loop[stats_entry->channel_index]),
+                        stats_entry->frame_outcome, stats_entry->rssi, stats_entry->rnsi, stats_entry->phase_offset,
+                        stats_entry->phase_offset_count);
 #endif /* WPS_ENABLE_PHY_STATS_PER_BANDS */
 #endif /* WPS_ENABLE_PHY_STATS */
 
+        /* Reset phase offset value to not compute older data if no frame is received */
+        memset(stats_entry->phase_offset, 0, PHASE_OFFSET_BYTE_COUNT);
         /* Set connection pointer to null to inform that processing statistics is done */
         stats_entry->connection = NULL;
     }
@@ -161,12 +158,18 @@ void wps_mac_statistics_update_main_stats(void *wps_mac)
     switch (mac->output_signal.main_signal) {
     case MAC_SIGNAL_WPS_FRAME_RX_SUCCESS:
         mac->main_connection->wps_stats.rx_received++;
-        mac->main_connection->wps_stats.rx_byte_received +=
-            (mac->main_xlayer->frame.payload_end_it - mac->main_xlayer->frame.payload_begin_it);
+        mac->main_connection->wps_stats.rx_byte_received += (mac->main_xlayer->frame.payload_end_it -
+                                                             mac->main_xlayer->frame.payload_begin_it);
+        if (mac->main_connection->cca.enable) {
+            mac->main_connection->wps_stats.cca_fail += mac->config.rx_cca_retry_count;
+        }
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
         mac->main_connection->wps_chan_stats[current_channel].rx_received++;
         mac->main_connection->wps_chan_stats[current_channel].rx_byte_received +=
             (mac->main_xlayer->frame.payload_end_it - mac->main_xlayer->frame.payload_begin_it);
+        if (mac->main_connection->cca.enable) {
+            mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.rx_cca_retry_count;
+        }
 #endif
         break;
     case MAC_SIGNAL_WPS_FRAME_RX_OVERRUN:
@@ -179,28 +182,8 @@ void wps_mac_statistics_update_main_stats(void *wps_mac)
         mac->main_connection->wps_stats.tx_success++;
         mac->main_connection->wps_stats.tx_byte_sent += (mac->main_xlayer->frame.payload_end_it -
                                                          mac->main_xlayer->frame.payload_begin_it);
-        if (mac->main_connection->cca.enable) {
-            if (mac->config.cca_try_count >= mac->config.cca_max_try_count) {
-                mac->main_connection->total_cca_events++;
-                mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
-                mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
-                mac->main_connection->wps_stats.cca_tx_fail++;
-                mac->main_connection->total_cca_tx_fail_count++;
-#if WPS_ENABLE_PHY_STATS_PER_BANDS
-                mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
-                mac->main_connection->wps_chan_stats[current_channel].cca_tx_fail++;
-#endif
-            } else if (mac->main_xlayer->frame.frame_outcome != FRAME_WAIT) {
-                mac->main_connection->total_cca_events++;
-                mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
-                mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
-                mac->main_connection->wps_stats.cca_pass++;
-#if WPS_ENABLE_PHY_STATS_PER_BANDS
-                mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
-                mac->main_connection->wps_chan_stats[current_channel].cca_pass++;
-#endif
-            }
-        }
+
+        wps_mac_update_stats(mac);
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
         mac->main_connection->wps_chan_stats[current_channel].tx_success++;
         mac->main_connection->wps_chan_stats[current_channel].tx_byte_sent +=
@@ -213,28 +196,7 @@ void wps_mac_statistics_update_main_stats(void *wps_mac)
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
         mac->main_connection->wps_chan_stats[current_channel].tx_fail++;
 #endif
-        if (mac->main_connection->cca.enable) {
-            if (mac->config.cca_try_count >= mac->config.cca_max_try_count) {
-                mac->main_connection->total_cca_events++;
-                mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
-                mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
-                mac->main_connection->wps_stats.cca_tx_fail++;
-                mac->main_connection->total_cca_tx_fail_count++;
-#if WPS_ENABLE_PHY_STATS_PER_BANDS
-                mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
-                mac->main_connection->wps_chan_stats[current_channel].cca_tx_fail++;
-#endif
-            } else if (mac->main_xlayer->frame.frame_outcome != FRAME_WAIT) {
-                mac->main_connection->total_cca_events++;
-                mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
-                mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
-                mac->main_connection->wps_stats.cca_pass++;
-#if WPS_ENABLE_PHY_STATS_PER_BANDS
-                mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
-                mac->main_connection->wps_chan_stats[current_channel].cca_pass++;
-#endif
-            }
-        }
+        wps_mac_update_stats(mac);
         break;
     case MAC_SIGNAL_WPS_TX_DROP:
         mac->main_connection->wps_stats.tx_drop++;
@@ -245,28 +207,7 @@ void wps_mac_statistics_update_main_stats(void *wps_mac)
         break;
     case MAC_SIGNAL_WPS_EMPTY:
         /* PHY NACK signal occurred but SAW has not yet trigger, handle CCA stats only. */
-        if (mac->main_connection->cca.enable) {
-            if (mac->config.cca_try_count >= mac->config.cca_max_try_count) {
-                mac->main_connection->total_cca_events++;
-                mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
-                mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
-                mac->main_connection->wps_stats.cca_tx_fail++;
-                mac->main_connection->total_cca_tx_fail_count++;
-#if WPS_ENABLE_PHY_STATS_PER_BANDS
-                mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
-                mac->main_connection->wps_chan_stats[current_channel].cca_tx_fail++;
-#endif
-            } else if (mac->main_xlayer->frame.frame_outcome != FRAME_WAIT) {
-                mac->main_connection->total_cca_events++;
-                mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
-                mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
-                mac->main_connection->wps_stats.cca_pass++;
-#if WPS_ENABLE_PHY_STATS_PER_BANDS
-                mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
-                mac->main_connection->wps_chan_stats[current_channel].cca_pass++;
-#endif
-            }
-        }
+        wps_mac_update_stats(mac);
         break;
     default:
         break;
@@ -322,8 +263,8 @@ void wps_mac_statistics_update_auto_stats(void *wps_mac)
     switch (mac->output_signal.auto_signal) {
     case MAC_SIGNAL_WPS_FRAME_RX_SUCCESS:
         mac->auto_connection->wps_stats.rx_received++;
-        mac->auto_connection->wps_stats.rx_byte_received +=
-            (mac->auto_xlayer->frame.payload_end_it - mac->auto_xlayer->frame.payload_begin_it);
+        mac->auto_connection->wps_stats.rx_byte_received += (mac->auto_xlayer->frame.payload_end_it -
+                                                             mac->auto_xlayer->frame.payload_begin_it);
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
         mac->auto_connection->wps_chan_stats[current_channel].rx_received++;
         mac->auto_connection->wps_chan_stats[current_channel].rx_byte_received +=
@@ -374,20 +315,54 @@ void wps_mac_statistics_update_auto_stats(void *wps_mac)
  *  @param[in] connection        Connection instance.
  *  @param[in] frame_outcome     Frame outcome value.
  */
-static inline void wps_mac_statistics_store_process_data(wps_mac_stats_entry_t *stats_data,
-                                                         wps_mac_t *mac,
-                                                         wps_connection_t *connection,
-                                                         frame_outcome_t frame_outcome)
+static inline void wps_mac_statistics_store_process_data(wps_mac_stats_entry_t *stats_data, wps_mac_t *mac,
+                                                         wps_connection_t *connection, frame_outcome_t frame_outcome)
 {
-    stats_data->connection    = connection;
+    stats_data->connection = connection;
     stats_data->channel_index = mac->channel_index;
     stats_data->frame_outcome = frame_outcome;
-    stats_data->rssi          = mac->config.rssi_raw;
-    stats_data->rnsi          = mac->config.rnsi_raw;
+    stats_data->rssi = mac->config.rssi_raw;
+    stats_data->rnsi = mac->config.rnsi_raw;
 #if PHASE_OFFSET_BYTE_COUNT == 1
     stats_data->phase_offset[0] = mac->config.phase_offset[0];
 #else
     memcpy(stats_data->phase_offset, mac->config.phase_offset, PHASE_OFFSET_BYTE_COUNT);
+    stats_data->phase_offset_count = mac->config.phase_offset_count;
 #endif
+}
+#endif
+
+#if WPS_ENABLE_LINK_STATS
+/** @brief Update the statistics.
+ *
+ *  @param[in] mac  MAC Layer instance.
+ */
+static void wps_mac_update_stats(wps_mac_t *mac)
+{
+#if WPS_ENABLE_PHY_STATS_PER_BANDS
+    uint8_t current_channel = mac->channel_index;
+#endif
+    if (mac->main_connection->cca.enable) {
+        if (mac->config.cca_try_count >= mac->config.cca_max_try_count) {
+            mac->main_connection->total_cca_events++;
+            mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
+            mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
+            mac->main_connection->wps_stats.cca_tx_fail++;
+            mac->main_connection->total_cca_tx_fail_count++;
+#if WPS_ENABLE_PHY_STATS_PER_BANDS
+            mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
+            mac->main_connection->wps_chan_stats[current_channel].cca_tx_fail++;
+#endif
+        } else if (mac->main_xlayer->frame.frame_outcome != FRAME_WAIT) {
+            mac->main_connection->total_cca_events++;
+            mac->main_connection->wps_stats.cca_fail += mac->config.cca_try_count;
+            mac->main_connection->total_cca_fail_count += mac->config.cca_try_count;
+            mac->main_connection->wps_stats.cca_pass++;
+#if WPS_ENABLE_PHY_STATS_PER_BANDS
+            mac->main_connection->wps_chan_stats[current_channel].cca_fail += mac->config.cca_try_count;
+            mac->main_connection->wps_chan_stats[current_channel].cca_pass++;
+#endif
+        }
+    }
 }
 #endif

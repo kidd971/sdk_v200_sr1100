@@ -1,7 +1,7 @@
 /** @file  filtering_functions.h
  *  @brief SPARK Audio Core ARM filtering functions.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -17,11 +17,11 @@ extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-#define FIR_MASK_16BITS 0x0000FFFF
-#define FIR_MASK_24BITS 0x00FFFFFF
+#define FIR_MASK_16BITS     0x0000FFFF
+#define FIR_MASK_24BITS     0x00FFFFFF
 
-#define FIR_BITSHIFT_16BITS      16
-#define FIR_BITSHIFT_24BITS      8
+#define FIR_BITSHIFT_16BITS 16
+#define FIR_BITSHIFT_24BITS 8
 
 /* TYPES **********************************************************************/
 /** @brief Error status returned by init functions in the library.

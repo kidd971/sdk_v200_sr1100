@@ -1,7 +1,7 @@
 /** @file  pairing_state_node.c
  *  @brief This file handles the function related to the node's pairing states.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -34,7 +34,7 @@ static pairing_addressing_message_t pairing_addressing_message;
 static pairing_addressing_response_t pairing_addressing_response;
 static pairing_addressing_action_t pairing_addressing_action;
 
-static uint8_t *received_payload[PAIRING_MAX_PAYLOAD_SIZE];
+static uint8_t received_payload[PAIRING_MAX_PAYLOAD_SIZE];
 static pairing_command_t received_pairing_command;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
@@ -167,8 +167,8 @@ static void authentication_wait_for_message(void)
 static void authentication_send_response(void)
 {
     /* Prepare the authentication response. */
-    pairing_authentication_response.pairing_command  = PAIRING_COMMAND_AUTHENTICATION_RESPONSE;
-    pairing_authentication_response.pairing_authentication_action  = pairing_authentication_action;
+    pairing_authentication_response.pairing_command = PAIRING_COMMAND_AUTHENTICATION_RESPONSE;
+    pairing_authentication_response.pairing_authentication_action = pairing_authentication_action;
 
     pairing_wireless_send_message((uint8_t *)&pairing_authentication_response, sizeof(pairing_authentication_response));
 
@@ -202,8 +202,8 @@ static void identification_send_message(void)
 {
     /* Prepare the identification message. */
     pairing_identification_message.pairing_command = PAIRING_COMMAND_IDENTIFICATION_MESSAGE;
-    pairing_identification_message.device_role     = pairing_address_get_device_role();
-    pairing_identification_message.unique_id       = pairing_wireless_get_radio_serial_number();
+    pairing_identification_message.device_role = pairing_address_get_device_role();
+    pairing_identification_message.unique_id = pairing_wireless_get_radio_serial_number();
 
     pairing_wireless_send_message((uint8_t *)&pairing_identification_message, sizeof(pairing_identification_message));
 
@@ -271,7 +271,7 @@ static void addressing_wait_for_message(void)
 static void addressing_send_response(void)
 {
     /* Prepare the addressing response. */
-    pairing_addressing_response.pairing_command  = PAIRING_COMMAND_ADDRESSING_RESPONSE;
+    pairing_addressing_response.pairing_command = PAIRING_COMMAND_ADDRESSING_RESPONSE;
     pairing_addressing_response.pairing_addressing_action = pairing_addressing_action;
 
     pairing_wireless_send_message((uint8_t *)&pairing_addressing_response, sizeof(pairing_addressing_response));

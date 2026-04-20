@@ -3,7 +3,7 @@
  *         number format. User have control over the precision bits (Y) and the
  *         integer value bits(X).
  *
- *  @copyright Copyright (C) 2020 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -29,19 +29,19 @@ static int32_t clip64_to_32(int64_t x);
 /* PUBLIC FUNCTIONS ***********************************************************/
 fixed_point_format_t fixed_point_initialization(uint8_t precision_bits, uint8_t integer_bits)
 {
-    fixed_point_format_t fixed_point_format;
+    fixed_point_format_t fixed_point_format = {0};
 
     if ((no_bits_defined(precision_bits, integer_bits)) ||
-         not_enough_fixed_point_bits(precision_bits + integer_bits + FIXED_POINT_SIGN_BIT)) {
+        not_enough_fixed_point_bits(precision_bits + integer_bits + FIXED_POINT_SIGN_BIT)) {
         apply_default_configuration(&fixed_point_format);
     } else if (integer_bits == 0) {
-        fixed_point_format.precision    = precision_bits;
+        fixed_point_format.precision = precision_bits;
         fixed_point_format.integer_bits = FIXED_POINT_TOTAL_NUMBER_OF_BITS - precision_bits - FIXED_POINT_SIGN_BIT;
     } else if (precision_bits == 0) {
-        fixed_point_format.precision    = FIXED_POINT_TOTAL_NUMBER_OF_BITS - integer_bits - FIXED_POINT_SIGN_BIT;
+        fixed_point_format.precision = FIXED_POINT_TOTAL_NUMBER_OF_BITS - integer_bits - FIXED_POINT_SIGN_BIT;
         fixed_point_format.integer_bits = integer_bits;
     } else {
-        fixed_point_format.precision    = precision_bits;
+        fixed_point_format.precision = precision_bits;
         fixed_point_format.integer_bits = integer_bits;
     }
 
@@ -88,8 +88,8 @@ int32_t fixed_point_q_to_int_conv(fixed_point_format_t *fixed_point_format, q_nu
 
 q_num_t fixed_point_add(q_num_t q_num1, q_num_t q_num2)
 {
-    q_num_t result;
-    int64_t result_tmp;
+    q_num_t result = 0;
+    int64_t result_tmp = 0;
 
     result_tmp = clip64_to_32((int64_t)q_num1 + (int64_t)q_num2);
 
@@ -105,8 +105,8 @@ q_num_t fixed_point_sub(q_num_t q_num1, q_num_t q_num2)
 
 q_num_t fixed_point_multiply(fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2)
 {
-    q_num_t result;
-    int64_t result_tmp;
+    q_num_t result = 0;
+    int64_t result_tmp = 0;
 
     result_tmp = (int64_t)q_num1 * (int64_t)q_num2;
 
@@ -121,9 +121,9 @@ q_num_t fixed_point_multiply(fixed_point_format_t *fixed_point_format, q_num_t q
 
 q_num_t fixed_point_division(fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2)
 {
-    int32_t result;
-    int64_t nominator_scale;
-    int64_t result_tmp;
+    int32_t result = 0;
+    int64_t nominator_scale = 0;
+    int64_t result_tmp = 0;
 
     nominator_scale = (int64_t)q_num1 << fixed_point_format->precision;
 
@@ -138,12 +138,12 @@ q_num_t fixed_point_division(fixed_point_format_t *fixed_point_format, q_num_t q
 
 fixed_point_mean_format_t fixed_point_mean_init(fixed_point_format_t *fixed_point_format, uint16_t mean_size)
 {
-    fixed_point_mean_format_t fixed_point_mean_format;
+    fixed_point_mean_format_t fixed_point_mean_format = {0};
 
-    fixed_point_mean_format.max_mean_size          = mean_size;
+    fixed_point_mean_format.max_mean_size = mean_size;
     fixed_point_mean_format.mean_accumulated_value = 0;
-    fixed_point_mean_format.mean_index             = 0;
-    fixed_point_mean_format.mean_precision_bits    = fixed_point_format->precision;
+    fixed_point_mean_format.mean_index = 0;
+    fixed_point_mean_format.mean_precision_bits = fixed_point_format->precision;
 
     return fixed_point_mean_format;
 }
@@ -161,20 +161,21 @@ int64_t fixed_point_mean_add(fixed_point_mean_format_t *fixed_point_mean_format,
 void fixed_point_mean_reset(fixed_point_mean_format_t *fixed_point_mean_format)
 {
     fixed_point_mean_format->mean_accumulated_value = 0;
-    fixed_point_mean_format->mean_index             = 0;
+    fixed_point_mean_format->mean_index = 0;
 }
 
 q_num_t fixed_point_mean_calculate(fixed_point_mean_format_t *fixed_point_mean_format, uint16_t size)
 {
-    q_num_t result;
-    int64_t nominator_scale;
-    int64_t result_tmp;
+    q_num_t result = 0;
+    int64_t nominator_scale = 0;
+    int64_t result_tmp = 0;
     q_num_t mean_size_scale = 0;
 
     if (size != 0) {
         mean_size_scale = (q_num_t)size << fixed_point_mean_format->mean_precision_bits;
     } else {
-        mean_size_scale = (q_num_t)fixed_point_mean_format->max_mean_size << fixed_point_mean_format->mean_precision_bits;
+        mean_size_scale = (q_num_t)fixed_point_mean_format->max_mean_size
+                          << fixed_point_mean_format->mean_precision_bits;
     }
 
     nominator_scale = fixed_point_mean_format->mean_accumulated_value << fixed_point_mean_format->mean_precision_bits;
@@ -238,7 +239,7 @@ static bool not_enough_fixed_point_bits(uint8_t total_nb_bits)
 static void apply_default_configuration(fixed_point_format_t *fixed_point_format)
 {
     fixed_point_format->integer_bits = FIXED_POINT_DEFAULT_INTEGER_BITS;
-    fixed_point_format->precision    = FIXED_POINT_DEFAULT_PRECISION;
+    fixed_point_format->precision = FIXED_POINT_DEFAULT_PRECISION;
 }
 
 /** @brief Saturate given float value.

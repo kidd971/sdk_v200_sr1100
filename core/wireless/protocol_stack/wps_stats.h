@@ -1,7 +1,7 @@
 /** @file  wps_stats.h
  *  @brief Wireless Protocol Stack statistics.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -203,10 +203,10 @@ float wps_stats_get_tx_link_usage_ratio(wps_connection_t *connection);
 float wps_stats_get_rx_link_usage_ratio(wps_connection_t *connection);
 #endif /* WPS_ENABLE_STATS_USED_TIMESLOTS */
 
-/** @brief Get average RSSI on the physical layer.
+/** @brief Get the connection's average RSSI in tenths of dB.
  *
  *  @param[in] connection  WPS connection object.
- *  @return Average RSSI.
+ *  @return Average RSSI in tenths of dB.
  */
 static inline uint32_t wps_stats_get_phy_rssi_avg(wps_connection_t *connection)
 {
@@ -219,16 +219,6 @@ static inline uint32_t wps_stats_get_phy_rssi_avg(wps_connection_t *connection)
     return rssi;
 }
 
-/** @brief Get last received RSSI measurement on the given connection.
- *
- *  @param[in] connection  WPS connection object.
- *  @return Instantaneous RSSI.
- */
-static inline uint32_t wps_stats_get_phy_rssi(wps_connection_t *connection)
-{
-    return link_lqi_get_inst_rssi(&connection->lqi);
-}
-
 /** @brief Get last received RSSI measurement on the given connection in tenth of dB.
  *
  *  @param[in] connection  WPS connection object.
@@ -239,24 +229,14 @@ static inline uint32_t wps_stats_get_inst_phy_rssi_tenth_db(wps_connection_t *co
     return link_lqi_get_inst_rssi_tenth_db(&connection->lqi);
 }
 
-/** @brief Get average RNSI on the physical layer.
+/** @brief Get the connection's average RNSI in tenths of dB.
  *
  *  @param[in] connection  WPS connection object.
- *  @return Average RNSI.
+ *  @return Average RNSI in tenths of dB.
  */
 static inline uint32_t wps_stats_get_phy_rnsi_avg(wps_connection_t *connection)
 {
     return link_lqi_get_avg_rnsi_tenth_db(&connection->lqi);
-}
-
-/** @brief Get last received RNSI measurement on the given connection.
- *
- *  @param[in] connection  WPS connection object.
- *  @return Instantaneous RNSI.
- */
-static inline uint32_t wps_stats_get_phy_rnsi(wps_connection_t *connection)
-{
-    return link_lqi_get_inst_rnsi(&connection->lqi);
 }
 
 /** @brief Get last received RNSI measurement on the given connection in tenth of dB.
@@ -269,19 +249,40 @@ static inline uint32_t wps_stats_get_inst_phy_rnsi_tenth_db(wps_connection_t *co
     return link_lqi_get_inst_rnsi_tenth_db(&connection->lqi);
 }
 
-/** @brief Get link margin on the physical layer.
+/** @brief Get the connection's link margin average in tenths of dB.
  *
  *  @param[in] connection  WPS connection object.
- *  @return Link margin.
+ *  @return Link margin average in tenths of dB.
  */
 int32_t wps_stats_get_phy_margin_avg(wps_connection_t *connection);
 
-/** @brief Get the instantaneous link margin on the physical layer.
+/** @brief Get the connection's last computed instantaneous link margin in tenths of dB.
  *
  *  @param[in] connection  WPS connection object.
- *  @return Link margin.
+ *  @return Instantaneous Link margin in tenths of dB.
  */
 int32_t wps_stats_get_inst_phy_margin(wps_connection_t *connection);
+
+/** @brief Get the connection's last computed link margin block average in tenths of dB.
+ *
+ *  @param[in] connection  WPS connection object.
+ *  @return Link margin block average in tenths of dB.
+ */
+int32_t wps_stats_get_link_margin_block_avg_tenth_db(wps_connection_t *connection);
+
+/** @brief Get the connection's last computed RSSI block average in tenths of dB.
+ *
+ *  @param[in] connection  WPS connection object.
+ *  @return RSSI block average in tenths of dB.
+ */
+int32_t wps_stats_get_rssi_block_avg_tenth_db(wps_connection_t *connection);
+
+/** @brief Get the connection's last computed RNSI block average in tenths of dB.
+ *
+ *  @param[in] connection  WPS connection object.
+ *  @return RSSI block average in tenths of dB.
+ */
+int32_t wps_stats_get_rnsi_block_avg_tenth_db(wps_connection_t *connection);
 
 /** @brief Get phase offset instantaneous values.
  *
@@ -289,8 +290,7 @@ int32_t wps_stats_get_inst_phy_margin(wps_connection_t *connection);
  *  @param[in] index       Index.
  *  @return Phase offset values.
  */
-static inline uint32_t wps_stats_get_phy_inst_phase_offset(wps_connection_t *connection,
-                                                           uint8_t index)
+static inline uint32_t wps_stats_get_phy_inst_phase_offset(wps_connection_t *connection, uint8_t index)
 {
     return link_lqi_get_inst_phase_offset(&connection->lqi, index);
 }
@@ -335,6 +335,26 @@ static inline uint32_t wps_stats_get_phy_nack_frame_count(wps_connection_t *conn
 static inline uint32_t wps_stats_get_phy_received_frame_count(wps_connection_t *connection)
 {
     return link_lqi_get_received_count(&connection->lqi);
+}
+
+/** @brief Get received data size invalid frame count on the physical layer.
+ *
+ *  @param[in] connection  WPS connection object.
+ *  @return Received invalid data size count frame.
+ */
+static inline uint32_t wps_stats_get_phy_received_data_size_invalid_frame_count(wps_connection_t *connection)
+{
+    return link_lqi_get_received_data_size_invalid_count(&connection->lqi);
+}
+
+/** @brief Get received header size invalid frame count on the physical layer.
+ *
+ *  @param[in] connection  WPS connection object.
+ *  @return Received invalid header size count frame.
+ */
+static inline uint32_t wps_stats_get_phy_received_header_size_invalid_frame_count(wps_connection_t *connection)
+{
+    return link_lqi_get_received_header_size_invalid_count(&connection->lqi);
 }
 
 /** @brief Get missing frame count on the physical layer.
@@ -406,26 +426,26 @@ float wps_stats_get_phy_mrr(wps_connection_t *connection);
  */
 float wps_stats_get_phy_per(wps_connection_t *connection);
 
-/** @brief Get RSSI code average.
+/** @brief Get RSSI average raw.
+ *
+ *  @note Raw values are hardware-specific codes that require conversion to human-readable units (e.g., tenths of dB)
+ *        for interpretation. The average is calculated based on all received RSSI values.
  *
  *  @param[in] connection  WPS connection object.
- *  @return RSSI average.
+ *  @return RSSI average represented in radio-specific code (raw value).
  */
 int32_t wps_stats_get_phy_rssi_avg_raw(wps_connection_t *connection);
 
-/** @brief Get RNSI code average.
+/** @brief Get RNSI average raw.
+ *
+ *  @note Raw values are hardware-specific codes that require conversion to human-readable units (e.g., tenths of dB)
+ *        for interpretation. The average is calculated based on all received RNSI values.
  *
  *  @param[in] connection  WPS connection object.
- *  @return RNSI average.
+ *  @return RNSI average represented in radio-specific code (raw value).
  */
 int32_t wps_stats_get_phy_rnsi_avg_raw(wps_connection_t *connection);
 
-/** @brief Get link margin code average.
- *
- *  @param[in] connection  WPS connection object.
- *  @return Link margin average.
- */
-int32_t wps_stats_get_phy_margin_avg_raw(wps_connection_t *connection);
 #endif /* WPS_ENABLE_PHY_STATS */
 
 /** @brief Get duplicated frame count on the physical layer.
@@ -469,39 +489,6 @@ static inline uint32_t wps_stats_get_retry_frame_count(wps_connection_t *connect
 }
 
 #if WPS_ENABLE_STATS_USED_TIMESLOTS
-/** @brief Get average Received Signal Strength Indicator (RSSI) of frames with payload.
- *
- *  @param[in] connection  WPS connection object.
- *  @return Average RSSI.
- */
-static inline uint32_t wps_stats_get_rssi_avg(wps_connection_t *connection)
-{
-    uint16_t rssi = link_lqi_get_avg_rssi_tenth_db(&connection->used_frame_lqi);
-    uint16_t rnsi = link_lqi_get_avg_rnsi_tenth_db(&connection->used_frame_lqi);
-
-    /* RSSI can't be lower than noise floor */
-    rssi = (rssi < rnsi) ? rnsi : rssi;
-
-    return rssi;
-}
-
-/** @brief Get average Received Noise Strength Indicator (RNSI) of frames with payload.
- *
- *  @param[in] connection  WPS connection object.
- *  @return Average RNSI.
- */
-static inline uint32_t wps_stats_get_rnsi_avg(wps_connection_t *connection)
-{
-    return link_lqi_get_avg_rnsi_tenth_db(&connection->used_frame_lqi);
-}
-
-/** @brief Get link margin of frames with payload.
- *
- *  @param[in] connection  WPS connection object.
- *  @return Link margin.
- */
-int32_t wps_stats_get_margin_avg(wps_connection_t *connection);
-
 /** @brief Get ACK frame count of frames with payload.
  *
  *  @param[in] connection  WPS connection object.
@@ -615,8 +602,7 @@ void wps_stats_reset(wps_connection_t *connection);
  *  @param[in] channel_idx Channel index.
  *  @return Average RSSI.
  */
-static inline uint32_t wps_stats_get_chan_rssi_avg(wps_connection_t *connection,
-                                                   uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_rssi_avg(wps_connection_t *connection, uint8_t channel_idx)
 {
     uint16_t rssi = link_lqi_get_avg_rssi_tenth_db(&connection->channel_lqi[channel_idx]);
     uint16_t rnsi = link_lqi_get_avg_rnsi_tenth_db(&connection->channel_lqi[channel_idx]);
@@ -644,8 +630,7 @@ static inline uint32_t wps_stats_get_chan_rssi(wps_connection_t *connection, uin
  *  @param[in] channel_idx Channel index.
  *  @return Average RNSI.
  */
-static inline uint32_t wps_stats_get_chan_rnsi_avg(wps_connection_t *connection,
-                                                   uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_rnsi_avg(wps_connection_t *connection, uint8_t channel_idx)
 {
     return link_lqi_get_avg_rnsi_tenth_db(&connection->channel_lqi[channel_idx]);
 }
@@ -697,8 +682,7 @@ int32_t wps_stats_get_chan_margin_avg(wps_connection_t *connection, uint8_t chan
  *  @param[in] channel_idx Channel index.
  *  @return Ack frame count.
  */
-static inline uint32_t wps_stats_get_chan_ack_frame_count(wps_connection_t *connection,
-                                                          uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_ack_frame_count(wps_connection_t *connection, uint8_t channel_idx)
 {
     return link_lqi_get_ack_count(&connection->channel_lqi[channel_idx]);
 }
@@ -709,8 +693,7 @@ static inline uint32_t wps_stats_get_chan_ack_frame_count(wps_connection_t *conn
  *  @param[in] channel_idx Channel index.
  *  @return Nack frame count.
  */
-static inline uint32_t wps_stats_get_chan_nack_frame_count(wps_connection_t *connection,
-                                                           uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_nack_frame_count(wps_connection_t *connection, uint8_t channel_idx)
 {
     return link_lqi_get_nack_count(&connection->channel_lqi[channel_idx]);
 }
@@ -721,8 +704,7 @@ static inline uint32_t wps_stats_get_chan_nack_frame_count(wps_connection_t *con
  *  @param[in] channel_idx Channel index.
  *  @return Received frame count.
  */
-static inline uint32_t wps_stats_get_chan_received_frame_count(wps_connection_t *connection,
-                                                               uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_received_frame_count(wps_connection_t *connection, uint8_t channel_idx)
 {
     return link_lqi_get_received_count(&connection->channel_lqi[channel_idx]);
 }
@@ -733,8 +715,7 @@ static inline uint32_t wps_stats_get_chan_received_frame_count(wps_connection_t 
  *  @param[in] channel_idx Channel index.
  *  @return Missing frame count.
  */
-static inline uint32_t wps_stats_get_chan_missing_frame_count(wps_connection_t *connection,
-                                                              uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_missing_frame_count(wps_connection_t *connection, uint8_t channel_idx)
 {
     return link_lqi_get_lost_count(&connection->channel_lqi[channel_idx]);
 }
@@ -745,8 +726,7 @@ static inline uint32_t wps_stats_get_chan_missing_frame_count(wps_connection_t *
  *  @param[in] channel_idx Channel index.
  *  @return Rejected frame count.
  */
-static inline uint32_t wps_stats_get_chan_rejected_frame_count(wps_connection_t *connection,
-                                                               uint8_t channel_idx)
+static inline uint32_t wps_stats_get_chan_rejected_frame_count(wps_connection_t *connection, uint8_t channel_idx)
 {
     return link_lqi_get_rejected_count(&connection->channel_lqi[channel_idx]);
 }

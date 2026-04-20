@@ -2,7 +2,7 @@
  *
  *  @brief Wireless Core audio endpoint initialization.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -32,8 +32,7 @@ typedef struct ep_swc_instance {
  *  @param[out] swc_producer_iface  Wireless Core producer audio endpoint interface.
  *  @param[out] swc_consumer_iface  Wireless Core consumer audio endpoint interface.
  */
-void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface,
-                           sac_endpoint_interface_t *swc_consumer_iface);
+void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface, sac_endpoint_interface_t *swc_consumer_iface);
 
 #ifdef __cplusplus
 }

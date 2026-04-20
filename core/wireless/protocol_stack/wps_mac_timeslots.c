@@ -1,7 +1,7 @@
 /** @file  wps_mac_timeslots.c
  *  @brief Wireless Protocol Stack MAC time slots module.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -13,16 +13,16 @@
 /* PUBLIC FUNCTIONS ***********************************************************/
 void wps_mac_timeslots_find_received_timeslot_and_connection_main(wps_mac_t *wps_mac, const xlayer_frame_t *const frame)
 {
-    uint8_t ts_id_saw;
-    uint8_t time_slot_id;
-    uint8_t connection_id;
-    wps_connection_t *connection;
-    uint8_t connection_count;
-    uint8_t *conn_id;
-    wps_connection_t *prev_auto_connection;
+    uint8_t ts_id_saw = 0;
+    uint8_t time_slot_id = 0;
+    uint8_t connection_id = 0;
+    wps_connection_t *connection = NULL;
+    uint8_t connection_count = 0;
+    uint8_t *conn_id = NULL;
+    wps_connection_t *prev_auto_connection = NULL;
 
     connection = wps_mac->main_connection;
-    connection_count = wps_mac->timeslot->main_connection_count;
+    connection_count = wps_mac->timeslot->main_conn_list.connection_count;
     conn_id = &wps_mac->main_connection_id;
     prev_auto_connection = wps_mac->auto_connection;
     if (wps_mac_is_network_node(wps_mac)) {
@@ -43,7 +43,7 @@ void wps_mac_timeslots_find_received_timeslot_and_connection_main(wps_mac_t *wps
                                                                               wps_mac->main_connection_id);
         wps_mac->auto_connection = link_scheduler_get_current_auto_connection(&wps_mac->scheduler, 0);
         connection = wps_mac->main_connection;
-        connection_count = wps_mac->timeslot->main_connection_count;
+        connection_count = wps_mac->timeslot->main_conn_list.connection_count;
     }
 
     if (connection_count > 1) {
@@ -73,18 +73,18 @@ void wps_mac_timeslots_find_received_timeslot_and_connection_main(wps_mac_t *wps
 
 void wps_mac_timeslots_find_received_timeslot_and_connection_auto(wps_mac_t *wps_mac, const xlayer_frame_t *const frame)
 {
-    uint8_t connection_id;
-    wps_connection_t *connection;
-    uint8_t connection_count;
-    uint8_t *conn_id;
-    link_protocol_t *link_protocol;
+    uint8_t connection_id = 0;
+    wps_connection_t *connection = NULL;
+    uint8_t connection_count = 0;
+    uint8_t *conn_id = NULL;
+    link_protocol_t *link_protocol = NULL;
 
     connection = wps_mac->auto_connection;
     /* If an auto-reply connection does not exist, use the main connection to parse the header */
     if (connection == NULL) {
         connection = wps_mac->main_connection;
     }
-    connection_count = wps_mac->timeslot->auto_connection_count;
+    connection_count = wps_mac->timeslot->auto_conn_list.connection_count;
     conn_id = &wps_mac->auto_connection_id;
     link_protocol = &connection->link_protocol;
 
@@ -93,7 +93,7 @@ void wps_mac_timeslots_find_received_timeslot_and_connection_auto(wps_mac_t *wps
      */
     if (connection == NULL) {
         connection = wps_mac->main_connection;
-        connection_count = wps_mac->timeslot->main_connection_count;
+        connection_count = wps_mac->timeslot->main_conn_list.connection_count;
         conn_id = &wps_mac->main_ack_connection_id;
         link_protocol = connection->auto_link_protocol;
     }

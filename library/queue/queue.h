@@ -1,7 +1,7 @@
 /** @file queue.h
  *  @brief Queue management.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -19,43 +19,64 @@ extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-#define QUEUE_LIMIT_UNLIMITED  0xffff
-#define QUEUE_NB_BYTES_NEEDED(num_nodes, data_size) ((num_nodes) * ((sizeof(queue_node_t) + (data_size))))
+/*! Calculate number of bytes required for the queue. */
+#define QUEUE_NB_BYTES_NEEDED(num_queues, num_nodes, data_size) \
+    ((num_nodes) *                                              \
+     (sizeof(queue_node_t) + data_size + (sizeof(queue_node_t *) * num_queues) + (sizeof(queue_t *) * num_queues)))
 
 /* TYPES **********************************************************************/
+/** @brief Node instance.
+ */
 typedef struct queue_node {
-    uint8_t           *data;
-    struct queue      *home_queue;
-    struct queue_node *next;
+    /*! Pointer to the node’s payload. */
+    uint8_t *data;
+    /*! The free queue that owns this node. */
+    struct queue *home_queue;
+    /*! Pointer to the next node in the current queue. */
+    struct queue_node **next;
+    /*! Pointer to the list of queues in which this node currently resides. */
+    struct queue **current_queue;
     /*! Number of bytes allocated for each node. */
     uint16_t data_size;
     /*! Number of times this node has been enqueued. This allows a node to be shared between different queues. It will
      *  not be returned to the home queue until all queues freed the node.
      */
     uint8_t copy_count;
+    /*! Number of queues this node has been enqueued into. */
+    uint8_t num_queues;
 } queue_node_t;
 
+/** @brief Queue instance.
+ */
 typedef struct queue {
+    /*! Pointer to the first node in the queue. */
     queue_node_t *head;
+    /*! Pointer to the last node in the queue. */
     queue_node_t *tail;
-    uint16_t     length;
-    uint16_t     limit;
-    bool         free_queue_type;
-    const char   *q_name;
+     /*! Current number of nodes in the queue. */
+    uint16_t length;
+    /*! Maximum number of nodes allowed in the queue. */
+    uint16_t limit;
+    /*! Indicates if this queue is a free queue type. */
+    bool free_queue_type;
+    /*! Pointer to the name of the queue. */
+    const char *q_name;
+    /*! Pointer to the previous queue in queues list. */
     struct queue *prev_queue;
 } queue_t;
 
+/** @brief Queue statistics instance.
+ */
 typedef struct queue_stats {
+    /*! Current number of nodes in the queue. */
     uint16_t queue_length;
+    /*! Maximum number of nodes allowed in the queue. */
     uint16_t queue_limit;
-    char     *queue_name;
-    bool     queue_free_type;
- } queue_stats_t;
-
-typedef struct queue_critical_cfg {
-    void (*enter_critical)(void);
-    void (*exit_critical)(void);
-} queue_critical_cfg_t;
+    /*! Pointer to the name of the queue. */
+    char *queue_name;
+    /*! Indicates if this queue is a free queue type. */
+    bool queue_free_type;
+} queue_stats_t;
 
 /* MACROS *********************************************************************/
 /** @brief Return pointer to data + offset for the specified node.
@@ -67,10 +88,8 @@ typedef struct queue_critical_cfg {
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize queue management module.
- *
- *  @param[in] critical  Pointer to critical section enter and exit functions.
  */
-void queue_init(queue_critical_cfg_t critical);
+void queue_init(void);
 
 /** @brief Initialize a new node pool.
  *
@@ -78,11 +97,12 @@ void queue_init(queue_critical_cfg_t critical);
  *  @param[in] new_free_queue  Queue where new nodes will be stored.
  *  @param[in] num_nodes       Number of nodes in this free pool.
  *  @param[in] data_size       Data size of each node.
+ *  @param[in] num_queues      Total number of queues in the system.
  *  @param[in] queue_name      Queue name.
  *  @return Amount of memory consumed by this pool. This value rounded up to the nearest 4-byte multiple.
  */
-uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_nodes,
-                         uint16_t data_size, const char *queue_name);
+uint32_t queue_init_pool(uint8_t *pool, queue_t *new_free_queue, uint16_t num_nodes, uint16_t data_size,
+                         uint8_t num_queues, const char *queue_name);
 
 /** @brief Initialize a new queue.
  *

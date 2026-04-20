@@ -6,7 +6,7 @@
  *  properly generate a complete packet regrouping one
  *  or multiple information.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -26,8 +26,9 @@ void link_protocol_add(link_protocol_t *link_protocol, link_protocol_info_t *pro
     *err = LINK_PROTO_NO_ERROR;
     if (link_protocol->current_number_of_protocol < MAX_NUMBER_OF_PROTOCOL) {
         if (link_protocol->current_buffer_offset < link_protocol->max_buffer_size) {
-            link_protocol->protocol_info[link_protocol->current_number_of_protocol]       = *protocol_info;
-            link_protocol->protocol_info[link_protocol->current_number_of_protocol].index = link_protocol->current_buffer_offset;
+            link_protocol->protocol_info[link_protocol->current_number_of_protocol] = *protocol_info;
+            link_protocol->protocol_info[link_protocol->current_number_of_protocol].index =
+                link_protocol->current_buffer_offset;
             link_protocol->current_number_of_protocol++;
             link_protocol->current_buffer_offset += protocol_info->size;
         } else {
@@ -40,7 +41,7 @@ void link_protocol_add(link_protocol_t *link_protocol, link_protocol_info_t *pro
 
 void link_protocol_send_buffer(link_protocol_t *link_protocol, uint8_t *buffer_to_send, uint32_t *size)
 {
-    uint32_t size_to_send       = 0;
+    uint32_t size_to_send = 0;
 
     for (uint8_t i = 0; i < link_protocol->current_number_of_protocol; i++) {
         link_protocol->protocol_info[i].send(link_protocol->protocol_info[i].instance, buffer_to_send + size_to_send);

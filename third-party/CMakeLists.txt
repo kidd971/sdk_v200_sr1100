@@ -17,3 +17,6 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/stmicroelectronics")
     add_subdirectory(stmicroelectronics)
 endif()
 
+if(IS_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/ThrowTheSwitch")
+    add_subdirectory(ThrowTheSwitch)
+endif()

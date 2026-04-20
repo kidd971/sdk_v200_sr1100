@@ -19,7 +19,7 @@
  *
  *  Based on arm_fir_decimate_q15.c CMSIS DSP Library V1.9.0.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *             Copyright (C) 2010-2021 ARM Limited or its affiliates. All rights reserved.
  *
  *  @author    Derivative: SPARK FW Team.
@@ -63,11 +63,11 @@ void fir_decimate(const fir_decimate_instance_t *instance, const uint8_t *src, u
 {
     int32_t *p_state = instance->p_state;         /* State pointer */
     const int32_t *p_coeffs = instance->p_coeffs; /* Coefficient pointer */
-    int32_t *p_state_cur;                         /* Points to the current sample of the state */
-    int32_t *px0;                                 /* Temporary pointer for state buffer */
-    const int32_t *pb;                            /* Temporary pointer for coefficient buffer */
-    int32_t x0, c0;                               /* Temporary variables to hold state and coefficient values */
-    int64_t acc0;                                 /* Accumulator */
+    int32_t *p_state_cur = NULL;                  /* Points to the current sample of the state */
+    int32_t *px0 = NULL;                          /* Temporary pointer for state buffer */
+    const int32_t *pb = NULL;                     /* Temporary pointer for coefficient buffer */
+    int32_t x0 = 0, c0 = 0;                       /* Temporary variables to hold state and coefficient values */
+    int64_t acc0 = 0;                             /* Accumulator */
     uint32_t num_taps = instance->num_taps;       /* Number of filter coefficients in the filter */
     uint32_t i, tap_count, block_count, out_block_size = block_size / instance->divide_ratio; /* Loop counters */
 

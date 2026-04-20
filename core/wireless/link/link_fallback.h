@@ -1,7 +1,7 @@
 /** @file  link_fallback.h
  *  @brief Link module to handle dynamic settings based on the payload size.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -35,6 +35,12 @@ typedef struct link_fallback {
  *  @param[in] threshold_count  Number of thresholds.
  */
 void link_fallback_init(link_fallback_t *const link_fallback, const uint8_t *const threshold, uint8_t threshold_count);
+
+/** @brief Disable the link fallback module.
+ *
+ *  @param[in] link_fallback  Link fallback instance.
+ */
+void link_fallback_disable(link_fallback_t *const link_fallback);
 
 /** @brief Get the current fallback channel index based on the payload size.
  *

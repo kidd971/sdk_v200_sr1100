@@ -1,7 +1,7 @@
 /** @file  xlayer_circular_data.c
  *  @brief xlayer circular data container.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -29,7 +29,7 @@ uint8_t *xlayer_circular_data_allocate_space(xlayer_circular_data_t *circ_data, 
     uint8_t *out_data = NULL;
     uint16_t last_head = circ_data->head;
 
-    /* Find a contiguous memory area of ​​size 'required_space'. */
+    /* Find a contiguous memory area of size 'required_space'. */
     if (circ_data->head >= circ_data->tail) {
         uint16_t free_bytes_to_end = circ_data->buffer_size - circ_data->head;
         uint16_t free_bytes_from_begin = circ_data->tail;

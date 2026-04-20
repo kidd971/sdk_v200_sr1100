@@ -3,7 +3,7 @@
  *         number format. User have control over the integer value bits (2^X) and the
  *         precision bits (2^-Y).
  *
- *  @copyright Copyright (C) 2020 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.

@@ -1,7 +1,7 @@
 /** @file  hello_world_node.c
  *  @brief This is a basic example of how to use the SPARK Wireless Core.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -12,8 +12,11 @@
 #include "dataforge.h"
 #include "datalink_facade.h"
 #include "pairing_api.h"
+#include "pairing_cfg.h"
 #include "swc_api.h"
+#include "swc_cfg.h"
 #include "swc_cfg_node.h"
+#include "swc_error.h"
 #include "swc_stats.h"
 
 /* CONSTANTS ******************************************************************/
@@ -25,43 +28,53 @@
 #endif
 
 #define MAX_PAYLOAD_SIZE_BYTE 64
-#define STATS_ARRAY_LENGTH    500
+#define STATS_ARRAY_LENGTH    2000
+#define PRINT_INTERVAL_MS     1000
+/* Size of the buffer used to print errors. */
+#define ERROR_MESSAGE_BUFFER_SIZE 50
 
-/* The timeout in second after which the pairing procedure will abort. */
-#define PAIRING_TIMEOUT_IN_SECONDS 10
-/* The pairing device role is used for the coordinator's pairing discovery list. */
-#define PAIRING_DEVICE_ROLE 1
-/* The application code prevents unwanted devices from pairing with this application. */
-#define PAIRING_APP_CODE 0x0000000000000444
+/* TYPES **********************************************************************/
+/** @brief Enumeration representing device pairing states.
+ */
+typedef enum device_pairing_state {
+    /*! The device is unpaired with the Coordinator. */
+    DEVICE_UNPAIRED,
+    /*! The device pairing is active. */
+    DEVICE_PAIRING,
+    /*! The device is paired with the Coordinator. */
+    DEVICE_PAIRED,
+} device_pairing_state_t;
 
 /* PRIVATE GLOBALS ************************************************************/
 /* ** Wireless Core ** */
 static uint8_t swc_memory_pool[SWC_MEM_POOL_SIZE];
-static swc_node_t *node;
 static swc_connection_t *rx_conn;
 
 static uint32_t timeslot_us[] = SCHEDULE;
 static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
 static uint32_t channel_frequency[] = CHANNEL_FREQ;
-static int32_t rx_timeslots[] = RX_TIMESLOTS;
+static int32_t rx_timeslots[] = COORD_TIMESLOTS;
 
 /* ** Application Specific ** */
-static uint32_t rx_count;
-static bool print_stats_now;
 static bool reset_stats_now;
-
-static bool device_state_paired;
+static facade_certification_mode_t certification_mode;
+/* Variables supporting pairing between the two devices. */
+static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 
 /*! Sequence number for pseudo random payload. */
-uint8_t seq_num;
+static uint8_t seq_num;
+static uint32_t valid_payload_count;
+static uint32_t invalid_payload_count;
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
+static void app_init(void);
 /* **** Wireless Core **** */
 static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err);
-static void conn_rx_success_callback(void *conn);
+static void conn_rx_success_callback(void *conn, void *arg);
 /* **** Application **** */
+static bool should_print_stats(void);
 static void print_stats(void);
 static void reset_stats(void);
 
@@ -70,6 +83,7 @@ static void unpair_device(void);
 
 static void pairing_application_callback(void);
 static void abort_pairing_procedure(void);
+static void pairing_button_callback(void);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
@@ -79,28 +93,57 @@ int main(void)
     /* Initialize wireless core context switch handler before pairing is available */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
-    while (1) {
-        if (!device_state_paired) {
-            /* When the device is not paired, the only action possible for the user is the pairing. */
-            facade_button_handling(enter_pairing_mode, NULL, NULL, NULL);
-        } else {
-            /* When the device is paired, normal operations are executed. */
-            facade_button_handling(unpair_device, reset_stats, NULL, NULL);
-            /* Print stats every 1000 transmissions */
-            if (print_stats_now) {
-                if (reset_stats_now) {
-                    swc_connection_reset_stats(rx_conn);
-                    reset_stats_now = false;
-                } else {
-                    print_stats();
-                }
-                print_stats_now = false;
+    facade_button_callbacks_t button_callbacks = {
+        .pairing_callback = pairing_button_callback,
+        .reset_stats_callback = reset_stats,
+    };
+    facade_set_button_callbacks(button_callbacks);
+
+    certification_mode = facade_get_certification_mode();
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        /* Init app in certification mode. */
+        app_init();
+        device_pairing_state = DEVICE_PAIRED;
+        while (1) {
+            /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
+            if (should_print_stats()) {
+                print_stats();
             }
         }
+    }
+
+    device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    enter_pairing_mode();
+
+    while (1) {
+        facade_button_handling();
+
+        /* Print received string and stats every PRINT_INTERVAL_MS */
+        if (should_print_stats()) {
+            print_stats();
+        }
+
+        /* Wait for an interrupt event. */
+        facade_wait_for_interrupt();
     }
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
+/** @brief Initialize the application.
+ */
+static void app_init(void)
+{
+    swc_error_t swc_err;
+
+    app_swc_core_init(&pairing_assigned_address, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connect(&swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+}
+
 /** @brief Initialize the Wireless Core.
  *
  *  @param[in]  app_pairing  Configure the Wireless Core with the pairing values.
@@ -111,6 +154,14 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     uint16_t local_address = app_pairing->node_address;
     uint16_t remote_address = app_pairing->coordinator_address;
 
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        app_pairing->coordinator_address = 0x1;
+        app_pairing->node_address = 0x2;
+        app_pairing->pan_id = 0xABC;
+        remote_address = 0x2;
+        local_address = 0x1;
+    }
+
     swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
@@ -120,32 +171,23 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
     };
-    swc_init(core_cfg, facade_context_switch_trigger, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
 
     swc_node_cfg_t node_cfg = {
-        .role = NETWORK_ROLE,
+        .role = SWC_ROLE_NODE,
         .pan_id = app_pairing->pan_id,
         .coordinator_address = remote_address,
         .local_address = local_address,
     };
-    node = swc_node_init(node_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
 
-    swc_radio_module_init(node, SWC_RADIO_ID_1, true, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, err);
+    ASSERT_SWC_STATUS(*err);
+
+    swc_radio_module_init(SWC_RADIO_ID_1, true, err);
+    ASSERT_SWC_STATUS(*err);
 
 #if (SWC_RADIO_COUNT == 2)
-    swc_radio_module_init(node, SWC_RADIO_ID_2, true, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_radio_module_init(SWC_RADIO_ID_2, true, err);
+    ASSERT_SWC_STATUS(*err);
 #endif
 
     /* ** RX Connection ** */
@@ -154,14 +196,22 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .source_address = remote_address,
         .destination_address = local_address,
         .max_payload_size = MAX_PAYLOAD_SIZE_BYTE,
-        .queue_size = RX_DATA_QUEUE_SIZE,
+        .queue_size = SWC_QUEUE_SIZE,
         .timeslot_id = rx_timeslots,
         .timeslot_count = ARRAY_SIZE(rx_timeslots),
     };
-    rx_conn = swc_connection_init(node, rx_conn_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    rx_conn = swc_connection_init(rx_conn_cfg, err);
+    ASSERT_SWC_STATUS(*err);
+
+    swc_connection_concurrency_cfg_t rx_concurrency_cfg = {
+        .enabled = true,
+        .try_count = SWC_CCA_TRY_COUNT,
+        .retry_time = SWC_CCA_RETRY_TIME,
+        .fail_action = SWC_CCA_ABORT_TX,
+    };
+
+    swc_connection_set_concurrency_cfg(rx_conn, &rx_concurrency_cfg, err);
+    ASSERT_SWC_STATUS(*err);
 
     swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
@@ -169,37 +219,42 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
         rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_conn, node, rx_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
+        swc_connection_add_channel(rx_conn, rx_channel_cfg, err);
+        ASSERT_SWC_STATUS(*err);
     }
-    swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, err);
+    ASSERT_SWC_STATUS(*err);
 
-    swc_setup(node, err);
+    /* Handle certification mode. */
+    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, err);
+    ASSERT_SWC_STATUS(*err);
+
+    swc_setup(err);
+    ASSERT_SWC_STATUS(*err);
 }
 
 /** @brief Callback function when a frame has been successfully received.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
+ *  @param[in] arg   Additional argument passed to the callback function.
  */
-static void conn_rx_success_callback(void *conn)
+static void conn_rx_success_callback(void *conn, void *arg)
 {
     (void)conn;
+    (void)arg;
 
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
     uint8_t *payload = NULL;
-    bool payload_is_valid;
+    bool payload_is_valid = false;
+    size_t payload_size = 0;
 
     /* Get new payload */
-    size_t payload_size = swc_connection_receive(rx_conn, &payload, &err);
+    payload_size = swc_connection_receive(rx_conn, &payload, &err);
+    ASSERT_SWC_STATUS(err);
 
-    if ((payload == NULL) || (err != SWC_ERR_NONE)) {
+    if (payload == NULL) {
         return;
     }
 
@@ -208,41 +263,130 @@ static void conn_rx_success_callback(void *conn)
     seq_num = dataforge_extract_seq_num(payload);
     if (seq_status != DATAFORGE_MATCHING_SEQ) {
         payload_is_valid = false;
+        invalid_payload_count++;
     } else {
         payload_is_valid = dataforge_validate_pseudo_crc(payload, payload_size);
+        valid_payload_count++;
     }
 
     /* Free the payload memory */
     swc_connection_receive_complete(rx_conn, &err);
+    ASSERT_SWC_STATUS(err);
 
     if (payload_is_valid) {
         facade_rx_conn_status();
     }
+}
 
-    /* Print stats every 1000 receptions */
-    rx_count++;
-    if ((rx_count % 1000) == 0) {
-        print_stats_now = true;
+/** @brief Check if stats should be printed.
+ *
+ *  @retval 0  Stats should not be printed.
+ *  @retval 1  Stats should be printed.
+ */
+static bool should_print_stats(void)
+{
+    static uint32_t tick_start;
+    uint32_t current_tick = facade_get_tick_ms();
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        tick_start = current_tick;
+        return false;
     }
+
+    if ((current_tick - tick_start) >= PRINT_INTERVAL_MS) {
+        tick_start = current_tick;
+        return true;
+    }
+
+    return false;
 }
 
 /** @brief Print the TX and RX statistics.
  */
 static void print_stats(void)
 {
-    static char stats_string[STATS_ARRAY_LENGTH];
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
 
-    swc_connection_update_stats(rx_conn);
-    swc_connection_format_stats(rx_conn, node, stats_string, sizeof(stats_string));
+    static char stats_string[STATS_ARRAY_LENGTH];
+    int string_length = 0;
+    swc_error_t swc_err = SWC_ERR_NONE;
+
+    const char *device_str = "\n\r<  NODE  >\n\r";
+    const char *certification_mode_str = "Cert. Mode %i\r\n";
+    const char *app_stats_str = "<<  Datalink App Statistics  >>\n\r";
+    const char *valid_sequence_count_str = "Valid Payload Sequence Count:\t%10d\n\r";
+    const char *invalid_sequence_count_str = "Invalid Payload Sequence Count:\t%10d\n\r";
+    const char *wireless_stats_str = "<<  Wireless Core Statistics  >>\n\r";
+
+    memset(stats_string, 0, sizeof(stats_string));
+
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
+                                  certification_mode_str, certification_mode);
+    }
+
+    /* Device Prelude */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, device_str);
+
+    /* Application statistics */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string), app_stats_str);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string), valid_sequence_count_str,
+                              valid_payload_count);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string), invalid_sequence_count_str,
+                              invalid_payload_count);
+
+    /* Wireless statistics */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
+    swc_connection_update_stats(rx_conn, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(rx_conn, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     facade_print_string(stats_string);
+
+    if (reset_stats_now) {
+        swc_connection_reset_stats(rx_conn, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
+        valid_payload_count = 0;
+        invalid_payload_count = 0;
+        reset_stats_now = false;
+    }
 }
 
 /** @brief Reset the TX and RX statistics.
  */
 static void reset_stats(void)
 {
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+
     if (reset_stats_now == false) {
         reset_stats_now = true;
+    }
+}
+
+/** @brief Handle pairing button callback.
+ */
+static void pairing_button_callback(void)
+{
+    switch (device_pairing_state) {
+    case DEVICE_PAIRED:
+        unpair_device();
+        break;
+    case DEVICE_PAIRING:
+        abort_pairing_procedure();
+        break;
+    case DEVICE_UNPAIRED:
+        enter_pairing_mode();
+        break;
+    default:
+        break;
     }
 }
 
@@ -250,19 +394,20 @@ static void reset_stats(void)
  */
 static void enter_pairing_mode(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
 
-    pairing_event_t pairing_event;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
+
+    /* Set the pairing state. */
+    device_pairing_state = DEVICE_PAIRING;
 
     facade_notify_enter_pairing();
 
     /* The Wireless Core must be stopped before starting the pairing procedure. */
     if (swc_get_status() == SWC_STATUS_RUNNING) {
         swc_disconnect(&swc_err);
-        if ((swc_err != SWC_ERR_NONE) && (swc_err != SWC_ERR_NOT_CONNECTED)) {
-            while (1);
-        }
+        ASSERT_SWC_STATUS(swc_err);
     }
 
     /* Give the information to the Pairing Module. */
@@ -272,9 +417,10 @@ static void enter_pairing_mode(void)
     app_pairing_cfg.application_callback = pairing_application_callback;
     app_pairing_cfg.memory_pool = swc_memory_pool;
     app_pairing_cfg.memory_pool_size = SWC_MEM_POOL_SIZE;
-    app_pairing_cfg.uwb_regulation = SWC_REGULATION_FCC;
-    pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE, &pairing_err);
+    pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE_NODE,
+                                       &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
+        facade_print_error_string("An error occured during the pairing process.");
         while (1);
     }
 
@@ -283,17 +429,8 @@ static void enter_pairing_mode(void)
     case PAIRING_EVENT_SUCCESS:
         facade_notify_pairing_successful();
 
-        app_swc_core_init(&pairing_assigned_address, &swc_err);
-        if (swc_err != SWC_ERR_NONE) {
-            while (1);
-        }
-
-        swc_connect(&swc_err);
-        if (swc_err != SWC_ERR_NONE) {
-            while (1);
-        }
-
-        device_state_paired = true;
+        app_init();
+        device_pairing_state = DEVICE_PAIRED;
 
         break;
     case PAIRING_EVENT_TIMEOUT:
@@ -302,7 +439,7 @@ static void enter_pairing_mode(void)
     default:
         /* Indicate that the pairing process was unsuccessful */
         facade_notify_not_paired();
-        device_state_paired = false;
+        device_pairing_state = DEVICE_UNPAIRED;
         break;
     }
 }
@@ -311,14 +448,12 @@ static void enter_pairing_mode(void)
  */
 static void unpair_device(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
-    device_state_paired = false;
+    device_pairing_state = DEVICE_UNPAIRED;
 
     swc_disconnect(&swc_err);
-    if ((swc_err != SWC_ERR_NONE) && (swc_err != SWC_ERR_NOT_CONNECTED)) {
-        while (1);
-    }
+    ASSERT_SWC_STATUS(swc_err);
 
     /* Indicate that the device is unpaired and turn off all LEDs. */
     facade_notify_not_paired();
@@ -333,7 +468,7 @@ static void pairing_application_callback(void)
      *       executes the registered application callback, which might take
      *       a variable amount of time.
      */
-    facade_button_handling(abort_pairing_procedure, NULL, NULL, NULL);
+    facade_button_handling();
 }
 
 /** @brief Abort the pairing procedure once started.
@@ -341,4 +476,14 @@ static void pairing_application_callback(void)
 static void abort_pairing_procedure(void)
 {
     pairing_abort();
+}
+
+void swc_error_handler(swc_error_t swc_status)
+{
+    char buffer[ERROR_MESSAGE_BUFFER_SIZE];
+
+    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    facade_print_error_string(buffer);
+
+    while (1);
 }

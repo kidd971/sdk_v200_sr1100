@@ -5,7 +5,7 @@
  *         disabled to ensure atomicity of certain operations. The implementation
  *         takes into account nested critical sections.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.

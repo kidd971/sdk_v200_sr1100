@@ -1,18 +1,15 @@
 /** @file  star_network_facade.h
  *  @brief Facades for low-level platform-specific features required by the application example.
  *
- *  @note This header defines the interfaces for various hardware features used by
- *  the star network example. These facades abstract the underlying
- *  platform-specific implementations of features like SPI communication,
- *  IRQ handling, timer functions, and context switching mechanisms. The actual
- *  implementations are selected at compile time based on the target platform,
- *  allowing for flexibility and portability across different hardware.
+ *  @note This header defines the interfaces for various hardware features used by the star network example.
  *
- *  The facade is designed to be a compile-time dependency only, with no
- *  support for runtime polymorphism. This ensures tight integration with the
- *  build system and minimal overhead.
+ *  These facades abstract the underlying platform-specific implementations of features like SPI communication, IRQ
+ *  handling, timer functions, and context switching mechanisms. The actual implementations are selected at compile time
+ *  based on the target platform, allowing for flexibility and portability across different hardware. The facade is
+ *  designed to be a compile-time dependency only, with no support for runtime polymorphism. This ensures tight
+ *  integration with the build system and minimal overhead.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -24,130 +21,87 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "common_facade.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* MACROS *********************************************************************/
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
-
 /* TYPES **********************************************************************/
-/** @brief Board's User button enumeration.
+/** @brief Certification modes.
  */
-typedef enum star_network_btn {
-    BUTTON_A,
-    BUTTON_B,
-    BUTTON_C,
-    BUTTON_D,
-} star_network_btn_t;
+typedef enum facade_certification_mode {
+    FACADE_CERTIF_NONE,
+    FACADE_CERTIF_STAR_NETWORK,
+} facade_certification_mode_t;
+
+/** @brief Function callbacks for button presses.
+ */
+typedef struct facade_button_callbacks {
+    /*! Function callback to pair/unpair the device. */
+    void (*pairing_callback)(void);
+    /*! Function callback to unpair the device. */
+    void (*unpair_device_callback)(void);
+} facade_button_callbacks_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-/** @brief Triggers a software interrupt for context switching in a bare-metal environment.
+/** @brief Read button state to define if certification mode is required.
  *
- *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism.
- *  It configures and triggers a software interrupt specifically allocated for context switching purposes.
- *  The interrupt invoked by this function should be set with the lowest priority to ensure that it does
- *  not preempt more critical system operations.
+ *  @return The certification mode to be applied.
+ */
+facade_certification_mode_t facade_get_certification_mode(void);
+
+/** @brief Set button function callbacks.
  *
- *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used
- *  to perform the context switch by setting the PendSV interrupt pending bit. The actual context
- *  switching logic, including saving and restoring of contexts, is handled by the interrupt service
- *  routine (ISR) associated with the software interrupt, which should invoke
- *  `swc_connection_callbacks_processing_handler` as part of its execution.
+ *  @param[in] button_callbacks  Button function callback structure.
+ */
+void facade_set_button_callbacks(facade_button_callbacks_t button_callbacks);
+
+/** @brief Poll for button presses and execute function callback.
+ */
+void facade_button_handling(void);
+
+/** @brief Read the state of the node's user button that will set the coordinator's LED state.
  *
- *  Usage:
- *  This function should be registered with `swc_register_context_switch_trigger` as part of the
- *  initialization process for applications that require custom context switching mechanisms,
- *  allowing the wireless core to manage task priorities and execute less critical processes seamlessly.
+ *  @return Returns true if the button is pressed, false otherwise.
+ */
+bool facade_node_read_user_button_state(void);
+
+/** @brief Read the state of the coordinator's user button 1 that will set the node1's LED state.
  *
- *  @see swc_register_context_switch_trigger
+ *  @return Returns true if the button is pressed, false otherwise.
  */
-void facade_context_switch_trigger(void);
+bool facade_coord_read_user_button_1_state(void);
 
-/**
- *  @brief Registers a callback function to be invoked by the context switch IRQ handler.
+/** @brief Read the state of the coordinator's user button 2 that will set the node2's LED state.
  *
- *  @note The primary use case involves registering the `swc_connection_callbacks_processing_handler`
- *  provided by the SWC API. This handler is then called within the context switch IRQ handler.
- *
- *  Example usage:
- *  @code
- *  int main(void) {
- *      // Register SWC API function to be invoked within the context switch associated IRQ handler
- *      facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
- *      // Further initialization and application code follows
- *  }
- *  @endcode
- *
- *  @param[in] callback  Function pointer to the user-defined callback.
+ *  @return Returns true if the button is pressed, false otherwise.
  */
-void facade_set_context_switch_handler(void (*callback)(void));
+bool facade_coord_read_user_button_2_state(void);
 
-/** @brief Initialize hardware drivers in the underlying board support package.
+/** @brief Notify user that the coord received a payload from node 1.
  */
-void facade_board_init(void);
+void facade_node1_payload_coord_received_status(void);
 
-/** @brief Poll for button presses.
- *
- *  @note Set NULL in place of unused callback.
- *
- *  @param[in] button1_callback  Function to execute when pressing button #1.
- *  @param[in] button2_callback  Function to execute when pressing button #2.
- *  @param[in] button3_callback  Function to execute when pressing button #3.
- *  @param[in] button4_callback  Function to execute when pressing button #4.
+/** @brief Notify user that the coord received an empty payload from node 1.
  */
-void facade_button_handling(void (*button1_callback)(void), void (*button2_callback)(void),
-                            void (*button3_callback)(void), void (*button4_callback)(void));
+void facade_node1_empty_payload_coord_received_status(void);
 
-/** @brief Blocking delay with a 1 ms resolution.
- *
- *  @param[in] ms_delay  Delay in milliseconds to wait.
+/** @brief Notify user that the coord received a payload from node 2.
  */
-void facade_delay(uint32_t ms_delay);
+void facade_node2_payload_coord_received_status(void);
 
-/** @brief Read the input from the user button.
- *
- *  @param[in] button  User button.
- *
- *  @return true if button is pressed.
+/** @brief Notify user that the coord received an empty payload from node 2.
  */
-bool facade_read_button_status(star_network_btn_t button);
+void facade_node2_empty_payload_coord_received_status(void);
 
-/** @brief Print characters through USB.
- *
- *  @param[in] fmt  Pointer to the characters to be printed.
- *  @param[in] ...  Variable argument list.
+/** @brief Notify user that the node received a payload from the coord.
  */
-void facade_usb_printf(const char *fmt, ...);
+void facade_coord_payload_node_received_status(void);
 
-/** @brief Notify user of payload present in frame.
+/** @brief Notify user that the node received an empty payload from the coord.
  */
-void facade_payload_sent_status(void);
-
-/** @brief Notify user of no payload present in frame.
- */
-void facade_empty_payload_sent_status(void);
-
-/** @brief Notify user of payload present in frame.
- */
-void facade_payload_received_status(void);
-
-/** @brief Notify user of no payload present in frame.
- */
-void facade_empty_payload_received_status(void);
-
-/** @brief Enter pairing notification LED pattern.
- */
-void facade_notify_enter_pairing(void);
-
-/** @brief Not paired notification LED pattern.
- */
-void facade_notify_not_paired(void);
-
-/** @brief Successful pairing notification LED pattern.
- */
-void facade_notify_pairing_successful(void);
+void facade_coord_empty_payload_node_received_status(void);
 
 #ifdef __cplusplus
 }

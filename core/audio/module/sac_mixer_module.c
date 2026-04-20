@@ -1,7 +1,7 @@
 /** @file  sac_mixer_module.c
  *  @brief SPARK Audio Core Mixer Module is used to mix multiple audio streams into one.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -28,8 +28,7 @@ sac_mixer_module_t *sac_mixer_module_init(sac_mixer_module_cfg_t cfg, mem_pool_t
     }
 
     /* Verify configurations */
-    if (cfg.nb_of_inputs < MIN_NB_OF_INPUTS ||
-        cfg.nb_of_inputs > MAX_NB_OF_INPUTS) {
+    if (cfg.nb_of_inputs < MIN_NB_OF_INPUTS || cfg.nb_of_inputs > MAX_NB_OF_INPUTS) {
         *sac_status = SAC_ERR_MIXER_INIT_FAILURE;
         return NULL;
     }
@@ -39,8 +38,7 @@ sac_mixer_module_t *sac_mixer_module_init(sac_mixer_module_cfg_t cfg, mem_pool_t
         return NULL;
     }
 
-    if ((cfg.payload_size < MIN_NB_OF_BYTES_PER_PAYLOAD) ||
-        (cfg.payload_size > MAX_NB_OF_BYTES_PER_PAYLOAD)) {
+    if ((cfg.payload_size < MIN_NB_OF_BYTES_PER_PAYLOAD) || (cfg.payload_size > MAX_NB_OF_BYTES_PER_PAYLOAD)) {
         *sac_status = SAC_ERR_MIXER_INIT_FAILURE;
         return NULL;
     }
@@ -103,8 +101,7 @@ void sac_mixer_module_handle_remainder(sac_mixer_module_t *sac_mixer_module)
 
         if (sample_remainder > 0) {
             memcpy(sac_mixer_module->input_samples_queue[input].samples,
-                   sac_mixer_module->input_samples_queue[input].samples + sample_size,
-                   sample_remainder);
+                   sac_mixer_module->input_samples_queue[input].samples + sample_size, sample_remainder);
         }
         sac_mixer_module->input_samples_queue[input].current_size = sample_remainder;
     }
@@ -140,7 +137,7 @@ static void algo_mix_int16_samples(sac_mixer_module_t *sac_mixer_module)
  */
 static uint8_t get_audio_payload_samples_count(sac_mixer_module_t *sac_mixer_module)
 {
-    uint8_t size_type;
+    uint8_t size_type = 0;
 
     if (sac_mixer_module->cfg.bit_depth == 16) {
         size_type = sizeof(int16_t);

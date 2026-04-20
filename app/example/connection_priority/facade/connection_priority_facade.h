@@ -1,18 +1,15 @@
 /** @file  connection_priority_facade.h
  *  @brief Facades for low-level platform-specific features required by the application example.
  *
- *  @note This header defines the interfaces for various hardware features used by
- *  the connection priority example. These facades abstract the underlying
- *  platform-specific implementations of features like SPI communication,
- *  IRQ handling, timer functions, and context switching mechanisms. The actual
- *  implementations are selected at compile time based on the target platform,
- *  allowing for flexibility and portability across different hardware.
+ *  @note This header defines the interfaces for various hardware features used by the connection priority example.
  *
- *  The facade is designed to be a compile-time dependency only, with no
- *  support for runtime polymorphism. This ensures tight integration with the
- *  build system and minimal overhead.
+ *  These facades abstract the underlying platform-specific implementations of features like SPI communication, IRQ
+ *  handling, timer functions, and context switching mechanisms. The actual implementations are selected at compile time
+ *  based on the target platform, allowing for flexibility and portability across different hardware. The facade is
+ *  designed to be a compile-time dependency only, with no support for runtime polymorphism. This ensures tight
+ *  integration with the build system and minimal overhead.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -22,72 +19,57 @@
 
 /* INCLUDES *******************************************************************/
 #include <stdint.h>
+#include "common_facade.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* MACROS *********************************************************************/
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+/* TYPES***********************************************************************/
+/** @brief Certification modes.
+ */
+typedef enum facade_certification_mode {
+    FACADE_CERTIF_NONE,
+    FACADE_CERTIF_CONNECTION_ID_0,
+    FACADE_CERTIF_CONNECTION_ID_1,
+    FACADE_CERTIF_CONNECTION_ID_2,
+    FACADE_CERTIF_CONNECTION_ID_3,
+    FACADE_CERTIF_CONNECTION_ID_4,
+} facade_certification_mode_t;
+
+/** @brief Function callbacks for button presses.
+ */
+typedef struct facade_button_callbacks {
+    /*! Function callback to pair/unpair the device. */
+    void (*pairing_callback)(void);
+    /*! Function callback to reset the statistics. */
+    void (*reset_stats_callback)(void);
+    /*! Function callback to toggle whether payloads are generated on Connection ID 0 by the application or not. */
+    void (*stop_cid0_toggle_callback)(void);
+} facade_button_callbacks_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-
-/** @brief Triggers a software interrupt for context switching in a bare-metal environment.
+/** @brief Read button state to define if certification mode for Coord is required.
  *
- *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism.
- *  It configures and triggers a software interrupt specifically allocated for context switching purposes.
- *  The interrupt invoked by this function should be set with the lowest priority to ensure that it does
- *  not preempt more critical system operations.
- *
- *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used
- *  to perform the context switch by setting the PendSV interrupt pending bit. The actual context
- *  switching logic, including saving and restoring of contexts, is handled by the interrupt service
- *  routine (ISR) associated with the software interrupt, which should invoke
- *  `swc_connection_callbacks_processing_handler` as part of its execution.
- *
- *  Usage:
- *  This function should be registered with `swc_register_context_switch_trigger` as part of the
- *  initialization process for applications that require custom context switching mechanisms,
- *  allowing the wireless core to manage task priorities and execute less critical processes seamlessly.
- *
- *  @see swc_register_context_switch_trigger
+ *  @return The certification mode to be applied.
  */
-void facade_context_switch_trigger(void);
+facade_certification_mode_t facade_get_coord_certification_mode(void);
 
-/**
- *  @brief Registers a callback function to be invoked by the context switch IRQ handler.
+/** @brief Read button state to define if certification mode for Node is required.
  *
- *  @note The primary use case involves registering the `swc_connection_callbacks_processing_handler`
- *  provided by the SWC API. This handler is then called within the context switch IRQ handler.
- *
- *  Example usage:
- *  @code
- *  int main(void) {
- *      // Register SWC API function to be invoked within the context switch associated IRQ handler
- *      facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
- *      // Further initialization and application code follows
- *  }
- *  @endcode
- *
- *  @param[in] callback  Function pointer to the user-defined callback.
+ *  @return The certification mode to be applied.
  */
-void facade_set_context_switch_handler(void (*callback)(void));
+facade_certification_mode_t facade_get_node_certification_mode(void);
 
-/** @brief Initialize hardware drivers in the underlying board support package.
+/** @brief Set button function callbacks.
+ *
+ *  @param[in] button_callbacks  Button function callback structure.
  */
-void facade_board_init(void);
+void facade_set_button_callbacks(facade_button_callbacks_t button_callbacks);
 
-/** @brief Poll for button presses.
- *
- *  @note Set NULL in place of unused callback.
- *
- *  @param[in] button1_callback  Function to execute when pressing button #1.
- *  @param[in] button2_callback  Function to execute when pressing button #2.
- *  @param[in] button3_callback  Function to execute when pressing button #3.
- *  @param[in] button4_callback  Function to execute when pressing button #4.
+/** @brief Poll for button presses and execute function callback.
  */
-void facade_button_handling(void (*button1_callback)(void), void (*button2_callback)(void),
-                            void (*button3_callback)(void), void (*button4_callback)(void));
+void facade_button_handling(void);
 
 /** @brief Initialize and set the timer 1 period.
  *
@@ -128,40 +110,6 @@ void facade_packet_rate_timer2_start(void);
 /** @brief Stop the timer 2.
  */
 void facade_packet_rate_timer2_stop(void);
-
-/** @brief Initialize and set the stats timer period.
- *
- *  @param[in] period_ms  Timer period in milliseconds.
- */
-void facade_stats_timer_init(uint32_t period_ms);
-
-/** @brief Set the stats timer callback.
- *
- *  @param[in] callback  Callback when timer expires.
- */
-void facade_stats_set_timer_callback(void (*callback)(void));
-
-/** @brief Start the stats timer.
- */
-void facade_stats_timer_start(void);
-
-/** @brief Print string.
- *
- *  @param[in] string  Null terminated string to print.
- */
-void facade_print_string(char *string);
-
-/** @brief Enter pairing notification LED pattern.
- */
-void facade_notify_enter_pairing(void);
-
-/** @brief Not paired notification LED pattern.
- */
-void facade_notify_not_paired(void);
-
-/** @brief Successful pairing notification LED pattern.
- */
-void facade_notify_pairing_successful(void);
 
 #ifdef __cplusplus
 }

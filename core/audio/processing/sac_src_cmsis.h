@@ -3,7 +3,7 @@
  *
  *  @note This processing stage requires an Arm Cortex-M processor based device.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -132,8 +132,8 @@ uint16_t sac_src_cmsis_process(void *instance, sac_pipeline_t *pipeline, sac_hea
  *         If the user require a conversion rate that is not an integer (e.g., 1.5x), it is not possible to use the
  *         discard function while doing so.
  */
-uint16_t sac_src_cmsis_process_discard(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in, uint16_t size,
-                                       uint8_t *data_out, sac_status_t *status);
+uint16_t sac_src_cmsis_process_discard(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,
+                                       uint16_t size, uint8_t *data_out, sac_status_t *status);
 
 #ifdef __cplusplus
 }

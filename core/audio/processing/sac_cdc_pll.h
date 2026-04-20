@@ -2,7 +2,7 @@
  *  @brief Clock drift compensation processing stage using audio buffer load averaging for
  *         detecting the drift and audio pll adjustment for correcting it.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -143,9 +143,10 @@ sac_cdc_pll_stats_t sac_cdc_pll_get_stats(sac_cdc_pll_instance_t *cdc);
  *  @param[in]  cdc     CDC instance.
  *  @param[out] buffer  Buffer where to put the formatted string.
  *  @param[in]  size    Size of the buffer.
+ *  @param[out] status  Status code.
  *  @return The formatted string length, excluding the NULL terminator.
  */
-int sac_cdc_pll_format_stats(sac_cdc_pll_instance_t *cdc, char *buffer, uint16_t size);
+int sac_cdc_pll_format_stats(sac_cdc_pll_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status);
 
 #ifdef __cplusplus
 }

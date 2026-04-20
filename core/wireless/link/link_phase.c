@@ -1,7 +1,7 @@
 /** @file  link_phase.c
  *  @brief Link phases management module.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -57,7 +57,7 @@ uint8_t link_phase_get_metrics_array(link_phase_t *link_phase, phase_infos_t **p
 bool link_phase_done(link_phase_t *link_phase)
 {
     link_phase->was_phase_read = true;
-    link_phase->current_sample_count  = 0;
+    link_phase->current_sample_count = 0;
 
     return link_phase->was_phase_read;
 }

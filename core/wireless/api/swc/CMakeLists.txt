@@ -1,5 +1,6 @@
 target_sources(swc
     PRIVATE
+        swc_error.c
         swc_stats.c
 )
 

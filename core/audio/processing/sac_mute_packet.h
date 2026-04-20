@@ -4,7 +4,7 @@
  *  @note This processing stage should be the last processing stage on an audio transmitting pipeline
  *        and the first processing stage on an audio receiving pipeline.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.

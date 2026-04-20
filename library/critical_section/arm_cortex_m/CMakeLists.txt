@@ -1,0 +1,1 @@
+target_sources(critical_section PRIVATE critical_section.c)

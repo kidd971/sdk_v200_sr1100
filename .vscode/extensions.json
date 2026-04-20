@@ -1,12 +1,6 @@
 {
     "recommendations": [
-        "marus25.cortex-debug",
-        "ms-vscode.cpptools",
-        "twxs.cmake",
-        "ms-vscode.cmake-tools",
-        "rioj7.command-variable",
-        "ms-python.python",
-        "corker.vscode-micromamba"
+        "spark-microsystems.spark-sdk-vscode"
     ],
     "unwantedRecommendations": []
 }

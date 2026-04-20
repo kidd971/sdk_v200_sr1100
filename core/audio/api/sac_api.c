@@ -1,7 +1,7 @@
 /** @file  sac_api.c
  *  @brief SPARK Audio Core Application Programming Interface.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -10,6 +10,7 @@
 /* INCLUDES *******************************************************************/
 #include "sac_api.h"
 #include <string.h>
+#include "critical_section.h"
 #include "sac_utils.h"
 
 /* CONSTANTS ******************************************************************/
@@ -22,18 +23,18 @@
 #define EP_ACTION_NODE_COUNT 1
 /* Number of free nodes required for audio process input. */
 #define PROCESS_INPUT_NODE_COUNT 1
+/* Minimum number of queues in a system */
+#define MIN_QUEUE_NUM 1
 
 /* PRIVATE GLOBALS ************************************************************/
 static mem_pool_t mem_pool;
 static sac_mixer_module_t *sac_mixer_module;
-static void (*enter_critical)(void);
-static void (*exit_critical)(void);
 static bool sac_initialized;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status);
 static queue_t *init_audio_free_queue(const char *queue_name, uint16_t queue_data_size, uint8_t queue_size,
-                                      sac_status_t *status);
+                                      uint8_t num_queues, sac_status_t *status);
 static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_node_t *processing_node,
                                                 sac_status_t *status);
 static bool is_process_exec_required(sac_processing_t *process, sac_pipeline_t *pipeline, queue_node_t *input_node,
@@ -49,23 +50,13 @@ static bool is_consumer_overflowing(sac_endpoint_t *consumer);
 static sac_endpoint_t *find_last_endpoint(sac_endpoint_t *ep);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-void sac_init(sac_cfg_t cfg, sac_hal_t *hal, sac_status_t *status)
+void sac_init(sac_cfg_t cfg, sac_status_t *status)
 {
-    queue_critical_cfg_t queue_critical;
-
     *status = SAC_OK;
 
-    SAC_CHECK_STATUS(hal == NULL, status, SAC_ERR_NULL_PTR, return);
-    SAC_CHECK_STATUS(hal->enter_critical == NULL, status, SAC_ERR_NULL_PTR, return);
-    SAC_CHECK_STATUS(hal->exit_critical == NULL, status, SAC_ERR_NULL_PTR, return);
+    SAC_CHECK_STATUS(cfg.memory_pool == NULL, status, SAC_ERR_NULL_PTR, return);
 
-    enter_critical = hal->enter_critical;
-    exit_critical = hal->exit_critical;
-
-    queue_critical.enter_critical = hal->enter_critical;
-    queue_critical.exit_critical = hal->exit_critical;
-
-    queue_init(queue_critical);
+    queue_init();
 
     mem_pool_init(&mem_pool, cfg.memory_pool, cfg.memory_pool_size);
 
@@ -84,7 +75,7 @@ void sac_mixer_init(sac_mixer_module_cfg_t cfg, sac_status_t *status)
 sac_pipeline_t *sac_pipeline_init(const char *name, sac_endpoint_t *producer, sac_pipeline_cfg_t cfg,
                                   sac_endpoint_t *consumer, sac_status_t *status)
 {
-    sac_pipeline_t *pipeline;
+    sac_pipeline_t *pipeline = NULL;
 
     *status = SAC_OK;
 
@@ -98,6 +89,18 @@ sac_pipeline_t *sac_pipeline_init(const char *name, sac_endpoint_t *producer, sa
     pipeline = mem_pool_malloc(&mem_pool, sizeof(sac_pipeline_t));
     SAC_CHECK_STATUS(pipeline == NULL, status, SAC_ERR_NOT_ENOUGH_MEMORY, return NULL);
 
+    if (cfg.max_payload_size == 0) {
+        if (producer->cfg.audio_payload_size > consumer->cfg.audio_payload_size) {
+            cfg.max_payload_size = producer->cfg.audio_payload_size;
+        } else {
+            cfg.max_payload_size = consumer->cfg.audio_payload_size;
+        }
+    } else if ((cfg.max_payload_size < producer->cfg.audio_payload_size) ||
+               (cfg.max_payload_size < consumer->cfg.audio_payload_size)) {
+        *status = SAC_ERR_PIPELINE_CFG_INVALID;
+        return NULL;
+    }
+
     pipeline->name = name;
     pipeline->producer = producer;
     pipeline->consumer = consumer;
@@ -109,7 +112,7 @@ sac_pipeline_t *sac_pipeline_init(const char *name, sac_endpoint_t *producer, sa
 sac_endpoint_t *sac_endpoint_init(void *instance, const char *name, sac_endpoint_interface_t iface,
                                   sac_endpoint_cfg_t cfg, sac_status_t *status)
 {
-    sac_endpoint_t *endpoint;
+    sac_endpoint_t *endpoint = NULL;
 
     *status = SAC_OK;
 
@@ -128,6 +131,7 @@ sac_endpoint_t *sac_endpoint_init(void *instance, const char *name, sac_endpoint
     endpoint->iface = iface;
     endpoint->cfg = cfg;
     endpoint->_internal.extra_queue_size = 0;
+    endpoint->_internal.num_endpoints = MIN_QUEUE_NUM;
 
     return endpoint;
 }
@@ -135,7 +139,7 @@ sac_endpoint_t *sac_endpoint_init(void *instance, const char *name, sac_endpoint
 sac_processing_t *sac_processing_stage_init(void *instance, const char *name, sac_processing_interface_t iface,
                                             sac_status_t *status)
 {
-    sac_processing_t *process;
+    sac_processing_t *process = NULL;
 
     *status = SAC_OK;
 
@@ -155,7 +159,7 @@ sac_processing_t *sac_processing_stage_init(void *instance, const char *name, sa
 
 void sac_pipeline_add_processing(sac_pipeline_t *pipeline, sac_processing_t *process, sac_status_t *status)
 {
-    sac_processing_t *current_process;
+    sac_processing_t *current_process = NULL;
 
     *status = SAC_OK;
 
@@ -187,6 +191,7 @@ void sac_pipeline_add_extra_consumer(sac_pipeline_t *pipeline, sac_endpoint_t *n
     SAC_CHECK_STATUS(next_consumer == NULL, status, SAC_ERR_NULL_PTR, return);
 
     find_last_endpoint(pipeline->consumer)->next_endpoint = next_consumer;
+    pipeline->consumer->_internal.num_endpoints++;
 }
 
 void sac_pipeline_add_extra_producer(sac_pipeline_t *pipeline, sac_endpoint_t *next_producer, sac_status_t *status)
@@ -198,6 +203,7 @@ void sac_pipeline_add_extra_producer(sac_pipeline_t *pipeline, sac_endpoint_t *n
     SAC_CHECK_STATUS(next_producer == NULL, status, SAC_ERR_NULL_PTR, return);
 
     find_last_endpoint(pipeline->producer)->next_endpoint = next_producer;
+    pipeline->producer->_internal.num_endpoints++;
 }
 
 void sac_add_producer(sac_endpoint_t *main_producer, sac_endpoint_t *next_producer, sac_status_t *status)
@@ -208,6 +214,7 @@ void sac_add_producer(sac_endpoint_t *main_producer, sac_endpoint_t *next_produc
     SAC_CHECK_STATUS(next_producer == NULL, status, SAC_ERR_NULL_PTR, return);
 
     find_last_endpoint(main_producer)->next_endpoint = next_producer;
+    main_producer->_internal.num_endpoints++;
 }
 
 void sac_endpoint_link(sac_endpoint_t *consumer, sac_endpoint_t *producer, sac_status_t *status)
@@ -224,7 +231,7 @@ void sac_endpoint_link(sac_endpoint_t *consumer, sac_endpoint_t *producer, sac_s
 
 void sac_pipeline_add_input_pipeline(sac_pipeline_t *pipeline, sac_pipeline_t *input_pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *producer;
+    sac_endpoint_t *producer = NULL;
 
     *status = SAC_OK;
 
@@ -247,9 +254,9 @@ void sac_pipeline_add_input_pipeline(sac_pipeline_t *pipeline, sac_pipeline_t *i
 
 void sac_pipeline_setup(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_processing_t *process;
-    sac_endpoint_t *consumer;
-    sac_endpoint_t *producer;
+    sac_processing_t *process = NULL;
+    sac_endpoint_t *consumer = NULL;
+    sac_endpoint_t *producer = NULL;
 
     *status = SAC_OK;
 
@@ -284,8 +291,8 @@ void sac_pipeline_setup(sac_pipeline_t *pipeline, sac_status_t *status)
 
 void sac_pipeline_produce(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *producer;
-    uint16_t size;
+    sac_endpoint_t *producer = NULL;
+    uint16_t size = 0;
 
     *status = SAC_OK;
 
@@ -326,7 +333,7 @@ void sac_pipeline_produce(sac_pipeline_t *pipeline, sac_status_t *status)
 
 void sac_pipeline_consume(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *consumer;
+    sac_endpoint_t *consumer = NULL;
 
     *status = SAC_OK;
 
@@ -371,7 +378,7 @@ void sac_pipeline_start(sac_pipeline_t *pipeline, sac_status_t *status)
 
 void sac_pipeline_stop(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_endpoint_t *consumer;
+    sac_endpoint_t *consumer = NULL;
 
     *status = SAC_OK;
 
@@ -405,12 +412,12 @@ uint32_t sac_processing_ctrl(sac_processing_t *sac_processing, sac_pipeline_t *p
 
 void sac_pipeline_process(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    queue_node_t *producer_node;
-    queue_node_t *input_node;
-    queue_node_t *output_node;
-    sac_endpoint_t *consumer;
-    sac_endpoint_t *producer;
-    uint8_t crc;
+    queue_node_t *producer_node = NULL;
+    queue_node_t *input_node = NULL;
+    queue_node_t *output_node = NULL;
+    sac_endpoint_t *consumer = NULL;
+    sac_endpoint_t *producer = NULL;
+    uint8_t crc = 0;
 
     *status = SAC_OK;
 
@@ -440,7 +447,7 @@ void sac_pipeline_process(sac_pipeline_t *pipeline, sac_status_t *status)
      */
     if (pipeline->cfg.mixer_option.output_mixer_pipeline) {
         input_node = start_mixing_process(pipeline, status);
-        if (status != SAC_OK) {
+        if (*status != SAC_OK) {
             return;
         }
     } else {
@@ -469,7 +476,6 @@ void sac_pipeline_process(sac_pipeline_t *pipeline, sac_status_t *status)
     if (producer->cfg.use_encapsulation) {
         crc = sac_node_get_header(input_node)->crc4;
         sac_node_get_header(input_node)->crc4 = 0;
-        sac_node_get_header(input_node)->reserved = 0;
         if (crc4itu(0, (uint8_t *)sac_node_get_header(input_node), sizeof(sac_header_t)) != crc) {
             /* Audio packet is corrupted, set it to a known value. */
             sac_node_set_payload_size(input_node, producer->cfg.audio_payload_size);
@@ -528,6 +534,20 @@ uint16_t sac_node_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, 
     return size;
 }
 
+uint16_t sac_node_data_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, sac_status_t *status)
+{
+    SAC_CHECK_STATUS(data == NULL, status, SAC_ERR_NULL_PTR, return 0);
+    SAC_CHECK_STATUS(dest_node == NULL, status, SAC_ERR_NULL_PTR, return 0);
+    SAC_CHECK_STATUS(dest_node->data == NULL, status, SAC_ERR_NULL_PTR, return 0);
+    SAC_CHECK_STATUS(size == 0, status, SAC_ERR_INVALID_ARG, return 0);
+    SAC_CHECK_STATUS((dest_node->data_size - SAC_PACKET_DATA_OFFSET) < size, status, SAC_ERR_NODE_DATA_SIZE_TOO_SMALL,
+                     return 0);
+
+    memcpy(sac_node_get_data(dest_node), data, size);
+
+    return size;
+}
+
 void sac_set_extra_queue_size(sac_endpoint_t *endpoint, uint8_t extra_queue_size, sac_status_t *status)
 {
     if (endpoint->_internal.extra_queue_size > (UINT8_MAX - extra_queue_size)) {
@@ -547,10 +567,14 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
 {
     sac_endpoint_t *consumer = pipeline->consumer;
     sac_endpoint_t *producer = pipeline->producer;
-    uint16_t queue_data_inflation_size;
-    uint16_t queue_data_size;
-    uint8_t free_queue_size;
-    uint8_t queue_size;
+    uint16_t queue_data_inflation_size = 0;
+    uint16_t ep_queue_data_size = 0;
+    uint16_t proc_queue_data_size = 0;
+    uint8_t free_queue_size = 0;
+    uint8_t queue_size = 0;
+    uint8_t num_queues_prod = producer->_internal.num_endpoints;
+    uint8_t num_queues_cons = consumer->_internal.num_endpoints;
+    uint8_t num_queues_proc = MIN_QUEUE_NUM;
 
     *status = SAC_OK;
 
@@ -559,21 +583,12 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
     queue_data_inflation_size += sizeof(sac_header_t);
     queue_data_inflation_size += CDC_QUEUE_DATA_SIZE_INFLATION;
 
-    /*
-     * The processing queue needs to handle any data size. We need to use the maximum value between the producer data
-     * size and the consumer data size.
-     */
-    if (consumer->cfg.audio_payload_size > producer->cfg.audio_payload_size) {
-        queue_data_size = consumer->cfg.audio_payload_size;
-    } else {
-        queue_data_size = producer->cfg.audio_payload_size;
-    }
-    queue_data_size += queue_data_inflation_size;
-    queue_data_size += sac_align_data_size(queue_data_size, uint32_t); /* Align nodes on 32bits. */
-
     /* Initialize processing queue. */
-    pipeline->_internal.processing_queue = init_audio_free_queue("Processing Free Queue", queue_data_size,
-                                                                 PROCESSING_NODE_COUNT, status);
+    proc_queue_data_size = pipeline->cfg.max_payload_size;
+    proc_queue_data_size += queue_data_inflation_size;
+    proc_queue_data_size += sac_align_data_size(proc_queue_data_size, uint32_t); /* Align nodes on 32bits. */
+    pipeline->_internal.processing_queue = init_audio_free_queue("Processing Free Queue", proc_queue_data_size,
+                                                                 PROCESSING_NODE_COUNT, num_queues_proc, status);
     if (*status != SAC_OK) {
         return;
     }
@@ -584,9 +599,9 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
      */
     if (producer->_internal.queue == NULL) {
         /* Calculate producer initial queue data size.  */
-        queue_data_size = producer->cfg.audio_payload_size;
-        queue_data_size += queue_data_inflation_size;
-        queue_data_size += sac_align_data_size(queue_data_size, uint32_t); /* Align nodes on 32bits. */
+        ep_queue_data_size = producer->cfg.audio_payload_size;
+        ep_queue_data_size += queue_data_inflation_size;
+        ep_queue_data_size += sac_align_data_size(ep_queue_data_size, uint32_t); /* Align nodes on 32bits. */
 
         if (producer->cfg.queue_size < SAC_MIN_PRODUCER_QUEUE_SIZE) {
             producer->cfg.queue_size = SAC_MIN_PRODUCER_QUEUE_SIZE;
@@ -597,8 +612,8 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
         /* Initialize free queue with one extra node for producer action.
          * If multiple producers are chained, they will all share this free queue.
          */
-        producer->_internal.free_queue = init_audio_free_queue("Producer Free Queue", queue_data_size, free_queue_size,
-                                                               status);
+        producer->_internal.free_queue = init_audio_free_queue("Producer Free Queue", ep_queue_data_size,
+                                                               free_queue_size, num_queues_prod, status);
         if (*status != SAC_OK) {
             return;
         }
@@ -621,9 +636,9 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
      */
     if (consumer->_internal.queue == NULL) {
         /* Calculate consumer initial queue data size.  */
-        queue_data_size = consumer->cfg.audio_payload_size;
-        queue_data_size += queue_data_inflation_size;
-        queue_data_size += sac_align_data_size(queue_data_size, uint32_t); /* Align nodes on 32bits. */
+        ep_queue_data_size = consumer->cfg.audio_payload_size;
+        ep_queue_data_size += queue_data_inflation_size;
+        ep_queue_data_size += sac_align_data_size(ep_queue_data_size, uint32_t); /* Align nodes on 32bits. */
 
         /* Initialize consumer free queue. */
         queue_size = consumer->cfg.queue_size;
@@ -641,8 +656,8 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
         if (consumer->cfg.delayed_action) {
             free_queue_size += EP_ACTION_NODE_COUNT;
         }
-        consumer->_internal.free_queue = init_audio_free_queue("Audio Buffer Free Queue", queue_data_size,
-                                                               free_queue_size, status);
+        consumer->_internal.free_queue = init_audio_free_queue("Audio Buffer Free Queue", ep_queue_data_size,
+                                                               free_queue_size, num_queues_cons, status);
         if (*status != SAC_OK) {
             return;
         }
@@ -666,18 +681,19 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
  *  @param[in]  queue_name       Name of the queue.
  *  @param[in]  queue_data_size  Size in bytes of the data in a node.
  *  @param[in]  queue_size       Number of nodes in the queue.
+ *  @param[in]  num_queues       Total number of queues in the system.
  *  @param[out] status           Status code.
  *  @return Pointer to the initialized free queue.
  */
 static queue_t *init_audio_free_queue(const char *queue_name, uint16_t queue_data_size, uint8_t queue_size,
-                                      sac_status_t *status)
+                                      uint8_t num_queues, sac_status_t *status)
 {
     uint8_t *pool_ptr = NULL;
     queue_t *free_queue = NULL;
 
     *status = SAC_OK;
 
-    pool_ptr = mem_pool_malloc(&mem_pool, QUEUE_NB_BYTES_NEEDED(queue_size, queue_data_size));
+    pool_ptr = mem_pool_malloc(&mem_pool, QUEUE_NB_BYTES_NEEDED(num_queues, queue_size, queue_data_size));
     if (pool_ptr == NULL) {
         *status = SAC_ERR_NOT_ENOUGH_MEMORY;
         return NULL;
@@ -688,7 +704,7 @@ static queue_t *init_audio_free_queue(const char *queue_name, uint16_t queue_dat
         return NULL;
     }
 
-    queue_init_pool(pool_ptr, free_queue, queue_size, queue_data_size, queue_name);
+    queue_init_pool(pool_ptr, free_queue, queue_size, queue_data_size, num_queues, queue_name);
 
     return free_queue;
 }
@@ -734,8 +750,8 @@ static bool is_consumer_overflowing(sac_endpoint_t *consumer)
 static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_node_t *processing_node,
                                                 sac_status_t *status)
 {
-    uint16_t length;
-    queue_node_t *consumer_node;
+    uint16_t length = 0;
+    queue_node_t *consumer_node = NULL;
     sac_endpoint_t *consumer = pipeline->consumer;
 
     *status = SAC_OK;
@@ -745,7 +761,7 @@ static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_
         if (is_consumer_overflowing(consumer)) {
             pipeline->_statistics.consumer_buffer_overflow_count++;
             consumer_node = queue_dequeue_node(consumer->_internal.queue);
-            enter_critical();
+            CRITICAL_SECTION_ENTER();
             if (pipeline->cfg.mixer_option.output_mixer_pipeline) {
                 for (uint8_t i = 0; i < MAX_NB_OF_INPUTS; i++) {
                     if (pipeline->input_pipeline[i] != NULL) {
@@ -757,7 +773,7 @@ static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_
                 /* FIXME: This only works for a single consumer. */
                 pipeline->_internal.samples_buffered_size -= sac_node_get_payload_size(consumer_node);
             }
-            exit_critical();
+            CRITICAL_SECTION_EXIT();
             queue_free_node(consumer_node);
         }
         consumer = consumer->next_endpoint;
@@ -781,10 +797,10 @@ static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_
     consumer = pipeline->consumer;
     do {
         queue_enqueue_node(consumer->_internal.queue, consumer_node);
-        enter_critical();
+        CRITICAL_SECTION_ENTER();
         /* FIXME: This only works for a single consumer. */
         pipeline->_internal.samples_buffered_size += sac_node_get_payload_size(consumer_node);
-        exit_critical();
+        CRITICAL_SECTION_EXIT();
         consumer = consumer->next_endpoint;
     } while (consumer != NULL);
 
@@ -809,7 +825,7 @@ static bool is_process_exec_required(sac_processing_t *process, sac_pipeline_t *
     if (process->iface.gate == NULL) {
         return true;
     } else {
-        return process->iface.gate(process->instance, pipeline, sac_node_get_header(node), sac_node_get_data(node),
+        return process->iface.gate(process, pipeline, sac_node_get_header(node), sac_node_get_data(node),
                                    sac_node_get_payload_size(node), status);
     }
 }
@@ -824,8 +840,8 @@ static bool is_process_exec_required(sac_processing_t *process, sac_pipeline_t *
  */
 static queue_node_t *process_samples(sac_pipeline_t *pipeline, queue_node_t *input_node, sac_status_t *status)
 {
-    uint16_t rv;
-    queue_node_t *output_node;
+    uint16_t rv = 0;
+    queue_node_t *output_node = NULL;
     sac_processing_t *process = pipeline->process;
 
     *status = SAC_OK;
@@ -925,8 +941,8 @@ static void enqueue_producer_node(sac_pipeline_t *pipeline, sac_status_t *status
 static uint16_t produce(sac_pipeline_t *pipeline, sac_status_t *status)
 {
     sac_endpoint_t *producer = pipeline->producer;
-    uint8_t *payload;
-    uint16_t payload_size;
+    uint8_t *payload = NULL;
+    uint16_t payload_size = 0;
 
     *status = SAC_OK;
 
@@ -958,8 +974,8 @@ static uint16_t produce(sac_pipeline_t *pipeline, sac_status_t *status)
  */
 static uint16_t consume(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_status_t *status)
 {
-    uint8_t *payload;
-    uint16_t payload_size, crc;
+    uint8_t *payload = NULL;
+    uint16_t payload_size, crc = 0;
 
     *status = SAC_OK;
 
@@ -980,7 +996,6 @@ static uint16_t consume(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_
 
             /* Update CRC. */
             ((sac_header_t *)payload)->crc4 = 0;
-            ((sac_header_t *)payload)->reserved = 0;
             crc = crc4itu(0, payload, sizeof(sac_header_t));
             ((sac_header_t *)payload)->crc4 = crc;
         } else {
@@ -999,8 +1014,8 @@ static uint16_t consume(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_
  */
 static void consume_no_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sac_status_t *status)
 {
-    uint16_t size;
-    queue_node_t *node;
+    uint16_t size = 0;
+    queue_node_t *node = NULL;
 
     *status = SAC_OK;
 
@@ -1016,9 +1031,9 @@ static void consume_no_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer,
     if (size > 0) {
         /* Consumed successfully, so dequeue and free. */
         node = queue_dequeue_node(consumer->_internal.queue);
-        enter_critical();
+        CRITICAL_SECTION_ENTER();
         pipeline->_internal.samples_buffered_size -= sac_node_get_payload_size(node);
-        exit_critical();
+        CRITICAL_SECTION_EXIT();
         queue_free_node(node);
     }
     consumer->_internal.current_node = NULL;
@@ -1044,7 +1059,7 @@ static void consume_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sa
     /* Get new node. */
     consumer->_internal.current_node = queue_dequeue_node(consumer->_internal.queue);
     if (consumer->_internal.current_node != NULL) {
-        enter_critical();
+        CRITICAL_SECTION_ENTER();
         if (pipeline->cfg.mixer_option.output_mixer_pipeline) {
             for (uint8_t i = 0; i < MAX_NB_OF_INPUTS; i++) {
                 if (pipeline->input_pipeline[i] != NULL) {
@@ -1055,7 +1070,7 @@ static void consume_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sa
         } else {
             pipeline->_internal.samples_buffered_size -= sac_node_get_payload_size(consumer->_internal.current_node);
         }
-        exit_critical();
+        CRITICAL_SECTION_EXIT();
     }
     /* Start consumption of new node. */
     consume(pipeline, consumer, status);
@@ -1069,8 +1084,8 @@ static void consume_delay(sac_pipeline_t *pipeline, sac_endpoint_t *consumer, sa
  */
 static queue_node_t *start_mixing_process(sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    queue_node_t *temp_node;
-    queue_node_t *output_node;
+    queue_node_t *temp_node = NULL;
+    queue_node_t *output_node = NULL;
     sac_endpoint_t *producer = pipeline->producer;
     uint8_t producer_index = 0;
 
@@ -1105,9 +1120,9 @@ static queue_node_t *start_mixing_process(sac_pipeline_t *pipeline, sac_status_t
                 sac_mixer_module_append_silence(&sac_mixer_module->input_samples_queue[producer_index],
                                                 silent_samples_size);
 
-                enter_critical();
+                CRITICAL_SECTION_ENTER();
                 pipeline->input_pipeline[producer_index]->_internal.samples_buffered_size += silent_samples_size;
-                exit_critical();
+                CRITICAL_SECTION_EXIT();
             }
         } while (sac_mixer_module->input_samples_queue[producer_index].current_size <
                  sac_mixer_module->cfg.payload_size);

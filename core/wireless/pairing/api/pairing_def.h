@@ -1,7 +1,7 @@
 /** @file  pairing_def.h
  *  @brief Pairing global definitions.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -75,8 +75,6 @@ typedef enum pairing_error {
     PAIRING_ERR_TIMEOUT,
     /*! HAL has not been initialized at the application level. */
     PAIRING_ERR_HAL_NOT_INITIALIZED,
-    /*! The wireless regulation chosen is not supported. */
-    PAIRING_ERR_REGULATION_OPTION_NOT_SUPPORTED,
     /*! The node's device role conflicts with the coordinator's reserved role. */
     PAIRING_ERR_DEVICE_ROLE,
     /*! A wireless error occurred. */

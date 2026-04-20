@@ -11,18 +11,6 @@ target_sources(swc
         state/pairing_state_machine.c
         state/pairing_state_node.c
         wireless/pairing_wireless.c
-    PUBLIC
-        api/pairing_error.h
-        communication/pairing_address.h
-        communication/pairing_event.h
-        communication/pairing_message.h
-        utilities/pairing_security.h
-        utilities/pairing_timer.h
-        state/pairing_state.h
-        state/pairing_state_coordinator.h
-        state/pairing_state_machine.h
-        state/pairing_state_node.h
-        wireless/pairing_wireless.h
 )
 
 target_include_directories(swc

@@ -2,7 +2,7 @@
  *  @brief Clock drift compensation processing stage using audio buffer load averaging for
  *         detecting the drift and interpolation for correcting it.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -50,7 +50,9 @@ typedef struct sac_cdc_resampling_stats {
 typedef struct sac_cdc_instance {
     /*! Amount of samples used when resampling. */
     uint16_t cdc_resampling_length;
-    /*! Amount of measurements used when averaging the consumer queue size. */
+    /*! Amount of measurements used when averaging the consumer queue size. This value can be calculated for a specific
+     *  drift value using the `sac_cdc_calculate_queue_average_size` api.
+     */
     uint16_t cdc_queue_avg_size;
     /*! Format of the audio samples. */
     sac_sample_format_t sample_format;
@@ -58,7 +60,7 @@ typedef struct sac_cdc_instance {
         /*! Internal: An instance of the resampling. */
         resampling_instance_t resampling_instance;
         /*! Internal: Number of bytes per audio sample. */
-        uint8_t  size_of_buffer_type;
+        uint8_t size_of_buffer_type;
         /*! Internal: An circular array of tx queue lengths used for averaging. */
         uint16_t *avg_arr;
         /*! Internal: Rolling average of the avg_arr. */
@@ -134,13 +136,24 @@ uint16_t sac_cdc_process(void *instance, sac_pipeline_t *pipeline, sac_header_t 
  *  @param[in]  cdc     CDC resampling instance.
  *  @param[out] buffer  Buffer where to put the formatted string.
  *  @param[in]  size    Size of the buffer.
+ *  @param[out] status  Status code.
  *  @return The formatted string length, excluding the NULL terminator.
  */
-int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size);
+int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status);
+
+/** @brief Calculate the queue average size to support max_drift_ppm.
+ *
+ *  @param[in] max_drift_ppm      Maximum amount of drift to be compensated.
+ *  @param[in] sample_rate        Sample rate at which CDC will be processed.
+ *  @param[in] sample_count       Number of samples per payload processed by the CDC.
+ *  @param[in] resampling_length  Total number of sample over which the resampling algorithm is executed.
+ *  @return
+ */
+uint32_t sac_cdc_calculate_queue_average_size(uint8_t max_drift_ppm, uint32_t sample_rate, uint32_t sample_count,
+                                              uint32_t resampling_length);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* SAC_CDC_H_ */
-

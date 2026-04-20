@@ -76,6 +76,7 @@ target_sources(stm32u5xx_hal_driver
         ${PREFIX_SRC}/stm32u5xx_ll_crc.c
         ${PREFIX_SRC}/stm32u5xx_ll_crs.c
         ${PREFIX_SRC}/stm32u5xx_ll_dac.c
+        ${PREFIX_SRC}/stm32u5xx_ll_dlyb.c
         ${PREFIX_SRC}/stm32u5xx_ll_dma.c
         ${PREFIX_SRC}/stm32u5xx_ll_exti.c
         #${PREFIX_SRC}/stm32u5xx_ll_fmac.c

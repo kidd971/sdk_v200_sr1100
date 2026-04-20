@@ -1,7 +1,7 @@
 /** @file  sac_endpoint_swc.c
  *  @brief Implement Wireless Core audio endpoint initialization functions.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -13,22 +13,22 @@
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static uint16_t ep_swc_action_produce(void *instance, uint8_t *samples, uint16_t size);
 static uint16_t ep_swc_action_consume(void *instance, uint8_t *samples, uint16_t size);
-static void ep_swc_start(void *instance);
+static void ep_swc_consumer_start(void *instance);
+static void ep_swc_producer_start(void *instance);
 static void ep_swc_stop(void *instance);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface,
-                           sac_endpoint_interface_t *swc_consumer_iface)
+void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface, sac_endpoint_interface_t *swc_consumer_iface)
 {
     if (swc_producer_iface != NULL) {
         swc_producer_iface->action = ep_swc_action_produce;
-        swc_producer_iface->start = ep_swc_start;
+        swc_producer_iface->start = ep_swc_producer_start;
         swc_producer_iface->stop = ep_swc_stop;
     }
 
     if (swc_consumer_iface != NULL) {
         swc_consumer_iface->action = ep_swc_action_consume;
-        swc_consumer_iface->start = ep_swc_start;
+        swc_consumer_iface->start = ep_swc_consumer_start;
         swc_consumer_iface->stop = ep_swc_stop;
     }
 }
@@ -44,8 +44,8 @@ void sac_endpoint_swc_init(sac_endpoint_interface_t *swc_producer_iface,
 static uint16_t ep_swc_action_produce(void *instance, uint8_t *samples, uint16_t size)
 {
     uint8_t *payload = NULL;
-    uint8_t payload_size;
-    swc_error_t err;
+    uint8_t payload_size = 0;
+    swc_error_t err = SWC_ERR_NONE;
     ep_swc_instance_t *inst = (ep_swc_instance_t *)instance;
     (void)size;
 
@@ -66,8 +66,8 @@ static uint16_t ep_swc_action_produce(void *instance, uint8_t *samples, uint16_t
  */
 static uint16_t ep_swc_action_consume(void *instance, uint8_t *samples, uint16_t size)
 {
-    uint8_t *buf;
-    swc_error_t err;
+    uint8_t *buf = NULL;
+    swc_error_t err = SWC_ERR_NONE;
     ep_swc_instance_t *inst = (ep_swc_instance_t *)instance;
 
     /** When the fallback is activated, and the payload size is smaller, the variable allocation of memory causes
@@ -83,11 +83,33 @@ static uint16_t ep_swc_action_consume(void *instance, uint8_t *samples, uint16_t
     }
 }
 
-/** @brief Start the endpoint.
+/** @brief Start the consumer endpoint.
  *
  *  @param[in] instance  Endpoint instance.
  */
-static void ep_swc_start(void *instance)
+static void ep_swc_consumer_start(void *instance)
+{
+    uint8_t *buf = NULL;
+    swc_error_t err = SWC_ERR_NONE;
+    ep_swc_instance_t *inst = (ep_swc_instance_t *)instance;
+
+    /* Fill wireless core queue with empty payload to maintain buffering latency. */
+    swc_connection_get_payload_buffer(inst->connection, &buf, &err);
+    while (buf != NULL) {
+        swc_connection_send(inst->connection, buf, 0, &err);
+        ASSERT_SWC_STATUS(err);
+
+        swc_connection_get_payload_buffer(inst->connection, &buf, &err);
+
+        ASSERT_SWC_STATUS(err);
+    }
+}
+
+/** @brief Start the producer endpoint.
+ *
+ *  @param[in] instance  Endpoint instance.
+ */
+static void ep_swc_producer_start(void *instance)
 {
     (void)instance;
 }

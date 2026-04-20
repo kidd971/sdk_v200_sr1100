@@ -1,7 +1,7 @@
 /** @file link_scheduler.h
  *  @brief Scheduler module.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -19,24 +19,30 @@ extern "C" {
 #endif
 
 /* TYPES **********************************************************************/
+
+typedef struct timeslot_conn_list {
+    /*! Number of connections on this time slot. */
+    uint8_t connection_count;
+    /*! List of connection instances on this timeslot. */
+    wps_connection_t *connection[WPS_MAX_CONN_PER_TIMESLOT];
+    /*! List of priority for connection instances. */
+    uint8_t priority[WPS_MAX_CONN_PER_TIMESLOT];
+    /*!  Maximum payload size of all connections. */
+    uint8_t max_payload_size;
+    /*! Maximum CCA RX timeout offset in PLL cycles of all connections. */
+    uint32_t max_cca_rx_timeout_offset;
+} timeslot_conn_list_t;
+
 /** @brief Timeslot instance.
  */
 typedef struct timeslot {
-    /*! Main connection instance. */
-    wps_connection_t *connection_main[WPS_MAX_CONN_PER_TIMESLOT];
-    /*! Auto-reply connection instance. */
-    wps_connection_t *connection_auto_reply[WPS_MAX_CONN_PER_TIMESLOT];
+    /*! List of main connection instances. */
+    timeslot_conn_list_t main_conn_list;
+    /*! List of auto-reply connection instances. */
+    timeslot_conn_list_t auto_conn_list;
     /*! Timeslot duration, in PLL cycles. */
     uint32_t duration_pll_cycles;
-    /*! Timeslot priority for main connection instances. */
-    uint8_t connection_main_priority[WPS_MAX_CONN_PER_TIMESLOT];
-    /*! Timeslot priority for auto-reply connection instances. */
-    uint8_t connection_auto_priority[WPS_MAX_CONN_PER_TIMESLOT];
-    /*! Number of main connections on this time slot. */
-    uint8_t main_connection_count;
-    /*! Number of auto reply connections on this time slot. */
-    uint8_t auto_connection_count;
-    /*! Last used connection on this time slot. */
+    /*! ID of the last used main connection on this time slot. */
     uint8_t last_used_main_connection;
     /*! Sleep level for this time slot. */
     sleep_lvl_t sleep_lvl;
@@ -138,6 +144,36 @@ static inline timeslot_t *link_scheduler_get_current_timeslot(scheduler_t *sched
     return &scheduler->schedule.timeslot[scheduler->current_time_slot_num];
 }
 
+/** @brief Get the current time slot's main connections max payload size.
+ *
+ *  @param[in]  scheduler  Scheduler object.
+ *  @return The current time slot's main connections max payload size.
+ */
+static inline uint8_t link_scheduler_get_current_timeslot_main_max_payload_size(scheduler_t *scheduler)
+{
+    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].main_conn_list.max_payload_size;
+}
+
+/** @brief Get the current time slot's main connections max CCA RX timeout offset.
+ *
+ *  @param[in]  scheduler  Scheduler object.
+ *  @return The current time slot's main connections max CCA RX timeout offset.
+ */
+static inline uint32_t link_scheduler_get_current_timeslot_max_cca_rx_timeout_offset(scheduler_t *scheduler)
+{
+    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].main_conn_list.max_cca_rx_timeout_offset;
+}
+
+/** @brief Get the current time slot's auto connections max payload size.
+ *
+ *  @param[in]  scheduler  Scheduler object.
+ *  @return The current time slot's auto connections max payload size.
+ */
+static inline uint8_t link_scheduler_get_current_timeslot_auto_max_payload_size(scheduler_t *scheduler)
+{
+    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].auto_conn_list.max_payload_size;
+}
+
 /** @brief Get the handle of the previous time slot index.
  *
  *  @param[in]  scheduler  Scheduler object.
@@ -164,7 +200,7 @@ static inline timeslot_t *link_scheduler_get_previous_timeslot_index(scheduler_t
  */
 static inline wps_connection_t *link_scheduler_get_current_main_connection(scheduler_t *scheduler, uint8_t id)
 {
-    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].connection_main[id];
+    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].main_conn_list.connection[id];
 }
 
 /** @brief Get the current time slot's auto reply connection.
@@ -175,7 +211,7 @@ static inline wps_connection_t *link_scheduler_get_current_main_connection(sched
  */
 static inline wps_connection_t *link_scheduler_get_current_auto_connection(scheduler_t *scheduler, uint8_t id)
 {
-    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].connection_auto_reply[id];
+    return scheduler->schedule.timeslot[scheduler->current_time_slot_num].auto_conn_list.connection[id];
 }
 
 /** @brief Get the total number of time slots.
@@ -200,7 +236,7 @@ static inline uint8_t link_scheduler_get_next_timeslot_index(scheduler_t *schedu
 
 /** @brief Get sleep the amount of time to sleep in PLL cycles.
  *
- *  @param[in]   scheduler  Scheduler object.
+ *  @param[in]  scheduler  Scheduler object.
  *  @return time to sleep in PLL cycles.
  */
 static inline uint32_t link_scheduler_get_sleep_time(scheduler_t *scheduler)

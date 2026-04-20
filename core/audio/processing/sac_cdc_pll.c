@@ -2,7 +2,7 @@
  *  @brief Clock drift compensation processing stage using audio buffer load averaging for
  *         detecting the drift and audio pll adjustment for correcting it.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -10,6 +10,7 @@
 
 /* INCLUDES *******************************************************************/
 #include "sac_cdc_pll.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "sac_utils.h"
@@ -25,7 +26,7 @@
 #define CDC_DEFAULT_EXTRA_QUEUE_SIZE 3
 /* Queue level thresholds. */
 #define CDC_QUEUE_HIGH_LEVEL_THRESHOLD(queue_limit) ((queue_limit) - 2)
-#define CDC_QUEUE_LOW_LEVEL_THRESHOLD 1
+#define CDC_QUEUE_LOW_LEVEL_THRESHOLD               1
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void adjust_latency(sac_cdc_pll_instance_t *cdc);
@@ -132,7 +133,7 @@ uint16_t sac_cdc_pll_process(void *instance, sac_pipeline_t *pipeline, sac_heade
     static uint8_t tx_queue_level_high_count;
     static int32_t error_accumulator;
     sac_cdc_pll_instance_t *cdc = instance;
-    uint32_t current_pll_fracn;
+    uint32_t current_pll_fracn = 0;
 
     *status = SAC_OK;
     current_pll_fracn = cdc->cdc_pll_hal.get_fracn();
@@ -207,20 +208,25 @@ sac_cdc_pll_stats_t sac_cdc_pll_get_stats(sac_cdc_pll_instance_t *cdc)
     return cdc_stats;
 }
 
-int sac_cdc_pll_format_stats(sac_cdc_pll_instance_t *cdc, char *buffer, uint16_t size)
+int sac_cdc_pll_format_stats(sac_cdc_pll_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status)
 {
     int string_length = 0;
+
+    *status = SAC_OK;
+
+    SAC_CHECK_STATUS(cdc == NULL, status, SAC_ERR_NULL_PTR, return 0);
+    SAC_CHECK_STATUS(buffer == NULL, status, SAC_ERR_NULL_PTR, return 0);
 
     sac_cdc_pll_stats_t cdc_stats = sac_cdc_pll_get_stats(cdc);
 
     string_length = snprintf(buffer, size,
-                             "\n<< CDC STATS >>\r\n"
-                             "  %s:\t\t%10lu\r\n"
-                             "  %s:\t\t%10lu\r\n"
-                             "  %s:\t\t\t%10li\r\n"
-                             "  %s:\t\t\t%10li\r\n"
-                             "  %s:\t\t%10lu\r\n"
-                             "  %s:\t\t%10li\r\n",
+                             "<< CDC PLL Statistics >>\r\n"
+                             "  %s:\t\t%10" PRIu32 "\r\n"
+                             "  %s:\t\t%10" PRIu32 "\r\n"
+                             "  %s:\t\t\t%10" PRIi32 "\r\n"
+                             "  %s:\t\t\t%10" PRIi32 "\r\n"
+                             "  %s:\t\t%10" PRIu32 "\r\n"
+                             "  %s:\t\t%10" PRIi32 "\r\n",
                              "Target queue size", cdc_stats.target_queue_size, "Avg queue size",
                              cdc_stats.avg_queue_size, "Error", cdc_stats.queue_size_error, "Avg delta",
                              cdc_stats.queue_size_avg_delta, "Current PLL value", cdc_stats.current_pll_value,
@@ -236,9 +242,9 @@ int sac_cdc_pll_format_stats(sac_cdc_pll_instance_t *cdc, char *buffer, uint16_t
  */
 static void adjust_latency(sac_cdc_pll_instance_t *cdc)
 {
-    int16_t current_pll_fracn_offset;
-    int16_t adjust_pll_fracn_offset;
-    uint32_t current_pll_fracn;
+    int16_t current_pll_fracn_offset = 0;
+    int16_t adjust_pll_fracn_offset = 0;
+    uint32_t current_pll_fracn = 0;
 
     /* Save the current offset. */
     current_pll_fracn_offset = cdc->_internal.pll_fracn_offset;
@@ -267,6 +273,7 @@ static void update_queue_avg(sac_cdc_pll_instance_t *cdc, sac_pipeline_t *pipeli
     uint16_t current_queue_length = pipeline->_internal.samples_buffered_size /
                                     (pipeline->consumer->cfg.channel_count * cdc->_internal.size_of_buffer_type *
                                      cdc->_internal.sample_amount);
+    current_queue_length += pipeline->_internal.pending_packets;
     uint16_t avg_idx = cdc->_internal.avg_idx;
 
     /* Check is queue level is high. */

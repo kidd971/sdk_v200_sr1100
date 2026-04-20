@@ -3,7 +3,7 @@
  *
  *  @note This processing stage requires an Arm Cortex-M processor based device.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -25,50 +25,89 @@
  */
 #define FIR_SAMPLE_COUNT_CORRECTION_FACTOR 2
 
-/* Half of initial sampling frequency */
+/* Half of initial sampling frequency.
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.35
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.35
+ *   Window function  = hamming
+ *   Gain             = 0.995
+ */
 static const int32_t fir_n24_c0_35_w_hamming_32bit[FIR_NUMTAPS] = {
-    373831,     -5398190,  -9034464,  1428966,   27704979,  35768973,  -16611028, -102718003,
-    -102343356, 94026137,  437870567, 712673411, 712673411, 437870567, 94026137,  -102343356,
-    -102718003, -16611028, 35768973,  27704979,  1428966,   -9034464,  -5398190,  373831,
+    371962,     -5371199,  -8989291,  1421821,   27566455,  35590128,  -16527973, -102204413,
+    -101831640, 93556006,  435681214, 709110044, 709110044, 435681214, 93556006,  -101831640,
+    -102204413, -16527973, 35590128,  27566455,  1421821,   -8989291,  -5371199,  371962,
 };
 
-/*
- * Same filter with coefficient multiplied by a factor of 2
+/* Same filter with coefficient multiplied by a factor of 2
  * Used to compensate for the gain loss due to the interpolation zero-stuffing.
+ *
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.35
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.35
+ *   Window function  = hamming
+ *   Gain             = 1.99
  */
 static const int32_t fir_n24_c0_35_w_hamming_x2_gain_32bit[FIR_NUMTAPS] = {
-    747662,     -10796381, -18068928, 2857933,    55409959,   71537947,  -33222056, -205436007,
-    -204686713, 188052275, 875741134, 1425346823, 1425346823, 875741134, 188052275, -204686713,
-    -205436007, -33222056, 71537947,  55409959,   2857933,    -18068928, -10796381, 747662,
+    743924,     -10742399, -17978583, 2843643,    55132910,   71180257,  -33055946, -204408827,
+    -203663280, 187112013, 871362429, 1418220089, 1418220089, 871362429, 187112013, -203663280,
+    -204408827, -33055946, 71180257,  55132910,   2843643,    -17978583, -10742399, 743924,
 };
 
-/* Third of initial sampling frequency */
+/* Third of initial sampling frequency.
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.2
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.2
+ *   Window function  = hamming
+ *   Gain             = 1.0
+ */
 static const int32_t fir_n24_c0_20_w_hamming_32bit[FIR_NUMTAPS] = {
     3830811,   1944310,   -3254016,  -14643242, -29801855, -37819816, -21852163, 32441298,
     126699149, 244179808, 353138497, 418879042, 418879042, 353138497, 244179808, 126699149,
     32441298,  -21852163, -37819816, -29801855, -14643242, -3254016,  1944310,   3830811,
 };
 
-/*
- * Same filter with coefficient multiplied by a factor of 3
+/* Same filter with coefficient multiplied by a factor of 3
  * Used to compensate for the gain loss due to the interpolation zero-stuffing.
+ *
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.2
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.2
+ *   Window function  = hamming
+ *   Gain             = 2.999
  */
 static const int32_t fir_n24_c0_20_w_hamming_x3_gain_32bit[FIR_NUMTAPS] = {
-    11492434,  5832931,   -9762050,   -43929727,  -89405567,  -113459450, -65556491, 97323896,
-    380097448, 732539426, 1059415492, 1256637128, 1256637128, 1059415492, 732539426, 380097448,
-    97323896,  -65556491, -113459450, -89405567,  -43929727,  -9762050,   5832931,   11492434,
+    11488603,  5830986,   -9758796,   -43915083,  -89375765,  -113421630, -65534639, 97291455,
+    379970749, 732295246, 1059062354, 1256218249, 1256218249, 1059062354, 732295246, 379970749,
+    97291455,  -65534639, -113421630, -89375765,  -43915083,  -9758796,   5830986,   11488603,
 };
 
-/* Fourth of initial sampling frequency */
+/* Fourth of initial sampling frequency.
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.15
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.15
+ *   Window function  = hamming
+ *   Gain             = 1.0
+ */
 static const int32_t fir_n24_c0_15_w_hamming_32bit[FIR_NUMTAPS] = {
     -3624579,  -6158766,  -10307372, -13854923, -11480531, 3692190,   37194283,  90107443,
     157164413, 227093189, 285371665, 318544811, 318544811, 285371665, 227093189, 157164413,
     90107443,  37194283,  3692190,   -11480531, -13854923, -10307372, -6158766,  -3624579,
 };
 
-/*
- * Same filter with coefficient multiplied by a factor of 4
+/* Same filter with coefficient multiplied by a factor of 4
  * Used to compensate for the gain loss due to the interpolation zero-stuffing.
+ *
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.15
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.15
+ *   Window function  = hamming
+ *   Gain             = 4.0
  */
 static const int32_t fir_n24_c0_15_w_hamming_x4_gain_32bit[FIR_NUMTAPS] = {
     -14498319, -24635067, -41229489,  -55419694,  -45922124,  14768761,   148777134, 360429775,
@@ -76,7 +115,14 @@ static const int32_t fir_n24_c0_15_w_hamming_x4_gain_32bit[FIR_NUMTAPS] = {
     360429775, 148777134, 14768761,   -45922124,  -55419694,  -41229489,  -24635067, -14498319,
 };
 
-/* Sixth of initial sampling frequency. */
+/* Sixth of initial sampling frequency.
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.1
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.1
+ *   Window function  = hamming
+ *   Gain             = 1.0
+ */
 static const int32_t fir_n24_c0_10_w_hamming_32bit[FIR_NUMTAPS] = {
     -2390937,  -1094722,  1832137,   9139335,   23437783,  46326649,  77681972,  115325150,
     155197661, 192036148, 220405496, 235845147, 235845147, 220405496, 192036148, 155197661,
@@ -85,6 +131,13 @@ static const int32_t fir_n24_c0_10_w_hamming_32bit[FIR_NUMTAPS] = {
 
 /* Same filter with coefficient multiplied by a factor of 6
  * Used to compensate for the gain loss due to the interpolation zero-stuffing.
+ *
+ *   FIR low pass filter characteristics :
+ *   Number of taps   = 24
+ *   Cutoff frequency = 0.1
+ *   Cutoff frequency = Sampling rate [Hz] / 2 * 0.1
+ *   Window function  = hamming
+ *   Gain             = 6.0
  */
 static const int32_t fir_n24_c0_10_w_hamming_x6_gain_32bit[FIR_NUMTAPS] = {
     -14345622, -6568333,   10992826,   54836011,   140626703,  277959898,  466091835,  691950904,
@@ -101,21 +154,21 @@ void sac_src_cmsis_init(void *instance, const char *name, sac_pipeline_t *pipeli
     (void)pipeline;
     (void)name;
 
-    int32_t *fir_state;
-    const int32_t *fir_coeff_decimation;
-    const int32_t *fir_coeff_interpolation;
+    int32_t *fir_state = NULL;
+    const int32_t *fir_coeff_decimation = NULL;
+    const int32_t *fir_coeff_interpolation = NULL;
     src_cmsis_instance_t *src_instance = instance;
-    fir_decimate_instance_t *decimate_instance;
-    fir_interpolate_instance_t *interpolate_instance;
-    fir_sample_format_t *input_format;
-    fir_sample_format_t *output_format;
-    uint8_t input_sample_size_byte;
-    uint8_t output_sample_size_byte;
-    uint32_t block_size;
-    uint32_t allocation_size;
-    uint16_t discard_accumulator_size;
-    uint8_t bit_depth;
-    filtering_functions_error_t fir_err;
+    fir_decimate_instance_t *decimate_instance = NULL;
+    fir_interpolate_instance_t *interpolate_instance = NULL;
+    fir_sample_format_t *input_format = NULL;
+    fir_sample_format_t *output_format = NULL;
+    uint8_t input_sample_size_byte = 0;
+    uint8_t output_sample_size_byte = 0;
+    uint32_t block_size = 0;
+    uint32_t allocation_size = 0;
+    uint16_t discard_accumulator_size = 0;
+    uint8_t bit_depth = 0;
+    filtering_functions_error_t fir_err = FILTERING_FUNCTION_ERR_NONE;
 
     *status = SAC_OK;
 
@@ -366,9 +419,9 @@ void sac_src_cmsis_discard_init(void *instance, const char *name, sac_pipeline_t
     (void)name;
     (void)pipeline;
 
-    int16_t discard_accumulator_size;
+    int16_t discard_accumulator_size = 0;
     src_cmsis_instance_t *src_instance = instance;
-    uint8_t input_sample_size_byte;
+    uint8_t input_sample_size_byte = 0;
 
     if (src_instance->cfg.input_sample_format.sample_encoding == SAC_SAMPLE_PACKED) {
         input_sample_size_byte = src_instance->cfg.input_sample_format.bit_depth / SAC_BYTE_SIZE_BITS;
@@ -396,34 +449,36 @@ void sac_src_cmsis_discard_init(void *instance, const char *name, sac_pipeline_t
 uint16_t sac_src_cmsis_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,
                                uint16_t size, uint8_t *data_out, sac_status_t *status)
 {
-    (void)pipeline;
     (void)header;
 
     uint16_t sample_count_in = 0;
     uint16_t sample_count_out = 0;
+    uint32_t expected_sample_count_in = 0;
     uint16_t accumulator_sample_count = 0;
-    uint16_t expected_discard_input_size;
+    uint16_t expected_discard_input_size = 0;
     src_cmsis_instance_t *src_instance = instance;
-    uint8_t input_sample_size_byte;
-    uint8_t output_sample_size_byte;
-    uint16_t data_in_idx;
-    uint16_t data_out_idx;
-    uint8_t *audio_in;
-    uint8_t *audio_out;
+    uint8_t input_sample_size_byte = 0;
+    uint8_t output_sample_size_byte = 0;
+    uint16_t data_in_idx = 0;
+    uint16_t data_out_idx = 0;
+    uint8_t *audio_in = NULL;
+    uint8_t *audio_out = NULL;
 
     *status = SAC_OK;
 
     set_word_size(&src_instance->cfg, &input_sample_size_byte, &output_sample_size_byte);
 
     sample_count_in = size / input_sample_size_byte;
+    expected_sample_count_in = pipeline->_internal.current_sample_count * src_instance->cfg.channel_count;
 
+    /* When using fallback, current_sample_count tracking is enabled. This allows tracking of discard state. */
     if (src_instance->cfg.multiply_ratio > SAC_SRC_ONE) {
         accumulator_sample_count = ((FIR_NUMTAPS / src_instance->cfg.multiply_ratio) * src_instance->cfg.channel_count);
 
         /* Validate input payload size. */
-        if (size != src_instance->cfg.payload_size) {
+        if ((expected_sample_count_in > 0) && (sample_count_in != expected_sample_count_in)) {
             /* Input size different than what was expected. */
-            expected_discard_input_size = (src_instance->cfg.payload_size / input_sample_size_byte) +
+            expected_discard_input_size = expected_sample_count_in +
                                           (accumulator_sample_count / FIR_SAMPLE_COUNT_CORRECTION_FACTOR);
             if (sample_count_in == expected_discard_input_size) {
                 /* Discard transition packet. */

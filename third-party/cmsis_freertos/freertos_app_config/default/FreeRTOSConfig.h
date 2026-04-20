@@ -69,7 +69,7 @@ extern uint32_t SystemCoreClock;
 #define configTICK_RATE_HZ                        ((TickType_t)1000)
 #define configMAX_PRIORITIES                      (56)
 #define configMINIMAL_STACK_SIZE                  ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE                     ((size_t)25000)
+#define configTOTAL_HEAP_SIZE                     ((size_t)FREERTOS_TOTAL_HEAP_SIZE)
 #define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP 0
 #define configMAX_TASK_NAME_LEN                   (16)
 #define configUSE_TRACE_FACILITY                  1
@@ -80,6 +80,8 @@ extern uint32_t SystemCoreClock;
 #define configUSE_COUNTING_SEMAPHORES             1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION   0
 #define configUSE_TASK_NOTIFICATIONS              1
+#define configRECORD_STACK_HIGH_ADDRESS           1
+#define configSTACK_DEPTH_TYPE                    uint32_t
 
 /* Defaults to size_t for backward compatibility, but can be changed
    if lengths will always be less than the number of bytes in a size_t. */

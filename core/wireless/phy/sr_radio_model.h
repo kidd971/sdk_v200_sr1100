@@ -3,7 +3,7 @@
  *
  *  Radio model and package descriptions.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is confidential and proprietary.
  *  @author    SPARK FW Team.
  */
@@ -11,14 +11,24 @@
 #define SR_RADIO_MODEL_H_
 
 /* MACROS *********************************************************************/
-#define KEY_TO_INDEX(k)                  (k - 1)
-#define IS_SR1120(phy_model)             (phy_model == PHY_MODEL_SR1120)
-#define IS_SR1020(phy_model)             (phy_model == PHY_MODEL_SR1020)
-#define IS_SR1010(phy_model)             (phy_model == PHY_MODEL_SR1010)
+#if SR1100
+/*! SR1100 family only has a SR1X20 model. */
+#define IS_SR1X10(phy_model) ((void)(phy_model), false)
+#define IS_SR1X20(phy_model) ((void)(phy_model), true)
+#else
+#define IS_SR1X10(phy_model) (phy_model == PHY_MODEL_SR1010)
+#define IS_SR1X20(phy_model) (phy_model == PHY_MODEL_SR1020)
+#endif
 #define IS_QFN28(phy_package)            (phy_package == PHY_PACKG_QFN28)
 #define IS_QFN32(phy_package)            (phy_package == PHY_PACKG_QFN32)
 #define IS_QFN48(phy_package)            (phy_package == PHY_PACKG_QFN48)
 #define CHIP_ID_IS_BELOW(value, chip_id) (chip_id < value)
+#define GHZ_3_1_CODE                     75  /* 3100 MHz / 40.96 */
+#define GHZ_5_8_CODE                     142 /* 5800 MHz / 40.96 */
+#define GHZ_6_CODE                       146 /* 6000 MHz / 40.96 */
+#define GHZ_9_3_CODE                     227 /* 9300 MHz / 40.96 */
+#define IS_SR1010_FREQ(freq)             (freq >= GHZ_3_1_CODE && freq <= GHZ_5_8_CODE)
+#define IS_SR1X20_FREQ(freq)             (freq >= GHZ_6_CODE && freq <= GHZ_9_3_CODE)
 
 /* TYPES **********************************************************************/
 typedef enum phy_model {
@@ -38,6 +48,5 @@ typedef enum phy_package {
     /*! QFN32 package */
     PHY_PACKG_QFN32 = 2,
 } phy_package_t;
-
 
 #endif /* SR_RADIO_MODEL_H_ */

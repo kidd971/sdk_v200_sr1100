@@ -1,0 +1,5 @@
+if(${HARDWARE} STREQUAL "QUASAR")
+    add_subdirectory(quasar)
+elseif(${HARDWARE} STREQUAL "EVK")
+    add_subdirectory(evk)
+endif()

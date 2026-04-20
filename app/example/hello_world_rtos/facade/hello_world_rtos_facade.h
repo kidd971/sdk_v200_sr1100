@@ -1,18 +1,15 @@
 /** @file  hello_world_rtos_facade.h
  *  @brief Facades for low-level platform-specific features required by the application example.
  *
- *  @note This header defines the interfaces for various hardware features used by
- *  the hello-world-rtos example. These facades abstract the underlying
- *  platform-specific implementations of features like SPI communication,
- *  IRQ handling, timer functions, and context switching mechanisms. The actual
- *  implementations are selected at compile time based on the target platform,
- *  allowing for flexibility and portability across different hardware.
+ *  @note This header defines the interfaces for various hardware features used by the hello-world-rtos example.
  *
- *  The facade is designed to be a compile-time dependency only, with no
- *  support for runtime polymorphism. This ensures tight integration with the
- *  build system and minimal overhead.
+ *  These facades abstract the underlying platform-specific implementations of features like SPI communication, IRQ
+ *  handling, timer functions, and context switching mechanisms. The actual implementations are selected at compile time
+ *  based on the target platform, allowing for flexibility and portability across different hardware. The facade is
+ *  designed to be a compile-time dependency only, with no support for runtime polymorphism. This ensures tight
+ *  integration with the build system and minimal overhead.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -22,62 +19,53 @@
 
 /* INCLUDES *******************************************************************/
 #include <stdint.h>
+#include "common_facade.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* MACROS *********************************************************************/
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+/* TYPES **********************************************************************/
+/** @brief Certification modes.
+ */
+typedef enum facade_certification_mode {
+    FACADE_CERTIF_NONE,
+    FACADE_CERTIF_HELLO_WORLD_RTOS,
+} facade_certification_mode_t;
+
+/** @brief Function callbacks for button presses.
+ */
+typedef struct facade_button_callbacks {
+    /*! Function callback to pair/unpair the device. */
+    void (*pairing_callback)(void);
+    /*! Function callback to reset the statistics. */
+    void (*reset_stats_callback)(void);
+} facade_button_callbacks_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-/** @brief Initialize hardware drivers in the underlying board support package.
- */
-void facade_board_init(void);
+void facade_button_init(void);
 
-/** @brief Poll for button presses.
+/** @brief Read button state to define if certification mode is required.
  *
- *  @note Set NULL in place of unused callback.
+ *  @return The certification mode to be applied.
+ */
+facade_certification_mode_t facade_get_certification_mode(void);
+
+/** @brief Set button function callbacks.
  *
- *  @param[in] button1_callback  Function to execute when pressing button #1.
- *  @param[in] button2_callback  Function to execute when pressing button #2.
- *  @param[in] button3_callback  Function to execute when pressing button #3.
- *  @param[in] button4_callback  Function to execute when pressing button #4.
+ *  @param[in] button_callbacks  Button function callback structure.
  */
-void facade_button_handling(void (*button1_callback)(void), void (*button2_callback)(void),
-                            void (*button3_callback)(void), void (*button4_callback)(void));
+void facade_set_button_callbacks(facade_button_callbacks_t button_callbacks);
 
-/** @brief Notify user of the wireless TX connection status.
+/** @brief Poll for button presses and execute function callback.
  */
-void facade_tx_conn_status(void);
+void facade_button_handling(void);
 
-/** @brief Notify user of the wireless RX connection status.
- */
-void facade_rx_conn_status(void);
-
-/** @brief Blocking delay with a 1ms resolution.
+/** @brief Set the button application callback to process a button state change event.
  *
- *  @param[in] ms_delay  Delay in milliseconds to wait.
+ *  @param[in] button_event_callback  Function callback to be called on a button state change event.
  */
-void facade_delay(uint32_t ms_delay);
-
-/** @brief Print a string of characters.
- *
- *  @param[in] string  Null terminated string to print.
- */
-void facade_print_string(char *string);
-
-/** @brief Enter pairing notification LED pattern.
- */
-void facade_notify_enter_pairing(void);
-
-/** @brief Not paired notification LED pattern.
- */
-void facade_notify_not_paired(void);
-
-/** @brief Successful pairing notification LED pattern.
- */
-void facade_notify_pairing_successful(void);
+void facade_set_button_event_callback(void (*button_event_callback)(void));
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,2 @@
+target_sources(middleware_tinyusb PRIVATE tusb_descriptors.c)
+target_include_directories(middleware_tinyusb PUBLIC ${CMAKE_CURRENT_LIST_DIR})

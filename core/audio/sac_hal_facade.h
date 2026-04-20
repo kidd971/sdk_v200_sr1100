@@ -11,7 +11,7 @@
  *  support for runtime polymorphism. This ensures tight integration with the
  *  build system and minimal overhead.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -27,19 +27,12 @@ extern "C" {
 #endif
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
-/** @brief Initialize the Audio Core HAL.
+/** @brief Initialize the audio endpoint interfaces.
  *
- *  @param[out] hal  Audio Core HAL.
+ *  @param[out] producer_iface  Producer audio endpoint interface.
+ *  @param[out] consumer_iface  Consumer audio endpoint interface.
  */
-void sac_facade_hal_init(sac_hal_t *hal);
-
-/** @brief Initialize the codec audio endpoint interfaces.
- *
- *  @param[out] codec_producer_iface  Codec producer audio endpoint interface.
- *  @param[out] codec_consumer_iface  Codec consumer audio endpoint interface.
- */
-void sac_facade_codec_endpoint_init(sac_endpoint_interface_t *codec_producer_iface,
-                                    sac_endpoint_interface_t *codec_consumer_iface);
+void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *producer_iface, sac_endpoint_interface_t *consumer_iface);
 
 /** @brief Initialize the Clock Drift Compensation processing stage.
  *
@@ -53,9 +46,18 @@ sac_processing_t *sac_facade_cdc_processing_init(sac_sample_format_t format, sac
  *
  *  @param[out] buffer  Buffer where to put the formatted string.
  *  @param[in]  size    Size of the buffer.
+ *  @param[out] status  Status code.
  *  @return The formatted string length, excluding the NULL terminator.
  */
-int sac_facade_cdc_format_stats(char *buffer, uint16_t size);
+int sac_facade_cdc_format_stats(char *buffer, uint16_t size, sac_status_t *status);
+
+/** @brief Set the Clock Drift Compensation queue size target.
+ *
+ *  @param[in]  pipeline    Pipeline instance.
+ *  @param[in]  queue_size  Queue size to set.
+ *  @param[out] status      Status code.
+ */
+void facade_app_audio_cdc_set_target_queue_size(sac_pipeline_t *pipeline, uint8_t queue_size, sac_status_t *status);
 
 #ifdef __cplusplus
 }

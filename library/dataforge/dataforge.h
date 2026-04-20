@@ -2,7 +2,7 @@
  *  @brief Pseudo random data generator/validator with the help of a CRC and data pattern generator/validator.
  *         Often use to validate application.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -23,9 +23,12 @@ extern "C" {
 /** @brief Dataforge sequence number match status.
  */
 typedef enum {
-    DATAFORGE_MATCHING_SEQ     = 0,  /*! Sequence numbers matched */
-    DATAFORGE_NON_MATCHING_SEQ = 1,  /*! Sequence numbers do not match */
-    DATAFORGE_DUPLICATE_SEQ    = 2,  /*! Sequence numbers are duplicate */
+    /*! Sequence numbers matched */
+    DATAFORGE_MATCHING_SEQ = 0,
+    /*! Sequence numbers do not match */
+    DATAFORGE_NON_MATCHING_SEQ = 1,
+    /*! Sequence numbers are duplicate */
+    DATAFORGE_DUPLICATE_SEQ = 2,
 } dataforge_seq_status_t;
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
@@ -86,7 +89,8 @@ uint8_t dataforge_extract_seq_num(uint8_t *payload);
  *  @param[in] payload_size        Payload size.
  *  @param[in] payload_data_count  Payload data pattern count.
  */
-void dataforge_generate_pattern(char *payload, uint32_t *payload_data, uint8_t payload_size, uint8_t payload_data_count);
+void dataforge_generate_pattern(char *payload, uint32_t *payload_data, uint8_t payload_size,
+                                uint8_t payload_data_count);
 
 /** @brief Validate payload of repeating payload data array pattern.
  *
@@ -104,4 +108,3 @@ bool dataforge_validate_pattern(uint8_t *payload, uint32_t *pattern, uint8_t pay
 #endif
 
 #endif /* PSEUDO_DATA_H_ */
-

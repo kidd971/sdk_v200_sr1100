@@ -1,7 +1,7 @@
 /** @file link_cca.h
  *  @brief Clear Channel Assessment module.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is confidential and proprietary.
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -33,16 +33,20 @@ typedef enum cca_fail_action {
 typedef struct {
     /*! Clear channel threshold, valid values are between 0 and 47 */
     uint8_t threshold;
-    /*! Maximum number of failed CCA tries before taking the configured fail action */
-    uint8_t max_try_count;
     /*! Action to take when all tries failed */
     cca_fail_action_t fail_action;
     /*! CCA retry time in PLL cycles */
     uint16_t retry_time_pll_cycles;
     /*! CCA ON time in PLL cycles */
     uint16_t on_time_pll_cycles;
+    /*! Number of failed CCA tries before taking the configured fail action. */
+    uint8_t max_try_count;
     /*! Fallback try count array */
-    const uint8_t *fbk_try_count;
+    const uint8_t *fallback_cca_try_count;
+    /*! Number of fallback modes. */
+    uint8_t fallback_mode_count;
+    /*! RX timeout offset in PLL cycles */
+    uint32_t rx_timeout_offset_pll_cycles;
     /*! Enable feature */
     bool enable;
 } link_cca_t;
@@ -56,25 +60,48 @@ typedef struct {
  *  @param[in] on_time_pll_cycles     CCA On time.
  *  @param[in] max_try_count          CCA max try count.
  *  @param[in] fail_action            CCA fail action.
- *  @param[in] enable                 CCA enable flag.
+ *  @return True if the CCA configuration is valid.
  */
-void link_cca_init(link_cca_t *cca, uint8_t threshold, uint16_t retry_time_pll_cycles, uint16_t on_time_pll_cycles,
-                   uint8_t max_try_count, cca_fail_action_t fail_action, bool enable);
+bool link_cca_init(link_cca_t *cca, uint8_t threshold, uint16_t retry_time_pll_cycles, uint16_t on_time_pll_cycles,
+                   uint8_t max_try_count, cca_fail_action_t fail_action);
+
+/** @brief Disable the link CCA module.
+ *
+ *  @param[in] cca  CCA object.
+ */
+void link_cca_disable(link_cca_t *cca);
 
 /** @brief Set CCA fallback try count array.
  *
- * @param[in] cca           CCA object.
- * @param[in] fbk_try_count Fallback try count array.
- * @param[in] fallback_size Fallback array size.
+ *  @param[in] cca                     CCA object.
+ *  @param[in] fallback_cca_try_count  Fallback try count array.
+ *  @param[in] fallback_mode_count     Fallback array size.
+ *  @return True if the CCA configuration is valid.
  */
-void link_cca_set_fbk_try_count(link_cca_t *cca, uint8_t *fbk_try_count, size_t fallback_size);
+bool link_cca_set_fallback_try_count(link_cca_t *cca, uint8_t *fallback_cca_try_count, uint8_t fallback_mode_count);
 
-/** @brief Get CCA on time.
+/** @brief Get CCA ON time.
  *
  *  @param[in] cca  CCA object.
- *  @return  CCA on time.
+ *  @return  CCA ON time.
  */
 uint16_t link_cca_get_on_time(link_cca_t *cca);
+
+/** @brief Get the highest CCA try count value of all fallback modes.
+ *
+ *  @param[in] cca  CCA object.
+ *  @return The highest CCA try count value of all fallback modes.
+ */
+static inline uint8_t link_cca_get_highest_try_count(link_cca_t *cca)
+{
+    if (cca->fallback_cca_try_count != NULL && cca->fallback_mode_count > 0) {
+        /* Set the cca_max_try_count to the last fallback stage to cover all possibilities. */
+        return cca->fallback_cca_try_count[cca->fallback_mode_count - 1];
+    } else {
+        /* Use the default CCA max retry count of the connection. */
+        return cca->max_try_count;
+    }
+}
 
 #ifdef __cplusplus
 }

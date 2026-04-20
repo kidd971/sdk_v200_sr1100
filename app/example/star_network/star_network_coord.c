@@ -2,7 +2,7 @@
  *  @brief This is a basic example on how to use a SPARK star network.
  *         This example uses the SPARK SPARK Wireless Core.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -11,31 +11,48 @@
 /* INCLUDES *******************************************************************/
 #include <stdio.h>
 #include "pairing_api.h"
+#include "pairing_cfg.h"
 #include "star_network_facade.h"
 #include "swc_api.h"
+#include "swc_cfg.h"
 #include "swc_cfg_coord.h"
+#include "swc_error.h"
+#include "swc_stats.h"
 
 /* CONSTANTS ******************************************************************/
 #define SWC_MEM_POOL_SIZE     10000
 #define MAX_PAYLOAD_SIZE_BYTE 12
 #define BUTTON_PRESSED        0x01
 #define PRINTF_BUF_SIZE_BYTE  64
+#define PRINT_INTERVAL_MS     1000
+#define STATS_ARRAY_LENGTH    2000
+/* Size of the buffer used to print errors. */
+#define ERROR_MESSAGE_BUFFER_SIZE 50
 
-/* The device roles are used for the pairing discovery list. */
-#define DEVICE_ROLE_COORDINATOR 0
-#define DEVICE_ROLE_NODE_1      1
-#define DEVICE_ROLE_NODE_2      2
-/* The discovery list includes the coordinator and the node. */
-#define PAIRING_DISCOVERY_LIST_SIZE 3
-/* The application code prevents unwanted devices from pairing with this application. */
-#define PAIRING_APP_CODE 0x0000000000000777
-/* The timeout in second after which the pairing procedure will abort. */
-#define PAIRING_TIMEOUT_IN_SECONDS 10
+/* TYPES **********************************************************************/
+/** @brief Enumeration representing device pairing states.
+ */
+typedef enum device_pairing_state {
+    /*! The device is unpaired. */
+    DEVICE_UNPAIRED,
+    /*! The device pairing is active. */
+    DEVICE_PAIRING,
+    /*! The device is paired with at least one Node. */
+    DEVICE_PAIRED,
+} device_pairing_state_t;
+
+/** @brief Data used for transmitting and receiving the button state and an incrementing counter.
+ */
+typedef struct user_data {
+    /*! A boolean indicating the button's state. */
+    bool button_state;
+    /*! An incrementing counter. */
+    uint32_t counter;
+} user_data_t;
 
 /* PRIVATE GLOBALS ************************************************************/
 /* ** Wireless Core ** */
 static uint8_t swc_memory_pool[SWC_MEM_POOL_SIZE];
-static swc_node_t *node;
 static swc_connection_t *tx_to_node1_conn;
 static swc_connection_t *rx_from_node1_conn;
 static swc_connection_t *tx_to_node2_conn;
@@ -49,57 +66,91 @@ static int32_t rx_from_node1_timeslots[] = RX_FROM_NODE1_TIMESLOTS;
 static int32_t tx_to_node2_timeslots[] = TX_TO_NODE2_TIMESLOTS;
 static int32_t rx_from_node2_timeslots[] = RX_FROM_NODE2_TIMESLOTS;
 
-/* ** Application Specific ** */
-static unsigned long inc_node1;
-static unsigned long inc_node2;
-
-static uint8_t device_paired_count;
+/* **** Application Specific **** */
+static facade_certification_mode_t certification_mode;
+/* Variables supporting pairing between the two devices. */
+static bool continuous_pairing = true;
+static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 static pairing_discovery_list_t pairing_discovery_list[PAIRING_DISCOVERY_LIST_SIZE];
 
+/* Nodes counter values. */
+static volatile uint32_t last_received_node1_counter_value;
+static volatile uint32_t last_received_node2_counter_value;
+
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
 static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err);
-static void conn_node1_rx_success_callback(void *conn);
-static void conn_node2_rx_success_callback(void *conn);
+static void conn_node1_rx_success_callback(void *conn, void *arg);
+static void conn_node2_rx_success_callback(void *conn, void *arg);
 
 static void enter_pairing_mode(void);
 static void unpair_device(void);
 
 static void pairing_application_callback(void);
 static void abort_pairing_procedure(void);
+static void pairing_button_callback(void);
+static void unpair_button_callback(void);
 static void app_init(void);
+
+static void wireless_send_data(swc_connection_t *tx_conn, void *transmitted_data, uint8_t size, swc_error_t *swc_err);
+static uint16_t wireless_read_data(swc_connection_t *rx_conn, void *received_data, uint8_t size, swc_error_t *swc_err);
+
+static void send_user_data_to_node1(void);
+static void send_user_data_to_node2(void);
+static bool should_print_stats(void);
+static void print_stats(void);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
 {
-    swc_error_t swc_err;
-    uint8_t *star_network_buf;
-
     facade_board_init();
 
     /* Initialize wireless core context switch handler before pairing is available */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
+    facade_button_callbacks_t button_callbacks = {
+        .pairing_callback = pairing_button_callback,
+        .unpair_device_callback = unpair_button_callback,
+    };
+    facade_set_button_callbacks(button_callbacks);
+
+    certification_mode = facade_get_certification_mode();
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        /* Init app in certification mode. */
+        app_init();
+        device_pairing_state = DEVICE_PAIRED;
+        while (1) {
+            /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
+            if (should_print_stats()) {
+                print_stats();
+            }
+        }
+    }
+
+    device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    while (continuous_pairing) {
+        enter_pairing_mode();
+    }
+
     while (1) {
-        facade_button_handling(enter_pairing_mode, unpair_device, NULL, NULL);
-        swc_connection_allocate_payload_buffer(tx_to_node1_conn, &star_network_buf, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
-        if (star_network_buf != NULL) {
-            /* Send the payload through the Wireless Core. */
-            snprintf((char *)star_network_buf, MAX_PAYLOAD_SIZE_BYTE, "x%lu", inc_node1++);
-            star_network_buf[0] = facade_read_button_status(BUTTON_C);
-            /* Payload must include the terminating NULL. */
-            swc_connection_send(tx_to_node1_conn, star_network_buf, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
+        facade_button_handling();
+
+        if (device_pairing_state == DEVICE_PAIRED) {
+            /* Send an incrementing counter and the button state of the SW3 and SW4 to Nodes. */
+            send_user_data_to_node1();
+            send_user_data_to_node2();
         }
 
-        swc_connection_allocate_payload_buffer(tx_to_node2_conn, &star_network_buf, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
-        if (star_network_buf != NULL) {
-            /* Send the payload through the Wireless Core. */
-            snprintf((char *)star_network_buf, MAX_PAYLOAD_SIZE_BYTE, "x%lu", inc_node2++);
-            star_network_buf[0] = facade_read_button_status(BUTTON_D);
-            /* Payload must include the terminating NULL. */
-            swc_connection_send(tx_to_node2_conn, star_network_buf, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
+        /* Print received string and stats every PRINT_INTERVAL_MS */
+        if (should_print_stats()) {
+            print_stats();
         }
+
+        /* Wait for an interrupt event. */
+        facade_wait_for_interrupt();
     }
 }
 
@@ -111,9 +162,18 @@ int main(void)
  */
 static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err)
 {
-    uint8_t remote_address_node_1 = pairing_discovery_list[DEVICE_ROLE_NODE_1].node_address;
-    uint8_t remote_address_node_2 = pairing_discovery_list[DEVICE_ROLE_NODE_2].node_address;
-    uint8_t local_address = pairing_discovery_list[DEVICE_ROLE_COORDINATOR].node_address;
+    uint8_t remote_address_node_1 = pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE_1].node_address;
+    uint8_t remote_address_node_2 = pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE_2].node_address;
+    uint8_t local_address = pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address;
+
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        app_pairing->coordinator_address = 0x1;
+        app_pairing->node_address = 0x2;
+        app_pairing->pan_id = 0xABC;
+        remote_address_node_1 = 0x2;
+        remote_address_node_2 = 0x3;
+        local_address = 0x1;
+    }
 
     swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
@@ -124,31 +184,19 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
     };
-    swc_init(core_cfg, facade_context_switch_trigger, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    swc_set_fast_sync(true, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
 
     swc_node_cfg_t node_cfg = {
-        .role = NETWORK_ROLE,
+        .role = SWC_ROLE_COORDINATOR,
         .pan_id = app_pairing->pan_id,
         .coordinator_address = app_pairing->coordinator_address,
         .local_address = local_address,
     };
-    node = swc_node_init(node_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
 
-    swc_radio_module_init(node, SWC_RADIO_ID_1, true, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, err);
+    ASSERT_SWC_STATUS(*err);
+
+    swc_radio_module_init(SWC_RADIO_ID_1, true, err);
+    ASSERT_SWC_STATUS(*err);
 
     /* ** Coordinator sending to Node1 connection ** */
     swc_connection_cfg_t tx_to_node1_conn_cfg = {
@@ -156,14 +204,12 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .source_address = local_address,
         .destination_address = remote_address_node_1,
         .max_payload_size = MAX_PAYLOAD_SIZE_BYTE,
-        .queue_size = TX_DATA_QUEUE_SIZE,
+        .queue_size = SWC_QUEUE_SIZE,
         .timeslot_id = tx_to_node1_timeslots,
         .timeslot_count = ARRAY_SIZE(tx_to_node1_timeslots),
     };
-    tx_to_node1_conn = swc_connection_init(node, tx_to_node1_conn_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    tx_to_node1_conn = swc_connection_init(tx_to_node1_conn_cfg, err);
+    ASSERT_SWC_STATUS(*err);
 
     swc_channel_cfg_t tx_to_node1_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
@@ -171,12 +217,10 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
         tx_to_node1_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_to_node1_conn, node, tx_to_node1_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
+        swc_connection_add_channel(tx_to_node1_conn, tx_to_node1_channel_cfg, err);
+        ASSERT_SWC_STATUS(*err);
     }
 
     /* ** Coordinator receiving from Node1 connection ** */
@@ -185,14 +229,12 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .source_address = remote_address_node_1,
         .destination_address = local_address,
         .max_payload_size = MAX_PAYLOAD_SIZE_BYTE,
-        .queue_size = RX_DATA_QUEUE_SIZE,
+        .queue_size = SWC_QUEUE_SIZE,
         .timeslot_id = rx_from_node1_timeslots,
         .timeslot_count = ARRAY_SIZE(rx_from_node1_timeslots),
     };
-    rx_from_node1_conn = swc_connection_init(node, rx_from_node1_conn_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    rx_from_node1_conn = swc_connection_init(rx_from_node1_conn_cfg, err);
+    ASSERT_SWC_STATUS(*err);
 
     swc_channel_cfg_t rx_from_node1_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
@@ -200,17 +242,13 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
         rx_from_node1_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_from_node1_conn, node, rx_from_node1_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
+        swc_connection_add_channel(rx_from_node1_conn, rx_from_node1_channel_cfg, err);
+        ASSERT_SWC_STATUS(*err);
     }
-    swc_connection_set_rx_success_callback(rx_from_node1_conn, conn_node1_rx_success_callback, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_connection_set_rx_success_callback(rx_from_node1_conn, conn_node1_rx_success_callback, NULL, err);
+    ASSERT_SWC_STATUS(*err);
 
     /* ** Coordinator sending to Node2 connection ** */
     swc_connection_cfg_t tx_to_node2_conn_cfg = {
@@ -218,14 +256,12 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .source_address = local_address,
         .destination_address = remote_address_node_2,
         .max_payload_size = MAX_PAYLOAD_SIZE_BYTE,
-        .queue_size = TX_DATA_QUEUE_SIZE,
+        .queue_size = SWC_QUEUE_SIZE,
         .timeslot_id = tx_to_node2_timeslots,
         .timeslot_count = ARRAY_SIZE(tx_to_node2_timeslots),
     };
-    tx_to_node2_conn = swc_connection_init(node, tx_to_node2_conn_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    tx_to_node2_conn = swc_connection_init(tx_to_node2_conn_cfg, err);
+    ASSERT_SWC_STATUS(*err);
 
     swc_channel_cfg_t tx_to_node2_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
@@ -233,12 +269,10 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
         tx_to_node2_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_to_node2_conn, node, tx_to_node2_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
+        swc_connection_add_channel(tx_to_node2_conn, tx_to_node2_channel_cfg, err);
+        ASSERT_SWC_STATUS(*err);
     }
 
     /* ** Coordinator receiving from Node2 connection ** */
@@ -247,14 +281,12 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .source_address = remote_address_node_2,
         .destination_address = local_address,
         .max_payload_size = MAX_PAYLOAD_SIZE_BYTE,
-        .queue_size = RX_DATA_QUEUE_SIZE,
+        .queue_size = SWC_QUEUE_SIZE,
         .timeslot_id = rx_from_node2_timeslots,
         .timeslot_count = ARRAY_SIZE(rx_from_node2_timeslots),
     };
-    rx_from_node2_conn = swc_connection_init(node, rx_from_node2_conn_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    rx_from_node2_conn = swc_connection_init(rx_from_node2_conn_cfg, err);
+    ASSERT_SWC_STATUS(*err);
 
     swc_channel_cfg_t rx_from_node2_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
@@ -262,71 +294,111 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
         rx_from_node2_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_from_node2_conn, node, rx_from_node2_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
+        swc_connection_add_channel(rx_from_node2_conn, rx_from_node2_channel_cfg, err);
+        ASSERT_SWC_STATUS(*err);
     }
-    swc_connection_set_rx_success_callback(rx_from_node2_conn, conn_node2_rx_success_callback, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_connection_set_rx_success_callback(rx_from_node2_conn, conn_node2_rx_success_callback, NULL, err);
+    ASSERT_SWC_STATUS(*err);
 
-    swc_setup(node, err);
+    /* Handle certification mode. */
+    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, err);
+    ASSERT_SWC_STATUS(*err);
+
+    swc_setup(err);
+    ASSERT_SWC_STATUS(*err);
 }
 
 /** @brief Callback function when a frame has been successfully received from Node1.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
+ *  @param[in] arg   Additional argument for the callback function.
  */
-static void conn_node1_rx_success_callback(void *conn)
+static void conn_node1_rx_success_callback(void *conn, void *arg)
 {
     (void)conn;
+    (void)arg;
 
-    swc_error_t err;
-    uint8_t *payload = NULL;
+    swc_error_t swc_err = SWC_ERR_NONE;
+    user_data_t received_user_data = {0};
+    uint16_t read_data_size;
 
-    /* Get new payload. */
-    swc_connection_receive(rx_from_node1_conn, &payload, &err);
+    /* Get received payload. */
+    read_data_size = wireless_read_data(rx_from_node1_conn, &received_user_data, sizeof(received_user_data), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
-    if (payload[0] == BUTTON_PRESSED) {
-        facade_payload_sent_status();
-    } else {
-        facade_empty_payload_sent_status();
+    if (read_data_size > 0) {
+        /* Depending on the requested button state from the Node, the specified LED turns on or off. */
+        if (received_user_data.button_state == false) {
+            facade_node1_empty_payload_coord_received_status();
+        } else {
+            facade_node1_payload_coord_received_status();
+        }
     }
 
-    facade_usb_printf("Received from Node1 : %s\n\r", &payload[1]);
-
-    /* Notify the Wireless Core that the new payload has been read. */
-    swc_connection_receive_complete(rx_from_node1_conn, &err);
+    last_received_node1_counter_value = received_user_data.counter;
 }
 
 /** @brief Callback function when a frame has been successfully received from Node2.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
+ *  @param[in] arg   Additional argument for the callback function.
  */
-static void conn_node2_rx_success_callback(void *conn)
+static void conn_node2_rx_success_callback(void *conn, void *arg)
 {
     (void)conn;
+    (void)arg;
 
-    swc_error_t err;
-    uint8_t *payload = NULL;
+    swc_error_t swc_err = SWC_ERR_NONE;
+    user_data_t received_user_data = {0};
+    uint16_t read_data_size;
 
-    /* Get new payload */
-    swc_connection_receive(rx_from_node2_conn, &payload, &err);
+    /* Get received payload. */
+    read_data_size = wireless_read_data(rx_from_node2_conn, &received_user_data, sizeof(received_user_data), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
-    if (payload[0] == BUTTON_PRESSED) {
-        facade_payload_received_status();
-    } else {
-        facade_empty_payload_received_status();
+    if (read_data_size > 0) {
+        /* Depending on the requested button state from the Node, the specified LED turns on or off. */
+        if (received_user_data.button_state == false) {
+            facade_node2_empty_payload_coord_received_status();
+        } else {
+            facade_node2_payload_coord_received_status();
+        }
     }
 
-    facade_usb_printf("Received from \t\t\t Node2 : %s\n\r", &payload[1]);
+    last_received_node2_counter_value = received_user_data.counter;
+}
 
-    /* Notify the Wireless Core that the new payload has been read. */
-    swc_connection_receive_complete(rx_from_node2_conn, &err);
+/** @brief Handle pairing button callback.
+ */
+static void pairing_button_callback(void)
+{
+    switch (device_pairing_state) {
+    case DEVICE_PAIRED:
+    case DEVICE_UNPAIRED:
+        /* When paired, a new device can be added without loosing the other one. */
+        enter_pairing_mode();
+        break;
+    default:
+        break;
+    }
+}
+
+/** @brief Handle unpairing button callback.
+ */
+static void unpair_button_callback(void)
+{
+    switch (device_pairing_state) {
+    case DEVICE_PAIRED:
+        unpair_device();
+        break;
+    case DEVICE_PAIRING:
+        abort_pairing_procedure();
+        break;
+    default:
+        break;
+    }
 }
 
 /** @brief Enter in Pairing Mode using the Pairing Module.
@@ -336,16 +408,19 @@ static void enter_pairing_mode(void)
     swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
 
-    pairing_event_t pairing_event;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
+
+    /* Set the pairing state. */
+    if (device_pairing_state == DEVICE_UNPAIRED) {
+        device_pairing_state = DEVICE_PAIRING;
+    }
 
     facade_notify_enter_pairing();
 
     /* The wireless core must be stopped before starting the pairing procedure. */
     if (swc_get_status() == SWC_STATUS_RUNNING) {
         swc_disconnect(&swc_err);
-        if ((swc_err != SWC_ERR_NONE) && (swc_err != SWC_ERR_NOT_CONNECTED)) {
-            while (1);
-        }
+        ASSERT_SWC_STATUS(swc_err);
     }
 
     /* Give the information to the Pairing Application. */
@@ -355,18 +430,22 @@ static void enter_pairing_mode(void)
     app_pairing_cfg.application_callback = pairing_application_callback;
     app_pairing_cfg.memory_pool = swc_memory_pool;
     app_pairing_cfg.memory_pool_size = SWC_MEM_POOL_SIZE;
-    app_pairing_cfg.uwb_regulation = SWC_REGULATION_FCC;
     pairing_event = pairing_coordinator_start(&app_pairing_cfg, &pairing_assigned_address, pairing_discovery_list,
                                               PAIRING_DISCOVERY_LIST_SIZE, &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
+        facade_print_error_string("An error occured during the pairing process.");
         while (1);
     }
 
     /* Handle the pairing events. */
     switch (pairing_event) {
     case PAIRING_EVENT_SUCCESS:
+        if (device_pairing_state == DEVICE_PAIRED) {
+            /* The two devices are paired. */
+            continuous_pairing = false;
+        }
         app_init();
-        device_paired_count += 1;
+        device_pairing_state = DEVICE_PAIRED;
 
         break;
     case PAIRING_EVENT_TIMEOUT:
@@ -375,10 +454,14 @@ static void enter_pairing_mode(void)
     default:
         /* Indicate that the pairing process was unsuccessful. */
         facade_notify_not_paired();
-
-        if (device_paired_count > 0) {
+        /* If at least one device is paired, reinitialize the app to ensure proper functionality. */
+        if (device_pairing_state == DEVICE_PAIRED) {
             app_init();
+        } else if (device_pairing_state == DEVICE_PAIRING) {
+            device_pairing_state = DEVICE_UNPAIRED;
         }
+        /* There is no device ready for pairing, so the app stops trying to pair. */
+        continuous_pairing = false;
         break;
     }
 }
@@ -387,17 +470,15 @@ static void enter_pairing_mode(void)
  */
 static void unpair_device(void)
 {
-    swc_error_t swc_err;
-
-    device_paired_count = 0;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
 
     /* Disconnect the Wireless Core. */
     swc_disconnect(&swc_err);
-    if ((swc_err != SWC_ERR_NONE) && (swc_err != SWC_ERR_NOT_CONNECTED)) {
-        while (1);
-    }
+    ASSERT_SWC_STATUS(swc_err);
+
+    device_pairing_state = DEVICE_UNPAIRED;
 
     /* Indicate that the device is unpaired and turn off all LEDs. */
     facade_notify_not_paired();
@@ -412,7 +493,7 @@ static void pairing_application_callback(void)
      *       executes the registered application callback, which might take
      *       a variable amount of time.
      */
-    facade_button_handling(NULL, abort_pairing_procedure, NULL, NULL);
+    facade_button_handling();
 }
 
 /** @brief Abort the pairing procedure.
@@ -433,12 +514,204 @@ static void app_init(void)
 
     /* Reconfigure the Coordinator and Node addresses. */
     app_swc_core_init(&pairing_assigned_address, &swc_err);
-    if (swc_err != SWC_ERR_NONE) {
-        while (1);
-    }
+    ASSERT_SWC_STATUS(swc_err);
 
     swc_connect(&swc_err);
-    if (swc_err != SWC_ERR_NONE) {
-        while (1);
+    ASSERT_SWC_STATUS(swc_err);
+}
+
+/** @brief Send data with a specific connection.
+ *
+ *  @param[in]  tx_conn           Pointer to the connection used for data transmission.
+ *  @param[in]  transmitted_data  Data to be sent over the air.
+ *  @param[in]  size              Size of the data to be sent over the air.
+ *  @param[out] swc_err           Wireless Core error code.
+ */
+static void wireless_send_data(swc_connection_t *tx_conn, void *transmitted_data, uint8_t size, swc_error_t *swc_err)
+{
+    uint8_t *buffer = NULL;
+
+    /* Get buffer from queue to hold data. */
+    swc_connection_get_payload_buffer(tx_conn, &buffer, swc_err);
+    if ((*swc_err != SWC_ERR_NONE) || (buffer == NULL)) {
+        return;
     }
+
+    /* Format the new payload. */
+    if (transmitted_data != NULL) {
+        memcpy(buffer, transmitted_data, size);
+    }
+
+    /* Send the payload through the Wireless Core. */
+    swc_connection_send(tx_conn, buffer, size, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+}
+
+/** @brief Read data from a specific connection.
+ *
+ *  @param[in]  rx_conn        Pointer to the connection used for data reception.
+ *  @param[out] received_data  Pointer to data buffer to write to.
+ *  @param[in]  size           Size of the data buffer.
+ *  @param[out] swc_err        Wireless Core error code.
+ *  @return Size of the data read.
+ */
+static uint16_t wireless_read_data(swc_connection_t *rx_conn, void *received_data, uint8_t size, swc_error_t *swc_err)
+{
+    uint8_t *payload = NULL;
+    uint16_t payload_size = 0;
+
+    /* Read received data. */
+    payload_size = swc_connection_receive(rx_conn, &payload, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    if (payload_size > size) {
+        return 0;
+    }
+
+    if (received_data != NULL) {
+        memcpy(received_data, payload, payload_size);
+    }
+
+    /* Free the payload memory. */
+    swc_connection_receive_complete(rx_conn, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    return payload_size;
+}
+
+/** @brief Transmit user data to Node 1.
+ *
+ *  This function sends a data packet containing the state of button SW2
+ *  and an incrementing counter to Node 1.
+ */
+static void send_user_data_to_node1(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+    user_data_t data_to_transmit = {0};
+    static unsigned long inc_coord;
+
+    data_to_transmit.button_state = facade_coord_read_user_button_1_state();
+    data_to_transmit.counter = inc_coord++;
+
+    wireless_send_data(tx_to_node1_conn, &data_to_transmit, sizeof(data_to_transmit), &swc_err);
+}
+
+/** @brief Transmit user data to Node 2.
+ *
+ *  This function sends a data packet containing the state of button SW4
+ *  and an incrementing counter to Node 2.
+ */
+static void send_user_data_to_node2(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+    user_data_t data_to_transmit = {0};
+    static unsigned long inc_coord;
+
+    data_to_transmit.button_state = facade_coord_read_user_button_2_state();
+    data_to_transmit.counter = inc_coord++;
+
+    wireless_send_data(tx_to_node2_conn, &data_to_transmit, sizeof(data_to_transmit), &swc_err);
+}
+
+/** @brief Check if stats should be printed.
+ *
+ *  @retval 0  Stats should not be printed.
+ *  @retval 1  Stats should be printed.
+ */
+static bool should_print_stats(void)
+{
+    static uint32_t tick_start;
+    uint32_t current_tick = facade_get_tick_ms();
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        tick_start = current_tick;
+        return false;
+    }
+
+    if ((current_tick - tick_start) >= PRINT_INTERVAL_MS) {
+        tick_start = current_tick;
+        return true;
+    }
+
+    return false;
+}
+
+/** @brief Print the available statistics.
+ */
+static void print_stats(void)
+{
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+
+    static char stats_string[STATS_ARRAY_LENGTH];
+    int string_length = 0;
+    swc_error_t swc_err = SWC_ERR_NONE;
+
+    const char *device_str = "\n\r<  COORDINATOR  >\n\r";
+    const char *certification_mode_str = "Cert. Mode %i\r\n";
+    const char *app_stats_str = "<<  Star Network App Statistics  >>\n\r";
+    const char *node1_counter_str = "Node 1 counter value:\t%10lu\n\r";
+    const char *node2_counter_str = "Node 2 counter value:\t%10lu\n\r";
+    const char *wireless_stats_str = "<<  Wireless Core Statistics  >>\n\r";
+
+    memset(stats_string, 0, sizeof(stats_string));
+
+    swc_connection_update_stats(tx_to_node1_conn, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(tx_to_node2_conn, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(rx_from_node1_conn, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(rx_from_node2_conn, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
+                                  certification_mode_str, certification_mode);
+    }
+
+    /* Device role */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, device_str);
+
+    /* Application statistics */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, app_stats_str);
+    /* Connection transmission rate */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, node1_counter_str,
+                              last_received_node1_counter_value);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, node2_counter_str,
+                              last_received_node2_counter_value);
+
+    /* Wireless statistics */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
+    string_length += swc_connection_format_stats(tx_to_node1_conn, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(tx_to_node2_conn, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(rx_from_node1_conn, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(rx_from_node2_conn, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    facade_print_string(stats_string);
+}
+
+void swc_error_handler(swc_error_t swc_status)
+{
+    char buffer[ERROR_MESSAGE_BUFFER_SIZE];
+
+    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    facade_print_error_string(buffer);
+
+    while (1);
 }

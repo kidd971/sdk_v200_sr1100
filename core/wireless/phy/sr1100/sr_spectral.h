@@ -3,7 +3,7 @@
  *
  *  sr_spectral description
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is confidential and proprietary.
  *  @author    SPARK FW Team.
  */
@@ -16,6 +16,7 @@
 #include <string.h>
 #include "sr_calib.h"
 #include "sr_def.h"
+#include "sr_phy_error.h"
 #include "wps_error.h"
 
 #ifdef __cplusplus
@@ -118,8 +119,12 @@ typedef struct sr_reg_pattern {
 typedef struct sr_spectral {
     /*! Register 0x12 to 0x17 raw value */
     sr_reg_pattern_t reg_pattern;
+    /*! Number of pulses. */
+    uint8_t pulse_count;
     /*! Receiver integrators gain */
     uint8_t integgain;
+    /*! RNSI at the channel frequency */
+    uint8_t rnsi;
 } rf_channel_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -136,7 +141,8 @@ typedef struct sr_spectral {
  *  @param[in] spectral        Register instance to populate.
  *  @return Error during spectrum configuration.
  */
-sr_phy_error_t config_spectrum_advance(calib_vars_t *spectral_calib, channel_cfg_t *spectral_cfg, rf_channel_t *spectral);
+sr_phy_error_t config_spectrum_advance(calib_vars_t *spectral_calib, channel_cfg_t *spectral_cfg,
+                                       rf_channel_t *spectral);
 
 /** @brief Configuration of spectrum based on tx_power preset.
  *
@@ -166,7 +172,32 @@ uint8_t sr_get_lna_peak(uint32_t target_freq);
  *  @param[in] calibration_mode  RX or TX calibration.
  *  @return Index of the DCRO table.
  */
-uint8_t sr_find_matching_dcro(calib_vars_t *spectral_calib, uint32_t target_freq, spectral_calib_power_mode_t calibration_mode);
+uint8_t sr_find_matching_dcro(calib_vars_t *spectral_calib, uint32_t target_freq,
+                              spectral_calib_power_mode_t calibration_mode);
+
+/** @brief Get the integrator gain value based on used chip rate.
+ *
+ *  @param[in] pulse_count  The number of pulses on the RF pattern.
+ *  @param[in] chip_rate    Used chip rate.
+ */
+static inline uint8_t sr_get_integ_gain(uint8_t pulse_count, chip_rate_cfg_t chip_rate)
+{
+    /* The order of this table is important, do not change.
+     *  CHIP_RATE_20_48_MHZ = CHIP_RATE_0b00 = 0
+     *  CHIP_RATE_40_96_MHZ = CHIP_RATE_0b01 = 1
+     *  CHIP_RATE_27_30_MHZ = CHIP_RATE_0b10 = 2
+     */
+    static const uint8_t integ_gain_lut[CHIP_RATE_COUNT][MAX_PULSE_COUNT] = {
+        {INTEGGAIN_20_48_PC1, INTEGGAIN_20_48_PC2, INTEGGAIN_20_48_PCX},
+        {INTEGGAIN_40_96_PC1, INTEGGAIN_40_96_PC2, INTEGGAIN_40_96_PCX},
+        {INTEGGAIN_27_30_PC1, INTEGGAIN_27_30_PC2, INTEGGAIN_27_30_PCX},
+    };
+
+    uint8_t index_chip_rate = GET_CHIP_RATE(chip_rate);
+    uint8_t index_pulse_count = pulse_count - 1;
+
+    return integ_gain_lut[index_chip_rate][index_pulse_count];
+}
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 /** @file  wps_stats.c
  *  @brief Wireless Protocol Stack statistics.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -101,7 +101,7 @@ float wps_stats_get_rx_link_usage_ratio(wps_connection_t *connection)
 
 int32_t wps_stats_get_phy_margin_avg(wps_connection_t *connection)
 {
-    int32_t link_margin;
+    int32_t link_margin = 0;
 
     uint16_t rssi = link_lqi_get_avg_rssi_tenth_db(&connection->lqi);
     uint16_t rnsi = link_lqi_get_avg_rnsi_tenth_db(&connection->lqi);
@@ -115,6 +115,29 @@ int32_t wps_stats_get_phy_margin_avg(wps_connection_t *connection)
 int32_t wps_stats_get_inst_phy_margin(wps_connection_t *connection)
 {
     return link_lqi_get_inst_rssi_tenth_db(&connection->lqi) - link_lqi_get_inst_rnsi_tenth_db(&connection->lqi);
+}
+
+int32_t wps_stats_get_link_margin_block_avg_tenth_db(wps_connection_t *connection)
+{
+    int32_t link_margin;
+
+    uint16_t rssi = link_lqi_get_rssi_block_avg_tenth_db(&connection->lqi);
+    uint16_t rnsi = link_lqi_get_rnsi_block_avg_tenth_db(&connection->lqi);
+
+    /* RSSI can't be lower than noise floor */
+    link_margin = (rssi < rnsi) ? 0 : rssi - rnsi;
+
+    return link_margin;
+}
+
+int32_t wps_stats_get_rssi_block_avg_tenth_db(wps_connection_t *connection)
+{
+    return link_lqi_get_rssi_block_avg_tenth_db(&connection->lqi);
+}
+
+int32_t wps_stats_get_rnsi_block_avg_tenth_db(wps_connection_t *connection)
+{
+    return link_lqi_get_rnsi_block_avg_tenth_db(&connection->lqi);
 }
 
 float wps_stats_get_phy_ack_frame_ratio(wps_connection_t *connection)
@@ -192,8 +215,7 @@ float wps_stats_get_phy_per(wps_connection_t *connection)
         return 0.f;
     }
 
-    return (float)(total_frame_count - link_lqi_get_received_count(&connection->lqi)) /
-           total_frame_count;
+    return (float)(total_frame_count - link_lqi_get_received_count(&connection->lqi)) / total_frame_count;
 }
 
 int32_t wps_stats_get_phy_rssi_avg_raw(wps_connection_t *connection)
@@ -206,34 +228,9 @@ int32_t wps_stats_get_phy_rnsi_avg_raw(wps_connection_t *connection)
     return link_lqi_get_avg_rnsi_raw(&connection->lqi);
 }
 
-int32_t wps_stats_get_phy_margin_avg_raw(wps_connection_t *connection)
-{
-    int32_t margin_avg = link_lqi_get_avg_rnsi_raw(&connection->lqi) -
-                         link_lqi_get_avg_rssi_raw(&connection->lqi);
-
-    if (margin_avg < 0) {
-        return 0;
-    } else {
-        return margin_avg / 2;
-    }
-}
-
 #endif /* WPS_ENABLE_PHY_STATS */
 
 #if WPS_ENABLE_STATS_USED_TIMESLOTS
-int32_t wps_stats_get_margin_avg(wps_connection_t *connection)
-{
-    int32_t link_margin;
-
-    uint16_t rssi = link_lqi_get_avg_rssi_tenth_db(&connection->used_frame_lqi);
-    uint16_t rnsi = link_lqi_get_avg_rnsi_tenth_db(&connection->used_frame_lqi);
-
-    /* RSSI can't be lower than noise floor */
-    link_margin = (rssi < rnsi) ? 0 : rssi - rnsi;
-
-    return link_margin;
-}
-
 float wps_stats_get_ack_frame_ratio(wps_connection_t *connection)
 {
     uint32_t sent_count = link_lqi_get_sent_count(&connection->used_frame_lqi);
@@ -309,15 +306,14 @@ float wps_stats_get_per(wps_connection_t *connection)
         return 0.f;
     }
 
-    return (float)(total_frame_count - link_lqi_get_received_count(&connection->used_frame_lqi)) /
-           total_frame_count;
+    return (float)(total_frame_count - link_lqi_get_received_count(&connection->used_frame_lqi)) / total_frame_count;
 }
 #endif /* WPS_ENABLE_STATS_USED_TIMESLOTS */
 
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
 int32_t wps_stats_get_chan_margin_avg(wps_connection_t *connection, uint8_t channel_idx)
 {
-    int32_t link_margin;
+    int32_t link_margin = 0;
 
     uint16_t rssi = link_lqi_get_avg_rssi_tenth_db(&connection->channel_lqi[channel_idx]);
     uint16_t rnsi = link_lqi_get_avg_rnsi_tenth_db(&connection->channel_lqi[channel_idx]);
@@ -358,8 +354,7 @@ float wps_stats_get_chan_received_frame_ratio(wps_connection_t *connection, uint
         return 0.f;
     }
 
-    return (float)(link_lqi_get_received_count(&connection->channel_lqi[channel_idx])) /
-           total_count;
+    return (float)(link_lqi_get_received_count(&connection->channel_lqi[channel_idx])) / total_count;
 }
 
 float wps_stats_get_chan_missing_frame_ratio(wps_connection_t *connection, uint8_t channel_idx)
@@ -381,8 +376,7 @@ float wps_stats_get_chan_rejected_frame_ratio(wps_connection_t *connection, uint
         return 0.f;
     }
 
-    return (float)(link_lqi_get_rejected_count(&connection->channel_lqi[channel_idx])) /
-           total_count;
+    return (float)(link_lqi_get_rejected_count(&connection->channel_lqi[channel_idx])) / total_count;
 }
 
 float wps_stats_get_chan_mrr(wps_connection_t *connection, uint8_t channel_idx)
@@ -394,8 +388,7 @@ float wps_stats_get_chan_mrr(wps_connection_t *connection, uint8_t channel_idx)
         return 0.f;
     }
 
-    return (float)(link_lqi_get_lost_count(&connection->channel_lqi[channel_idx])) /
-           bad_frame_count;
+    return (float)(link_lqi_get_lost_count(&connection->channel_lqi[channel_idx])) / bad_frame_count;
 }
 
 float wps_stats_get_chan_per(wps_connection_t *connection, uint8_t channel_idx)
@@ -406,29 +399,29 @@ float wps_stats_get_chan_per(wps_connection_t *connection, uint8_t channel_idx)
         return 0.f;
     }
 
-    return (float)(total_frame_count -
-                   link_lqi_get_received_count(&connection->channel_lqi[channel_idx])) /
+    return (float)(total_frame_count - link_lqi_get_received_count(&connection->channel_lqi[channel_idx])) /
            total_frame_count;
 }
 #endif /* WPS_ENABLE_PHY_STATS_PER_BANDS */
 
 void wps_stats_reset(wps_connection_t *connection)
 {
-    #if WPS_ENABLE_PHY_STATS
-        link_lqi_reset(&connection->lqi);
-    #endif
-    #if WPS_ENABLE_STATS_USED_TIMESLOTS
-        link_lqi_reset(&connection->used_frame_lqi);
-    #endif
-    #if WPS_ENABLE_LINK_STATS
-        memset(&connection->wps_stats, 0, sizeof(wps_stats_t));
-    #endif
+#if WPS_ENABLE_PHY_STATS
+    link_lqi_reset(&connection->lqi);
+#endif
+#if WPS_ENABLE_STATS_USED_TIMESLOTS
+    link_lqi_reset(&connection->used_frame_lqi);
+#endif
+#if WPS_ENABLE_LINK_STATS
+    memset(&connection->wps_stats, 0, sizeof(wps_stats_t));
+#endif
 
     link_saw_arq_reset_stats(&connection->stop_and_wait_arq);
 
-    #if WPS_ENABLE_PHY_STATS_PER_BANDS
+#if WPS_ENABLE_PHY_STATS_PER_BANDS
     for (size_t i = 0; i < connection->max_channel_count; i++) {
         link_lqi_reset(&connection->channel_lqi[i]);
+        memset(&connection->wps_chan_stats[i], 0, sizeof(wps_stats_t));
     }
 #endif
 }

@@ -1,7 +1,7 @@
 /** @file  quasar_backend.c
  *  @brief Implement swc_hal_facade facade prototype functions.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -9,13 +9,12 @@
 
 /* INCLUDES *******************************************************************/
 #include "quasar.h"
+#include "quasar_qspi.h"
 #include "swc_hal_facade.h"
 
 /* CONSTANTS ******************************************************************/
-#define FREE_RUNNING_TIMER_PRIORITY       3
-#define MULTI_RADIO_MAX_TIMER_PERIOD      0xFFFE
-#define QUASAR_FREE_RUNNING_TIMER_FREQ_HZ 1000
-#define MULTI_RADIO_TIMER_PRESCALER       8
+#define MULTI_RADIO_MAX_TIMER_PERIOD 0xFFFE
+#define MULTI_RADIO_TIMER_PRESCALER  8
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 /* Context Switching and Interrupt Management */
@@ -39,14 +38,14 @@ void swc_hal_set_radio_2_irq_callback(void (*callback)(void))
     quasar_radio_set_radio_2_irq_callback(callback);
 }
 
-void swc_hal_set_radio_1_dma_rx_callback(void (*callback)(void))
+void swc_hal_set_radio_1_non_blocking_transfer_callback(void (*callback)(void))
 {
-    quasar_radio_set_radio_1_dma_callback(callback);
+    quasar_radio_set_radio_1_non_blocking_transfer_callback(callback);
 }
 
-void swc_hal_set_radio_2_dma_rx_callback(void (*callback)(void))
+void swc_hal_set_radio_2_non_blocking_transfer_callback(void (*callback)(void))
 {
-    quasar_radio_set_radio_2_dma_callback(callback);
+    quasar_radio_set_radio_2_non_blocking_transfer_callback(callback);
 }
 
 void swc_hal_radio_1_disable_irq_it(void)
@@ -69,24 +68,24 @@ void swc_hal_radio_2_enable_irq_it(void)
     quasar_radio_2_enable_irq_it();
 }
 
-void swc_hal_radio_1_disable_dma_irq_it(void)
+void swc_hal_radio_1_disable_non_blocking_transfer_irq_it(void)
 {
-    quasar_radio_1_disable_dma_irq_it();
+    quasar_radio_1_disable_non_blocking_transfer_irq_it();
 }
 
-void swc_hal_radio_2_disable_dma_irq_it(void)
+void swc_hal_radio_2_disable_non_blocking_transfer_irq_it(void)
 {
-    quasar_radio_2_disable_dma_irq_it();
+    quasar_radio_2_disable_non_blocking_transfer_irq_it();
 }
 
-void swc_hal_radio_1_enable_dma_irq_it(void)
+void swc_hal_radio_1_enable_non_blocking_transfer_irq_it(void)
 {
-    quasar_radio_1_enable_dma_irq_it();
+    quasar_radio_1_enable_non_blocking_transfer_irq_it();
 }
 
-void swc_hal_radio_2_enable_dma_irq_it(void)
+void swc_hal_radio_2_enable_non_blocking_transfer_irq_it(void)
 {
-    quasar_radio_2_enable_dma_irq_it();
+    quasar_radio_2_enable_non_blocking_transfer_irq_it();
 }
 
 /* GPIO Controls for Radios */
@@ -121,64 +120,175 @@ void swc_hal_radio_2_reset_reset_pin(void)
 }
 
 /* SPI Communication */
-void swc_hal_radio_1_spi_set_cs(void)
+void swc_hal_radio_1_end_transfer(void)
 {
+    /* The CS pin is the same for SPI and QSPI. */
     quasar_radio_1_spi_set_cs();
 }
 
-void swc_hal_radio_2_spi_set_cs(void)
+void swc_hal_radio_2_end_transfer(void)
 {
+    /* The CS pin is the same for SPI and QSPI. */
     quasar_radio_2_spi_set_cs();
 }
 
-void swc_hal_radio_1_spi_reset_cs(void)
+void swc_hal_radio_1_begin_transfer(void)
 {
+    /* The CS pin is the same for SPI and QSPI. */
     quasar_radio_1_spi_reset_cs();
 }
 
-void swc_hal_radio_2_spi_reset_cs(void)
+void swc_hal_radio_2_begin_transfer(void)
 {
+    /* The CS pin is the same for SPI and QSPI. */
     quasar_radio_2_spi_reset_cs();
 }
 
-void swc_hal_radio_1_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
+void swc_hal_radio_1_transfer_half_duplex_rx_blocking(uint8_t command, uint8_t *rx_data, uint16_t size)
 {
-    quasar_radio_1_spi_transfer_full_duplex_blocking(tx_data, rx_data, size);
+#if !RADIO_QSPI_ENABLED
+    (void)command;
+    (void)rx_data;
+    (void)size;
+
+    /* SPI sends full duplex by default. */
+    while (1);
+#else
+    /* Radio 1 uses OSPI1. */
+    quasar_qspi_transfer_half_duplex_rx_blocking(QUASAR_DEF_QSPI_SELECTION_RADIO_1, command, rx_data, size, 1);
+#endif
 }
 
-void swc_hal_radio_2_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
+void swc_hal_radio_1_transfer_half_duplex_tx_blocking(uint8_t command, uint8_t *tx_data, uint16_t size)
 {
-    quasar_radio_2_spi_transfer_full_duplex_blocking(tx_data, rx_data, size);
+#if !RADIO_QSPI_ENABLED
+    (void)command;
+    (void)tx_data;
+    (void)size;
+
+    /* SPI sends full duplex by default. */
+    while (1);
+#else
+    /* Radio 1 uses OSPI1. */
+    quasar_qspi_transfer_half_duplex_tx_blocking(QUASAR_DEF_QSPI_SELECTION_RADIO_1, command, tx_data, size, 1);
+#endif
 }
 
-void swc_hal_radio_1_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
+void swc_hal_radio_1_transfer_half_duplex_rx_non_blocking(uint8_t command, uint8_t *rx_data, uint16_t size)
 {
-    quasar_radio_1_spi_transfer_full_duplex_non_blocking(tx_data, rx_data, size);
+#if !RADIO_QSPI_ENABLED
+    (void)command;
+    (void)rx_data;
+    (void)size;
+
+    /* SPI sends full duplex by default. */
+    while (1);
+#else
+    /* Radio 1 uses OSPI1. */
+    quasar_qspi_transfer_half_duplex_rx_non_blocking(QUASAR_DEF_QSPI_SELECTION_RADIO_1, command, rx_data, size);
+#endif
 }
 
-void swc_hal_radio_2_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
+void swc_hal_radio_1_transfer_half_duplex_tx_non_blocking(uint8_t command, uint8_t *tx_data, uint16_t size)
 {
-    quasar_radio_2_spi_transfer_full_duplex_non_blocking(tx_data, rx_data, size);
+#if !RADIO_QSPI_ENABLED
+    (void)command;
+    (void)tx_data;
+    (void)size;
+
+    /* SPI sends full duplex by default. */
+    while (1);
+#else
+    /* Radio 1 uses OSPI1. */
+    quasar_qspi_transfer_half_duplex_tx_non_blocking(QUASAR_DEF_QSPI_SELECTION_RADIO_1, command, tx_data, size);
+#endif
 }
 
-bool swc_hal_radio_1_is_spi_busy(void)
+void swc_hal_radio_1_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
 {
-    return quasar_radio_1_is_spi_busy();
+#if !RADIO_QSPI_ENABLED
+    quasar_spi_transfer_full_duplex_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_1, tx_data, rx_data, size);
+#else
+    (void)tx_data;
+    (void)rx_data;
+    (void)size;
+
+    /* QSPI cannot operate in bidirectional mode. */
+    while (1);
+#endif
 }
 
-bool swc_hal_radio_2_is_spi_busy(void)
+void swc_hal_radio_2_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
 {
-    return quasar_radio_2_is_spi_busy();
+#if !RADIO_QSPI_ENABLED
+    quasar_spi_transfer_full_duplex_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_2, tx_data, rx_data, size);
+#else
+    (void)tx_data;
+    (void)rx_data;
+    (void)size;
+
+    /* QSPI cannot operate in bidirectional mode. */
+    while (1);
+#endif
+}
+
+void swc_hal_radio_1_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
+{
+#if !RADIO_QSPI_ENABLED
+    quasar_spi_transfer_full_duplex_non_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_1, tx_data, rx_data, size);
+#else
+    (void)tx_data;
+    (void)rx_data;
+    (void)size;
+
+    /* QSPI cannot operate in bidirectional mode. */
+    while (1);
+#endif
+}
+
+void swc_hal_radio_2_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
+{
+#if !RADIO_QSPI_ENABLED
+    quasar_spi_transfer_full_duplex_non_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_2, tx_data, rx_data, size);
+#else
+    (void)tx_data;
+    (void)rx_data;
+    (void)size;
+
+    /* QSPI cannot operate in bidirectional mode. */
+    while (1);
+#endif
+}
+
+void swc_hal_radio_1_set_access_mode_spi(void)
+{
+    quasar_qspi_set_mode(QUASAR_DEF_QSPI_SELECTION_RADIO_1, QUASAR_QSPI_1_LINE_MODE_0_DUMMY);
+}
+
+void swc_hal_radio_1_set_access_mode_qspi(void)
+{
+    quasar_qspi_set_mode(QUASAR_DEF_QSPI_SELECTION_RADIO_1, QUASAR_QSPI_4_LINES_MODE_1_DUMMY);
+}
+
+bool swc_hal_radio_1_is_transfer_busy(void)
+{
+#if !RADIO_QSPI_ENABLED
+    return QUASAR_SPI_IS_BUSY(QUASAR_DEF_SPI_SELECTION_RADIO_1);
+#else
+    return QUASAR_QSPI_IS_BUSY(QUASAR_DEF_QSPI_SELECTION_RADIO_1);
+#endif
+}
+
+bool swc_hal_radio_2_is_transfer_busy(void)
+{
+#if !RADIO_QSPI_ENABLED
+    return QUASAR_SPI_IS_BUSY(QUASAR_DEF_SPI_SELECTION_RADIO_2);
+#else
+    return QUASAR_QSPI_IS_BUSY(QUASAR_DEF_QSPI_SELECTION_RADIO_2);
+#endif
 }
 
 /* Timer and Delay Management */
-void swc_hal_free_running_timer_init(void)
-{
-    quasar_irq_priority_t irq_priority = FREE_RUNNING_TIMER_PRIORITY;
-
-    quasar_timer_free_running_ms_init(irq_priority);
-}
-
 uint64_t swc_hal_get_tick_free_running_timer(void)
 {
     return quasar_timer_free_running_ms_get_tick_count();
@@ -186,7 +296,7 @@ uint64_t swc_hal_get_tick_free_running_timer(void)
 
 uint32_t swc_hal_get_free_running_timer_frequency_hz(void)
 {
-    return QUASAR_FREE_RUNNING_TIMER_FREQ_HZ;
+    return quasar_timer_free_running_ms_get_tick_frequency();
 }
 
 /* Dual Radio Timer Management */

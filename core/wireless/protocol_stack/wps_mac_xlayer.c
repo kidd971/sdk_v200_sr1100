@@ -1,7 +1,7 @@
 /** @file  wps_mac_xlayer.c
  *  @brief Wireless Protocol Stack MAC xlayer component.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -17,34 +17,35 @@
 /* PRIVATE GLOBALS ************************************************************/
 /** @brief Buffer for xlayer instance when application RX/TX queue is empty.
  */
-uint8_t overrun_buffer[RADIO_MAX_PACKET_SIZE];
+static uint8_t overrun_buffer[RADIO_MAX_PACKET_SIZE + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES];
 /** @brief Auto-reply frame buffer when no auto-reply connection exist.
  * Contains only data for the header.
  */
-uint8_t auto_reply_buffer[HEADER_MAX_SIZE + 1];
+static uint8_t auto_reply_buffer[HEADER_MAX_SIZE + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES];
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_main(wps_mac_t *wps_mac, wps_connection_t *connection)
 {
-    xlayer_t *free_xlayer;
-    xlayer_queue_node_t *node;
-    bool unsync = ((wps_mac->tdma_sync.slave_sync_state == STATE_SYNCING) &&
-                   (wps_mac->node_role == NETWORK_NODE));
+    xlayer_t *free_xlayer = NULL;
+    xlayer_queue_node_t *node = NULL;
+    bool unsync = ((wps_mac->tdma_sync.slave_sync_state == STATE_SYNCING) && (wps_mac->node_role == NETWORK_NODE));
     bool valid_credits = link_credit_flow_ctrl_is_available(&connection->credit_flow_ctrl);
+    /* Offset the header memory to allow PHY to add SPI command bytes before the payload. */
+    uint8_t *header_memory = overrun_buffer + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
 
     if (connection->currently_enabled && valid_credits) {
         node = xlayer_queue_get_node(&connection->xlayer_queue);
         /* Check if there is something available to send on the COORDINATOR after connect event*/
-        if (connection->first_tx_after_connect && node != NULL && wps_mac->node_role == NETWORK_COORDINATOR) {
+        if (connection->send_sync_frame && node != NULL && wps_mac->node_role == NETWORK_COORDINATOR) {
             /* Prepare sync frame */
             node = NULL;
-            wps_mac->empty_frame_tx.frame.header_memory = overrun_buffer;
-            wps_mac->empty_frame_tx.frame.header_end_it = overrun_buffer + connection->header_size;
+            wps_mac->empty_frame_tx.frame.header_memory = header_memory;
+            wps_mac->empty_frame_tx.frame.header_end_it = header_memory + connection->cfg.header_size;
             wps_mac->empty_frame_tx.frame.header_begin_it = wps_mac->empty_frame_tx.frame.header_end_it;
             wps_mac->empty_frame_tx.frame.payload_end_it = wps_mac->empty_frame_tx.frame.header_end_it;
             wps_mac->empty_frame_tx.frame.payload_begin_it = wps_mac->empty_frame_tx.frame.header_end_it;
             free_xlayer = &wps_mac->empty_frame_tx;
-            wps_mac->empty_frame_tx.frame.time_stamp = connection->get_tick();
+            wps_mac->empty_frame_tx.frame.time_stamp = connection->cfg.get_tick();
             return free_xlayer;
         }
     } else {
@@ -61,18 +62,17 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_main(wps_mac_t *wps_mac, wps_connecti
             &connection->credit_flow_ctrl);
 
         if ((connection->auto_sync_enable && !unsync) || (credit_left_out_frames_exceed == true)) {
-            wps_mac->empty_frame_tx.frame.header_memory = overrun_buffer;
-            wps_mac->empty_frame_tx.frame.header_end_it = overrun_buffer + connection->header_size;
+            wps_mac->empty_frame_tx.frame.header_memory = header_memory;
+            wps_mac->empty_frame_tx.frame.header_end_it = header_memory + connection->cfg.header_size;
         } else {
             wps_mac->empty_frame_tx.frame.header_memory = NULL;
             wps_mac->empty_frame_tx.frame.header_end_it = NULL;
         }
         wps_mac->empty_frame_tx.frame.header_begin_it = wps_mac->empty_frame_tx.frame.header_end_it;
-        wps_mac->empty_frame_tx.frame.payload_end_it  = wps_mac->empty_frame_tx.frame.header_end_it;
-        wps_mac->empty_frame_tx.frame.payload_begin_it =
-            wps_mac->empty_frame_tx.frame.header_end_it;
-        free_xlayer                              = &wps_mac->empty_frame_tx;
-        wps_mac->empty_frame_tx.frame.time_stamp = connection->get_tick();
+        wps_mac->empty_frame_tx.frame.payload_end_it = wps_mac->empty_frame_tx.frame.header_end_it;
+        wps_mac->empty_frame_tx.frame.payload_begin_it = wps_mac->empty_frame_tx.frame.header_end_it;
+        free_xlayer = &wps_mac->empty_frame_tx;
+        wps_mac->empty_frame_tx.frame.time_stamp = connection->cfg.get_tick();
     } else {
         free_xlayer->frame.header_begin_it = free_xlayer->frame.header_end_it;
     }
@@ -82,10 +82,12 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_main(wps_mac_t *wps_mac, wps_connecti
 
 xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_auto(wps_mac_t *wps_mac, wps_connection_t *connection)
 {
-    xlayer_t *free_xlayer;
-    xlayer_queue_node_t *node;
+    xlayer_t *free_xlayer = NULL;
+    xlayer_queue_node_t *node = NULL;
     bool unsync = ((wps_mac->tdma_sync.slave_sync_state == STATE_SYNCING) && (wps_mac->node_role == NETWORK_NODE));
     bool valid_credits = link_credit_flow_ctrl_is_available(&connection->credit_flow_ctrl);
+    /* Offset the header memory to allow PHY to add SPI command bytes before the payload. */
+    uint8_t *header_memory = overrun_buffer + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
 
     if (connection->currently_enabled && valid_credits) {
         node = xlayer_queue_get_node(&connection->xlayer_queue);
@@ -101,11 +103,11 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_auto(wps_mac_t *wps_mac, wps_connecti
     if (free_xlayer == NULL || unsync) {
         xlayer_frame_t *empty_frame = &wps_mac->empty_frame_tx.frame;
         bool force_empty_frame = (connection->credit_flow_ctrl.enabled == true) ||
-                                 (connection->ranging_mode != WPS_RANGING_DISABLED);
+                                 (connection->cfg.ranging_mode != WPS_RANGING_DISABLED);
 
         if ((connection->auto_sync_enable && !unsync) || force_empty_frame == true) {
-            empty_frame->header_memory = overrun_buffer;
-            empty_frame->header_end_it = overrun_buffer + connection->header_size;
+            empty_frame->header_memory = header_memory;
+            empty_frame->header_end_it = header_memory + connection->cfg.header_size;
         } else {
             empty_frame->header_memory = NULL;
             empty_frame->header_end_it = NULL;
@@ -114,7 +116,7 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_auto(wps_mac_t *wps_mac, wps_connecti
         empty_frame->payload_end_it = empty_frame->header_end_it;
         empty_frame->payload_begin_it = empty_frame->header_end_it;
         free_xlayer = &wps_mac->empty_frame_tx;
-        empty_frame->time_stamp = connection->get_tick();
+        empty_frame->time_stamp = connection->cfg.get_tick();
     } else {
         free_xlayer->frame.header_begin_it = free_xlayer->frame.header_end_it;
     }
@@ -125,20 +127,29 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_auto(wps_mac_t *wps_mac, wps_connecti
 xlayer_t *wps_mac_xlayer_get_xlayer_for_rx(wps_mac_t *wps_mac, wps_connection_t *connection)
 {
     wps_mac->rx_node = xlayer_queue_get_free_node(connection->free_rx_queue);
+    /* Offset the header memory to allow PHY to add SPI command bytes before the payload. */
+    uint8_t *header_memory = overrun_buffer + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
 
     /* if free node is not available, will return an empty frame*/
     if (wps_mac->rx_node == NULL) {
-        wps_mac->empty_frame_rx.frame.header_memory   = overrun_buffer;
-        wps_mac->empty_frame_rx.frame.header_end_it   = overrun_buffer;
+        wps_mac->empty_frame_rx.frame.header_memory = header_memory;
+        wps_mac->empty_frame_rx.frame.header_end_it = header_memory;
         wps_mac->empty_frame_rx.frame.header_begin_it = wps_mac->empty_frame_rx.frame.header_end_it;
-        wps_mac->empty_frame_rx.frame.payload_begin_it = overrun_buffer + connection->header_size + EMPTY_BYTE;
+        wps_mac->empty_frame_rx.frame.payload_begin_it = header_memory + connection->cfg.header_size + EMPTY_BYTE;
         wps_mac->empty_frame_rx.frame.payload_memory_size = connection->payload_size;
-        wps_mac->empty_frame_rx.frame.header_memory_size  = connection->header_size;
+        wps_mac->empty_frame_rx.frame.header_memory_size = connection->cfg.header_size;
         return &wps_mac->empty_frame_rx;
     }
 
-    wps_mac->rx_node->xlayer.frame.payload_memory_size = connection->payload_size;
-    wps_mac->rx_node->xlayer.frame.header_memory_size  = connection->header_size;
+    if (connection->is_main) {
+        wps_mac->rx_node->xlayer.frame.payload_memory_size = link_scheduler_get_current_timeslot_main_max_payload_size(
+            &wps_mac->scheduler);
+    } else {
+        wps_mac->rx_node->xlayer.frame.payload_memory_size = link_scheduler_get_current_timeslot_auto_max_payload_size(
+            &wps_mac->scheduler);
+    }
+
+    wps_mac->rx_node->xlayer.frame.header_memory_size = connection->cfg.header_size;
     return &wps_mac->rx_node->xlayer;
 }
 
@@ -155,7 +166,7 @@ void wps_mac_xlayer_free_node_with_data(wps_connection_t *connection, xlayer_que
 
 void wps_mac_xlayer_update_main_rx_payload_buffer(void *wps_mac, xlayer_frame_t *frame, uint8_t required_space)
 {
-    wps_connection_t *connection;
+    wps_connection_t *connection = NULL;
     wps_mac_t *mac = (wps_mac_t *)wps_mac;
 
 #if (WPS_RADIO_COUNT == 2)
@@ -167,9 +178,7 @@ void wps_mac_xlayer_update_main_rx_payload_buffer(void *wps_mac, xlayer_frame_t 
 
     wps_mac_timeslots_find_received_timeslot_and_connection_main(mac, frame);
 
-    /* If RX node is null this mean that empty_frame_rx is used and buffer data is provided from
-     * overrun_buffer.
-     */
+    /* If RX node is null this mean that empty_frame_rx is used and buffer data is provided from overrun_buffer. */
     if (mac->rx_node == NULL || required_space == 0) {
         return;
     }
@@ -204,7 +213,7 @@ void wps_mac_xlayer_update_main_rx_payload_buffer(void *wps_mac, xlayer_frame_t 
 
 void wps_mac_xlayer_update_auto_reply_rx_payload_buffer(void *wps_mac, xlayer_frame_t *frame, uint8_t required_space)
 {
-    wps_connection_t *connection;
+    wps_connection_t *connection = NULL;
     wps_mac_t *mac = (wps_mac_t *)wps_mac;
 
 #if (WPS_RADIO_COUNT == 2)
@@ -216,9 +225,7 @@ void wps_mac_xlayer_update_auto_reply_rx_payload_buffer(void *wps_mac, xlayer_fr
 
     wps_mac_timeslots_find_received_timeslot_and_connection_auto(mac, frame);
 
-    /* If RX node is null this mean that empty_frame_rx is used and buffer data is provided from
-     * overrun_buffer.
-     */
+    /* If RX node is null this mean that empty_frame_rx is used and buffer data is provided from overrun_buffer. */
     if (mac->rx_node == NULL || required_space == 0) {
         return;
     }
@@ -253,27 +260,33 @@ void wps_mac_xlayer_update_auto_reply_rx_payload_buffer(void *wps_mac, xlayer_fr
 
 xlayer_t *wps_mac_xlayer_get_xlayer_for_empty_rx_auto(wps_mac_t *wps_mac, wps_connection_t *connection)
 {
+    /* Offset the header memory to allow PHY to add SPI command bytes before the payload. */
+    uint8_t *header_memory = auto_reply_buffer + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
+
     wps_mac->rx_node = NULL;
-    wps_mac->empty_auto_reply_frame.frame.header_memory = auto_reply_buffer;
-    wps_mac->empty_auto_reply_frame.frame.header_end_it = auto_reply_buffer;
+    wps_mac->empty_auto_reply_frame.frame.header_memory = header_memory;
+    wps_mac->empty_auto_reply_frame.frame.header_end_it = header_memory;
     wps_mac->empty_auto_reply_frame.frame.header_begin_it = wps_mac->empty_auto_reply_frame.frame.header_end_it;
     wps_mac->empty_auto_reply_frame.frame.payload_end_it = wps_mac->empty_auto_reply_frame.frame.header_end_it;
     wps_mac->empty_auto_reply_frame.frame.payload_begin_it = wps_mac->empty_auto_reply_frame.frame.header_end_it;
     wps_mac->empty_auto_reply_frame.frame.payload_memory_size = 0;
-    wps_mac->empty_auto_reply_frame.frame.header_memory_size = connection->ack_header_size;
+    wps_mac->empty_auto_reply_frame.frame.header_memory_size = connection->cfg.ack_header_size;
 
     return &wps_mac->empty_auto_reply_frame;
 }
 
 xlayer_t *wps_mac_xlayer_get_xlayer_for_empty_tx_auto(wps_mac_t *wps_mac, wps_connection_t *connection)
 {
-    wps_mac->empty_auto_reply_frame.frame.header_memory = auto_reply_buffer;
-    wps_mac->empty_auto_reply_frame.frame.header_end_it = auto_reply_buffer;
+    /* Offset the header memory to allow PHY to add SPI command bytes before the payload. */
+    uint8_t *header_memory = auto_reply_buffer + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
+
+    wps_mac->empty_auto_reply_frame.frame.header_memory = header_memory;
+    wps_mac->empty_auto_reply_frame.frame.header_end_it = header_memory;
     wps_mac->empty_auto_reply_frame.frame.header_begin_it = wps_mac->empty_auto_reply_frame.frame.header_end_it;
     wps_mac->empty_auto_reply_frame.frame.payload_end_it = wps_mac->empty_auto_reply_frame.frame.header_end_it;
     wps_mac->empty_auto_reply_frame.frame.payload_begin_it = wps_mac->empty_auto_reply_frame.frame.header_end_it;
     wps_mac->empty_auto_reply_frame.frame.payload_memory_size = 0;
-    wps_mac->empty_auto_reply_frame.frame.header_memory_size = connection->ack_header_size;
+    wps_mac->empty_auto_reply_frame.frame.header_memory_size = connection->cfg.ack_header_size;
 
     return &wps_mac->empty_auto_reply_frame;
 }

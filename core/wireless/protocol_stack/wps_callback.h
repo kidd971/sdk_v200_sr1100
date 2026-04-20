@@ -1,7 +1,7 @@
 /** @file  wps_callback.h
  *  @brief The WPS callback module handles the callback queue of the Wireless Protocol Stack.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -21,9 +21,11 @@ extern "C" {
 /** @brief WPS callback instance structure.
  */
 typedef struct wps_callback_inst {
-    /*! WPS callback function */
-    wps_callback_t func;
-    /*! WPS callback void pointer argument */
+    /*! Callback function. */
+    void (*func)(void *conn, void *parg);
+    /*! Pointer to the connection linked to the callback. */
+    void *conn;
+    /*! Pointer to the argument to pass to the callback function. */
     void *parg;
 } wps_callback_inst_t;
 

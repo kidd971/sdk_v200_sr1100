@@ -1,15 +1,15 @@
 /** @file xlayer_queue.c
  *  @brief Queue management.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
  */
 /* INCLUDES *******************************************************************/
 #include "xlayer_queue.h"
-#include "critical_section.h"
 #include <string.h>
+#include "critical_section.h"
 
 /* PRIVATE GLOBALS ************************************************************/
 static xlayer_queue_t *last_xlayer_queue;
@@ -55,7 +55,7 @@ void xlayer_queue_init_pool_with_header_data(uint8_t *pool, xlayer_queue_t *new_
                                              uint16_t data_size, const char *xlayer_queue_name)
 {
     xlayer_queue_node_t *node_ptr = (xlayer_queue_node_t *)pool;
-    uint8_t *data;
+    uint8_t *data = NULL;
 
     last_xlayer_queue = NULL;
     data = (uint8_t *)pool + (sizeof(xlayer_queue_node_t) * num_nodes);
@@ -92,10 +92,10 @@ void xlayer_queue_init_pool_with_header_data(uint8_t *pool, xlayer_queue_t *new_
 void xlayer_queue_init_queue(xlayer_queue_t *xlayer_queue, uint16_t max_size, const char *q_name)
 {
     /* Initialize new xlayer_queue */
-    xlayer_queue->head   = NULL;
-    xlayer_queue->tail   = NULL;
+    xlayer_queue->head = NULL;
+    xlayer_queue->tail = NULL;
     xlayer_queue->size = 0;
-    xlayer_queue->max_size  = max_size;
+    xlayer_queue->max_size = max_size;
     xlayer_queue->q_name = q_name;
     xlayer_queue->free_xlayer_queue_type = false;
     /* Add xlayer_queue to xlayer_queue list */
@@ -212,7 +212,7 @@ uint16_t xlayer_queue_get_free_space(xlayer_queue_t *xlayer_queue)
 
 void xlayer_queue_flush(xlayer_queue_t *xlayer_queue_to_flush)
 {
-    xlayer_queue_node_t *node;
+    xlayer_queue_node_t *node = NULL;
 
     /* Cannot flush free xlayer_queues */
     if (!xlayer_queue_to_flush->free_xlayer_queue_type) {
@@ -273,9 +273,9 @@ bool xlayer_queue_get_stats(bool first, xlayer_queue_stats_t *xlayer_queue_stats
         }
     }
     if (q_ptr != NULL) {
-        xlayer_queue_stats->xlayer_queue_name      = (char *)q_ptr->q_name;
-        xlayer_queue_stats->xlayer_queue_size      = q_ptr->size;
-        xlayer_queue_stats->xlayer_queue_max_size  = q_ptr->max_size;
+        xlayer_queue_stats->xlayer_queue_name = (char *)q_ptr->q_name;
+        xlayer_queue_stats->xlayer_queue_size = q_ptr->size;
+        xlayer_queue_stats->xlayer_queue_max_size = q_ptr->max_size;
         xlayer_queue_stats->xlayer_queue_free_type = q_ptr->free_xlayer_queue_type;
         ret = true;
     }

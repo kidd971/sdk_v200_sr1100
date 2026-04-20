@@ -1,7 +1,7 @@
 /** @file  swc_stats.h
  *  @brief SPARK Wireless Core statistics.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -24,21 +24,22 @@ extern "C" {
  *  returns a reference to these internal statistics so they
  *  can be used by the caller.
  *
- *  @param[in] conn  Connection handle.
+ *  @param[in]  conn  Connection handle.
+ *  @param[out] err   Wireless Core error code.
  *  @return Reference to the statistics.
  */
-swc_statistics_t *swc_connection_update_stats(swc_connection_t *const conn);
+swc_statistics_t *swc_connection_update_stats(swc_connection_t *const conn, swc_error_t *err);
 
 /** @brief Format the connection statistics as a string of characters.
  *
  *  @param[in]  conn    Connection handle.
- *  @param[in]  node    Node handle.
  *  @param[out] buffer  Buffer where to put the formatted string.
  *  @param[in]  size    Size of the buffer.
+ *  @param[out] err     Wireless Core error code.
  *  @return The formated string length, excluding the NULL terminator.
  */
-int swc_connection_format_stats(const swc_connection_t *const conn, const swc_node_t *const node, char *const buffer,
-                                uint16_t size);
+int swc_connection_format_stats(const swc_connection_t *const conn, char *const buffer,
+                                uint16_t size, swc_error_t *err);
 
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
 /** @brief Update connection statistics on a per channel basis.
@@ -53,13 +54,27 @@ int swc_connection_format_stats(const swc_connection_t *const conn, const swc_no
  *  @return Reference to the statistics for the target channel.
  */
 swc_statistics_t *swc_connection_update_stats_per_channel(swc_connection_t *const conn, const uint8_t channel_number);
+
+/** @brief Update connection QOS indicators on a per channel basis.
+ *
+ *  After calling this function, the QOS indicators inside the
+ *  connection handle will be updated. The function also
+ *  returns a reference to these internal indicators so they
+ *  can be used by the caller.
+ *
+ *  @param[in] conn            Connection handle.
+ *  @param[in] channel_number  Target channel.
+ *  @return Reference to the QOS indicators for the target channel.
+ */
+swc_qos_indicators_t *swc_connection_update_qos_per_channel(swc_connection_t *const conn, const uint8_t channel_number);
 #endif
 
 /** @brief Reset all the connection statistics.
  *
- *  @param[in] conn  Connection handle.
+ *  @param[in]  conn  Connection handle.
+ *  @param[out] err   Wireless Core error code.
  */
-void swc_connection_reset_stats(swc_connection_t *const conn);
+void swc_connection_reset_stats(swc_connection_t *const conn, swc_error_t *err);
 
 #ifdef __cplusplus
 }

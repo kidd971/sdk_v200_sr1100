@@ -5,6 +5,7 @@ add_library(audio_core "")
 target_sources(audio_core
     PRIVATE
         api/sac_api.c
+        api/sac_error.c
         api/sac_stats.c
         api/sac_utils.c
         endpoint/sac_dummy_endpoint.c
@@ -21,6 +22,7 @@ target_sources(audio_core
         processing/sac_src_cmsis.c
         processing/sac_cdc.c
         processing/sac_cdc_pll.c
+        processing/sac_sample_accumulator.c
     PUBLIC
         endpoint/sac_dummy_endpoint.h
         endpoint/sac_sinus_endpoint.h
@@ -36,6 +38,7 @@ target_sources(audio_core
         processing/sac_src_cmsis.h
         processing/sac_cdc.h
         processing/sac_cdc_pll.h
+        processing/sac_sample_accumulator.h
         sac_api.h
         sac_error.h
         sac_stats.h

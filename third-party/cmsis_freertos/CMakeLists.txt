@@ -15,3 +15,9 @@ add_subdirectory(src/Source)
 # Suppress the unused variable warning for this target
 target_compile_options(freertos_kernel PRIVATE -Wno-unused-variable)
 target_compile_options(freertos_kernel_port PRIVATE -Wno-unused-but-set-variable)
+
+if(${MCU_DRIVER} STREQUAL STMG4XX)
+    target_compile_definitions(freertos_kernel PRIVATE FREERTOS_TOTAL_HEAP_SIZE=0x4000)
+elseif(${MCU_DRIVER} STREQUAL STMU5XX)
+    target_compile_definitions(freertos_kernel PRIVATE FREERTOS_TOTAL_HEAP_SIZE=0x120000)
+endif()

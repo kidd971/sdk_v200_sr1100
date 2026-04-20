@@ -19,7 +19,7 @@
  *
  *  Based on arm_fir_interpolate_q15.c CMSIS DSP Library V1.9.0.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *             Copyright (C) 2010-2021 ARM Limited or its affiliates. All rights reserved.
  *
  *  @author    Derivative: SPARK FW Team.
@@ -61,14 +61,14 @@ filtering_functions_error_t fir_interpolate_init(fir_interpolate_instance_t *ins
 void fir_interpolate(const fir_interpolate_instance_t *instance, const uint8_t *src, uint8_t *dst, uint32_t block_size,
                      uint8_t channel, uint8_t channel_count)
 {
-    int32_t *p_state = instance->p_state;         /* State pointer */
-    const int32_t *p_coeffs = instance->p_coeffs; /* Coefficient pointer */
-    int32_t *p_state_cur;                         /* Points to the current sample of the state */
-    int32_t *ptr1;                                /* Temporary pointer for state buffer */
-    const int32_t *ptr2;                          /* Temporary pointer for coefficient buffer */
-    int64_t sum0;                                 /* Accumulators */
-    uint32_t i, j, k, block_count, tap_count;     /* Loop counters */
-    uint32_t phase_len = instance->phase_length;  /* Length of each polyphase filter component */
+    int32_t *p_state = instance->p_state;                         /* State pointer */
+    const int32_t *p_coeffs = instance->p_coeffs;                 /* Coefficient pointer */
+    int32_t *p_state_cur = NULL;                                  /* Points to the current sample of the state */
+    int32_t *ptr1 = NULL;                                         /* Temporary pointer for state buffer */
+    const int32_t *ptr2 = NULL;                                   /* Temporary pointer for coefficient buffer */
+    int64_t sum0 = 0;                                             /* Accumulators */
+    uint32_t i = 0, j = 0, k = 0, block_count = 0, tap_count = 0; /* Loop counters */
+    uint32_t phase_len = instance->phase_length;                  /* Length of each polyphase filter component */
 
     const uint8_t sample_size_in_byte = instance->input_sample_format.sample_size_byte;
     const uint8_t input_bitshift = instance->input_sample_format.sample_bitshift;
@@ -77,9 +77,9 @@ void fir_interpolate(const fir_interpolate_instance_t *instance, const uint8_t *
     const uint8_t output_bitshift = instance->output_sample_format.sample_bitshift;
     const uint8_t multiply_ratio = instance->multiply_ratio;
 
-    int64_t acc0, acc1, acc2, acc3;
-    int32_t x0, x1, x2, x3;
-    int32_t c0, c1, c2, c3;
+    int64_t acc0 = 0, acc1 = 0, acc2 = 0, acc3 = 0;
+    int32_t x0 = 0, x1 = 0, x2 = 0, x3 = 0;
+    int32_t c0 = 0, c1 = 0, c2 = 0, c3 = 0;
 
     src += channel * sample_size_in_byte;
     dst += channel * sample_size_out_byte;

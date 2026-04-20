@@ -1,7 +1,7 @@
 /** @file  wps_def.h
  *  @brief Wireless Protocol Stack definitions used by multiple modules.
  *
- *  @copyright Copyright (C) 2020 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -26,6 +26,8 @@ extern "C" {
 #include "link_protocol.h"
 #include "link_random_datarate_offset.h"
 #include "link_saw_arq.h"
+#include "link_tdma_sync.h"
+#include "sr_access.h"
 #include "sr_def.h"
 #include "sr_spectral.h"
 #include "wps_config.h"
@@ -77,27 +79,27 @@ typedef struct frag {
     /*! Number of payloads ready to read */
     uint16_t enqueued_count;
     /*! Function called by the wps to indicate the transmission failed */
-    void (*tx_success_callback)(void *parg);
+    void (*tx_success_callback)(void *conn, void *parg);
     /*! TX fail callback void pointer argument */
     void *tx_success_parg_callback;
     /*! Function called by the wps to indicate the frame has been received */
-    void (*tx_drop_callback)(void *parg);
+    void (*tx_drop_callback)(void *conn, void *parg);
     /*! RX fail callback void pointer argument */
     void *tx_drop_parg_callback;
     /*! Function called by the wps to indicate the transmission failed */
-    void (*tx_fail_callback)(void *parg);
+    void (*tx_fail_callback)(void *conn, void *parg);
     /*! TX fail callback void pointer argument */
     void *tx_fail_parg_callback;
     /*! Function called by the wps to indicate the frame has been received */
-    void (*rx_success_callback)(void *parg);
+    void (*rx_success_callback)(void *conn, void *parg);
     /*! RX success callback void pointer argument */
     void *rx_success_parg_callback;
     /*! Function called by the wps to indicate the frame has been received */
-    void (*rx_fail_callback)(void *parg);
+    void (*rx_fail_callback)(void *conn, void *parg);
     /*! RX fail callback void pointer argument */
     void *rx_fail_parg_callback;
     /*! Function called by the wps to indicate an event */
-    void (*event_callback)(void *parg);
+    void (*event_callback)(void *conn, void *parg);
     /*! Event callback void pointer argument */
     void *event_parg_callback;
 } frag_t;
@@ -166,6 +168,23 @@ typedef enum wps_ranging_mode {
     WPS_RANGING_RESPONDER_RX
 } wps_ranging_mode_t;
 
+/** @brief Wireless Protocol Stack connection header configuration.
+ */
+typedef struct wps_header_cfg {
+    /*! main connection flag. */
+    bool main_connection;
+    /*! rdo enabled flag. */
+    bool rdo_enabled;
+    /*! Ranging mode */
+    wps_ranging_mode_t ranging_mode;
+    /*! Connection ID flag. */
+    bool connection_id;
+    /*! Credit control flow flag. */
+    bool credit_fc_enabled;
+    /*! Dynamic PHY mode enabled flag. */
+    bool dynamic_phy_mode;
+} wps_header_cfg_t;
+
 /** @brief Phase information.
  */
 typedef struct wps_phase_info {
@@ -181,13 +200,51 @@ typedef struct wps_phase_info {
     uint8_t remote_phases_count;
 } wps_phase_info_t;
 
+/** @brief Wireless Protocol Stack connection configuration.
+ */
+typedef struct wps_connection_config {
+    /* Address */
+    /*! Current connection source address (Transmitting node address) */
+    uint16_t source_address;
+    /*! Current connection destination address (Receiving node address) */
+    uint16_t destination_address;
+
+    /* Buffer */
+    /*! Queue size */
+    uint16_t fifo_buffer_size;
+    /*! Length of the WPS header in the current configuration */
+    uint16_t header_size;
+    /*! Frame length to send/receive. Set to header + max payload size.*/
+    uint32_t frame_length;
+    /*! Length of the WPS header for ACK frame in the current configuration */
+    uint16_t ack_header_size;
+
+    /*! Connection priority */
+    uint8_t priority;
+    /*! Ranging mode */
+    wps_ranging_mode_t ranging_mode;
+    /*! Credit control flow flag. */
+    bool credit_fc_enabled;
+
+    /*! Get free running timer */
+    uint64_t (*get_tick)(void);
+    /*! Tick frequency in Hertz. */
+    uint32_t tick_frequency_hz;
+    /*! Enable or disable transmission of sent frame when syncing if data is available in queue. */
+    bool tx_sync_frame_on_syncing;
+    /*! SWC Connection instance */
+    void *conn;
+} wps_connection_cfg_t;
+
 /** @brief WPS Connection
  */
 struct wps_connection {
-    /*! Source address */
-    uint16_t source_address;
-    /*! Destination address */
-    uint16_t destination_address;
+
+    /*! Connection configuration parameters. */
+    wps_connection_cfg_t cfg;
+
+    /*! Current WPS header configuration */
+    wps_header_cfg_t header_cfg;
 
     /*! Frame size (only used if fixed frame size mode is enabled) */
     uint8_t payload_size;
@@ -205,10 +262,6 @@ struct wps_connection {
     link_phase_t link_phase;
     /*! Auto sync mode enable flag*/
     bool auto_sync_enable;
-    /*! Header size in bytes */
-    uint8_t header_size;
-    /*! ACK frame header size in bytes */
-    uint8_t ack_header_size;
     /*! Max time to delay the connection timeslot when connection queue is empty */
     int32_t empty_queue_max_delay;
     /*! Internal connection protocol */
@@ -223,16 +276,12 @@ struct wps_connection {
     link_fallback_t link_fallback;
     /*! Connection status */
     link_connect_status_t connect_status;
-    /*! Connection priority */
-    uint8_t priority;
     /*! Certification mode enable flag */
     bool certification_mode_enabled;
-    /*! Ranging mode */
-    wps_ranging_mode_t ranging_mode;
     /*! Credit flow control data */
     credit_flow_ctrl_t credit_flow_ctrl;
     /*! Flag to send sync frame when frame is available after connect event */
-    bool first_tx_after_connect;
+    bool send_sync_frame;
 #if !WPS_DISABLE_FRAGMENTATION
     /*! Fragmentation instance */
     frag_t frag;
@@ -305,32 +354,42 @@ struct wps_connection {
     /* Layer 1 */
     /*! Connection frame config */
     frame_cfg_t frame_cfg;
-    /*! RF channel information,
+    /*! RF channel information for 20.48 MHz chip rate,
      *   1D = Channel number
      *   2D = Radio number
      */
-    rf_channel_t (*channel)[WPS_RADIO_COUNT];
-    /*! RF fallback channel information
+    rf_channel_t (*channel_20_48)[WPS_RADIO_COUNT];
+    /*! RF fallback channel information for 20.48 MHz chip rate,
      *   1D = Fallback index number
      *   2D = Channel number
      *   3D = Radio number
      */
-    rf_channel_t (**fallback_channel)[WPS_RADIO_COUNT];
+    rf_channel_t (**fallback_channel_20_48)[WPS_RADIO_COUNT];
+    /*! RF channel information for 40.96 MHz chip rate,
+     *   1D = Channel number
+     *   2D = Radio number
+     */
+    rf_channel_t (*channel_40_96)[WPS_RADIO_COUNT];
+    /*! RF fallback channel information for 40.96 MHz chip rate,
+     *   1D = Fallback index number
+     *   2D = Channel number
+     *   3D = Radio number
+     */
+    rf_channel_t (**fallback_channel_40_96)[WPS_RADIO_COUNT];
     /*! Max number of different channel that the connection uses */
     uint8_t max_channel_count;
-    /* Callback */
     /*! Function called by the wps to indicate the frame has been successfully transmitted */
-    void (*tx_success_callback)(void *parg);
+    void (*tx_success_callback)(void *conn, void *parg);
     /*! Function called by the wps to indicate the transmission failed */
-    void (*tx_fail_callback)(void *parg);
+    void (*tx_fail_callback)(void *conn, void *parg);
     /*! Function called by the wps to indicate a frame is dropped */
-    void (*tx_drop_callback)(void *parg);
+    void (*tx_drop_callback)(void *conn, void *parg);
     /*! Function called by the wps to indicate the frame has been received */
-    void (*rx_success_callback)(void *parg);
+    void (*rx_success_callback)(void *conn, void *parg);
     /*! Function called by the wps to indicate ranging data readiness */
-    void (*ranging_data_ready_callback)(void *parg);
-    /*! Function called by the wps to indicate that a WPS event appened */
-    void (*evt_callback)(void *parg);
+    void (*ranging_data_ready_callback)(void *conn, void *parg);
+    /*! Function called by the wps to indicate that a WPS event occurred */
+    void (*evt_callback)(void *conn, void *parg);
 
     /*! TX success callback void pointer argument. */
     void *tx_success_parg_callback;
@@ -344,16 +403,22 @@ struct wps_connection {
     void *ranging_data_ready_parg_callback;
     /*! Event callback void pointer argument. */
     void *evt_parg_callback;
-    /*! Get free running timer tick */
-    uint64_t (*get_tick)(void);
-    /*! Tick frequency in Hertz. */
-    uint32_t tick_frequency_hz;
-    /*! Flush next packet in the wps tx queue */
+    /*! Flush next packet in the wps tx queue. */
     bool tx_flush;
     /*! Connection list node  */
     wps_connection_list_node_t conn_list_node;
     /*! Connection is main or auto reply */
     bool is_main;
+    /*! Connection has been assigned to the scheduler. */
+    bool assigned_to_scheduler;
+    /*! Whether the current connection is receiving or transmitting. */
+    bool is_tx_connection;
+    /*! Connection time stamp in microseconds. */
+    uint64_t time_stamp_us;
+    /*! Connection elapsed time in microseconds since last time stamp. */
+    uint32_t elapsed_time_us;
+    /*! Certification has been initialized for a slot already. */
+    bool certification_initialized;
 };
 
 /** @brief WPS role enumeration.
@@ -373,8 +438,10 @@ typedef enum wps_role {
 typedef struct wps_radio {
     /*! Radio instance */
     radio_t radio;
-    /*! Calibration variables */
-    calib_vars_t *spectral_calib_vars;
+    /*! Calibration variables for 20.48 MHz chip rate */
+    calib_vars_t *spectral_calib_vars_20_48;
+    /*! Calibration variables for 40.96 MHz chip rate */
+    calib_vars_t *spectral_calib_vars_40_96;
     /*! NVM variables */
     nvm_t *nvm;
 } wps_radio_t;
@@ -392,8 +459,8 @@ typedef struct node_config {
     uint32_t crc_polynomial;
     /*! Node current address */
     uint16_t local_address;
-    /*! Radio(s) configuration syncword */
-    syncword_cfg_t syncword_cfg;
+    /*! Radio(s) configuration SFD */
+    sfd_cfg_t sfd_cfg;
     /*! ISI mitigation level */
     isi_mitig_t isi_mitig;
     /*! Default radio RX gain */
@@ -402,6 +469,8 @@ typedef struct node_config {
     bool tx_jitter_enabled;
     /*! Maximum frame lost duration before link is considered unsynced. */
     uint32_t frame_lost_max_duration;
+    /*! Enable extraction of phase offset data for ISI indicator. */
+    bool isi_indicator_enabled;
 } wps_node_cfg_t;
 
 /** @brief WPS Node definition.
@@ -413,28 +482,34 @@ typedef struct node_config {
 typedef struct node {
     /*! Wireless Protocol Stack radio */
     wps_radio_t *radio;
-    /*! Node configuration */
+    /*! Node configuration. */
     wps_node_cfg_t cfg;
-    /*! Free TX xlayer_queue */
+    /*! Free TX xlayer_queue. */
     xlayer_queue_t free_tx_queue;
-    /*! Free RX xlayer_queue */
+    /*! Free RX xlayer_queue. */
     xlayer_queue_t free_rx_queue;
-    /*! Maximum frame size */
+    /*! Maximum frame size. */
     uint8_t max_payload_size;
-    /*! Maximum header size */
+    /*! Maximum header size. */
     uint8_t max_header_size;
-    /*! Total node count in all TX connections queues */
+    /*! Maximum frame size in auto reply. */
+    uint8_t max_payload_size_auto;
+    /*! Maximum header size in auto reply. */
+    uint8_t max_header_size_auto;
+    /*! Total node count in all TX connections queues. */
     uint16_t tx_queues_size;
-    /*! Total node count in all RX connections queues */
+    /*! Total node count in all RX connections queues. */
     uint16_t rx_queues_size;
-    /*! Total data size required for all RX connections */
+    /*! Total data size required for all RX connections. */
     uint32_t max_total_rx_data_size;
-    /*! Linked list of connections */
+    /*! Linked list of connections. */
     wps_connection_list_t conn_list;
-    /*! Low power callback */
+    /*! Low power callback. */
     void (*low_power_callback)(void *node);
-    /*! Denotes whether low power mode can be activated */
+    /*! Denotes whether low power mode can be activated. */
     volatile bool low_power_allowed;
+    /*! Denotes whether the node has been initialized or not. */
+    bool is_initialized;
 } wps_node_t;
 
 /** @brief Received frame.
@@ -486,10 +561,6 @@ typedef struct wps_request_config_info {
     /*! WPS read request structure array size */
     uint8_t read_request_size;
 } wps_request_config_info_t;
-
-/** @brief WPS events callback.
- */
-typedef void (*wps_callback_t)(void *parg);
 
 #ifdef __cplusplus
 }

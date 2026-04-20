@@ -1,7 +1,7 @@
 /** @file  wps_mac_statistics.h
  *  @brief Wireless Protocol Stack MAC statistics.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -33,6 +33,8 @@ typedef struct wps_mac_stats_entry {
     wps_connection_t *connection;
     /*! Phase offset */
     uint8_t phase_offset[PHASE_OFFSET_BYTE_COUNT];
+    /*! Phase offset count */
+    uint8_t phase_offset_count;
     /*! Current channel hopping index */
     uint8_t channel_index;
     /*! Receiver signal strength indicator */

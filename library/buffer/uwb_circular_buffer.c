@@ -1,35 +1,35 @@
 /** @file  uwb_circular_buffer.c
  *  @brief Circular buffer.
  *
- *  @copyright Copyright (C) 2020 SPARK Microsystems International Inc.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
  */
 
 /* INCLUDES *******************************************************************/
-#include <string.h>
 #include "uwb_circular_buffer.h"
+#include <string.h>
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void uwb_circ_buff_init(circ_buffer_t *buf, void *buf_ptr, uint32_t capacity, uint8_t size)
 {
-    buf->buf_full     = false;
-    buf->buf_empty    = true;
+    buf->buf_full = false;
+    buf->buf_empty = true;
     buf->buf_capacity = capacity;
-    buf->item_size    = size;
-    buf->buffer       = buf_ptr;
-    buf->num_data     = 0;
-    buf->free_space   = capacity;
-    buf->in_idx       = buf->buffer;
-    buf->out_idx      = buf->buffer;
-    buf->buffer_end   = (char *)buf->buffer + capacity * size;
+    buf->item_size = size;
+    buf->buffer = buf_ptr;
+    buf->num_data = 0;
+    buf->free_space = capacity;
+    buf->in_idx = buf->buffer;
+    buf->out_idx = buf->buffer;
+    buf->buffer_end = (char *)buf->buffer + capacity * size;
 }
 
 void uwb_circ_buff_in(circ_buffer_t *buf, void *data, uint32_t size, circ_buff_error_t *err)
 {
     uint16_t copied_len = 0;
-    uint16_t cpy_size   = (buf->item_size * size);
+    uint16_t cpy_size = (buf->item_size * size);
 
     *err = CIRC_BUFF_ERR_NONE;
 
@@ -72,7 +72,7 @@ void uwb_circ_buff_in(circ_buffer_t *buf, void *data, uint32_t size, circ_buff_e
 void uwb_circ_buff_out(circ_buffer_t *buf, void *data, uint32_t size, circ_buff_error_t *err)
 {
     uint16_t copied_len = 0;
-    uint16_t cpy_size   = (buf->item_size * size);
+    uint16_t cpy_size = (buf->item_size * size);
 
     *err = CIRC_BUFF_ERR_NONE;
 

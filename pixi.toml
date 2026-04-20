@@ -1,0 +1,49 @@
+[workspace]
+authors = ["SPARK Microsystems <spark-fw@sparkmicro.com>"]
+channels = ["https://prefix.dev/sparkmicro-sdk", "conda-forge"]
+name = "SPARK Microsystems"
+platforms = ["linux-64", "win-64"]
+version = "2.3.0"
+description = "SPARK Microsystems SDK Development Environment"
+homepage = "https://www.sparkmicro.com/"
+documentation = "https://www.sparkmicro.com/sdk-docs/"
+
+[environments.spark-sdk]
+features = ["spark-sdk-build", "spark-sdk-flash"]
+solve-group = "sdk"
+
+[feature.spark-sdk-build.dependencies]
+cmake = "==3.31.8"
+gcc-arm-none-eabi = "==10.3.2021.10"
+make = "*"
+ninja = "==1.11.0"
+
+[feature.spark-sdk-flash.dependencies]
+dfu-util-spark = "*"
+pip = "==22.2.1"
+pyocd-packs = ">=1.1.0"
+python = "==3.10.5"
+
+[feature.spark-sdk-flash.pypi-dependencies]
+pyocd = "==0.37.0"
+
+[feature.spark-sdk-build.tasks._build_preset]
+description = "Build a specific preset defined by PRESET env var"
+cmd = "cmake --preset=$PRESET -G Ninja && cmake --build build/$PRESET"
+
+[feature.spark-sdk-build.tasks.build-all]
+description = "Build all SDK example presets"
+cmd = "python -c \"import json, subprocess, os; [subprocess.run(['pixi', 'run', '_build_preset'], env={**os.environ, 'PRESET': p['name']}, check=True) for p in json.load(open('CMakePresets.json'))['configurePresets'] if not p.get('hidden', False) and 'datacom' not in p['name'] and 'unit-tests' not in p['name'] and p.get('cacheVariables', {}).get('APP') != 'Datacom']\""
+
+[feature.spark-sdk-flash.tasks.flash]
+description = "Flash a binary to the device (DFU)"
+cmd = "python script/dfu-util.py"
+
+[feature.spark-sdk-build.target.linux-64.activation]
+scripts = ["script/banner.sh"]
+
+[feature.spark-sdk-build.target.win-64.activation]
+scripts = ["script/banner.bat"]
+
+[feature.spark-sdk-flash.target.win-64.dependencies]
+qmk-driver-installer = "==1.0.0"

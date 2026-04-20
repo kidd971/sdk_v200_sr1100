@@ -1,9 +1,10 @@
 /** @file  pairing_api.c
- *  @brief The pairing module is used to exchange network information between two unconnected devices and establish network parameters for further exchanges.
+ *  @brief The pairing module is used to exchange network information between two unconnected devices and establish
+ *         network parameters for further exchanges.
  *
  *  @note Pairing only supports little endian.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -26,16 +27,7 @@
  * Delay in millisecond applied before disconnecting the wireless core to ensure
  * all packets have been acked before exiting.
  */
-#define PAIRING_EXIT_DELAY_MS            100
-
-/* MACROS *********************************************************************/
-#define CHECK_ERROR(cond, err_code, ret)       \
-    do {                                       \
-        if (cond) {                            \
-            pairing_error_set_error(err_code); \
-            ret;                               \
-        }                                      \
-    } while (0)
+#define PAIRING_EXIT_DELAY_MS 100
 
 /* PRIVATE GLOBALS ************************************************************/
 static void (*application_callback)(void);
@@ -46,31 +38,33 @@ static void pairing_process(void);
 static void pairing_deinit(void);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-pairing_event_t pairing_coordinator_start(pairing_cfg_t *pairing_cfg, pairing_assigned_address_t *pairing_assigned_address,
+pairing_event_t pairing_coordinator_start(pairing_cfg_t *pairing_cfg,
+                                          pairing_assigned_address_t *pairing_assigned_address,
                                           pairing_discovery_list_t *discovery_list, uint8_t discovery_list_size,
                                           pairing_error_t *pairing_err)
 {
-    swc_status_t swc_status;
+    swc_status_t swc_status = SWC_STATUS_STOPPED;
 
     *pairing_err = PAIRING_ERR_NONE;
     pairing_error_init(pairing_err);
 
     /* Avoid changing wireless configuration while the wireless core is running. */
     swc_status = pairing_wireless_get_status();
-    CHECK_ERROR(swc_status == SWC_STATUS_RUNNING, PAIRING_ERR_CHANGING_WIRELESS_CONFIG_WHILE_RUNNING, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(swc_status == SWC_STATUS_RUNNING, pairing_err, PAIRING_ERR_CHANGING_WIRELESS_CONFIG_WHILE_RUNNING,
+                return PAIRING_EVENT_NONE);
 
     /* Checking for parameter errors. */
-    CHECK_ERROR(pairing_cfg == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_assigned_address == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(discovery_list == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(discovery_list_size < PAIRING_DISCOVERY_LIST_MINIMUM_SIZE,
+    CHECK_ERROR(pairing_cfg == NULL, pairing_err, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_assigned_address == NULL, pairing_err, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(discovery_list == NULL, pairing_err, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(discovery_list_size < PAIRING_DISCOVERY_LIST_MINIMUM_SIZE, pairing_err,
                 PAIRING_ERR_DISCOVERY_LIST_SIZE_TOO_SMALL, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->app_code == 0, PAIRING_ERR_APP_CODE_NOT_CONFIGURED, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->timeout_sec < PAIRING_MINIMUM_TIMEOUT_SEC,
-                PAIRING_ERR_TIMEOUT, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->uwb_regulation >= _SWC_REGULATION_COUNT,
-                PAIRING_ERR_REGULATION_OPTION_NOT_SUPPORTED, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->context_switch_callback == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg->app_code == 0, pairing_err, PAIRING_ERR_APP_CODE_NOT_CONFIGURED,
+                return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg->timeout_sec < PAIRING_MINIMUM_TIMEOUT_SEC, pairing_err, PAIRING_ERR_TIMEOUT,
+                return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg->context_switch_callback == NULL, pairing_err, PAIRING_ERR_NULL_PTR,
+                return PAIRING_EVENT_NONE);
 
     /* Initialize the pairing module. */
     initialize_pairing_module(pairing_cfg, pairing_assigned_address);
@@ -103,25 +97,27 @@ pairing_event_t pairing_coordinator_start(pairing_cfg_t *pairing_cfg, pairing_as
 pairing_event_t pairing_node_start(pairing_cfg_t *pairing_cfg, pairing_assigned_address_t *pairing_assigned_address,
                                    uint8_t device_role, pairing_error_t *pairing_err)
 {
-    swc_status_t swc_status;
+    swc_status_t swc_status = SWC_STATUS_STOPPED;
 
     *pairing_err = PAIRING_ERR_NONE;
     pairing_error_init(pairing_err);
 
     /* Avoid changing wireless configuration while the wireless core is running. */
     swc_status = pairing_wireless_get_status();
-    CHECK_ERROR(swc_status == SWC_STATUS_RUNNING, PAIRING_ERR_CHANGING_WIRELESS_CONFIG_WHILE_RUNNING, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(swc_status == SWC_STATUS_RUNNING, pairing_err, PAIRING_ERR_CHANGING_WIRELESS_CONFIG_WHILE_RUNNING,
+                return PAIRING_EVENT_NONE);
 
     /* Checking for parameter errors. */
-    CHECK_ERROR(pairing_cfg == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_assigned_address == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->app_code == 0, PAIRING_ERR_APP_CODE_NOT_CONFIGURED, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->timeout_sec < PAIRING_MINIMUM_TIMEOUT_SEC,
-                PAIRING_ERR_TIMEOUT, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->uwb_regulation >= _SWC_REGULATION_COUNT,
-                PAIRING_ERR_REGULATION_OPTION_NOT_SUPPORTED, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(device_role == PAIRING_DEVICE_ROLE_COORDINATOR, PAIRING_ERR_DEVICE_ROLE, return PAIRING_EVENT_NONE);
-    CHECK_ERROR(pairing_cfg->context_switch_callback == NULL, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg == NULL, pairing_err, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_assigned_address == NULL, pairing_err, PAIRING_ERR_NULL_PTR, return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg->app_code == 0, pairing_err, PAIRING_ERR_APP_CODE_NOT_CONFIGURED,
+                return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg->timeout_sec < PAIRING_MINIMUM_TIMEOUT_SEC, pairing_err, PAIRING_ERR_TIMEOUT,
+                return PAIRING_EVENT_NONE);
+    CHECK_ERROR(device_role == PAIRING_DEVICE_ROLE_COORDINATOR, pairing_err, PAIRING_ERR_DEVICE_ROLE,
+                return PAIRING_EVENT_NONE);
+    CHECK_ERROR(pairing_cfg->context_switch_callback == NULL, pairing_err, PAIRING_ERR_NULL_PTR,
+                return PAIRING_EVENT_NONE);
 
     /* Initialize the pairing module. */
     initialize_pairing_module(pairing_cfg, pairing_assigned_address);
@@ -148,6 +144,11 @@ pairing_event_t pairing_node_start(pairing_cfg_t *pairing_cfg, pairing_assigned_
     return pairing_event_get_event();
 }
 
+swc_error_t pairing_get_swc_error(void)
+{
+    return pairing_wireless_get_error();
+}
+
 void pairing_abort(void)
 {
     pairing_event_set_event(PAIRING_EVENT_ABORT);
@@ -171,8 +172,8 @@ static void initialize_pairing_module(pairing_cfg_t *pairing_cfg, pairing_assign
     /* Initialize the pairing events. */
     pairing_event_init();
 
-    /* Initialize the timer manager module. */
-    pairing_timer_init(pairing_cfg->timeout_sec);
+    /* Set the timeout duration and begin counting the ticks to monitor the timeout. */
+    pairing_start_timeout_counter(pairing_cfg->timeout_sec);
 
     /* Application level callback to perform application tasks. */
     if (pairing_cfg->application_callback != NULL) {

@@ -1,7 +1,7 @@
 /** @file  sac_api.h
  *  @brief SPARK Audio Core Application Programming Interface.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -25,51 +25,49 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /*! Maximum of audio channels supported in audio core. */
-#define SAC_MAX_CHANNEL_COUNT          2
+#define SAC_MAX_CHANNEL_COUNT 2
 /*! Placeholder to be used in a `sac_processing_ctrl` function call when no arguments are required. */
-#define SAC_NO_ARG                     0
+#define SAC_NO_ARG 0
 /*! Position of the audio payload in the audio packet. */
-#define SAC_NODE_PAYLOAD_SIZE_OFFSET   0
+#define SAC_NODE_PAYLOAD_SIZE_OFFSET 0
 /*! Size of the audio payload variable. */
 #define SAC_NODE_PAYLOAD_SIZE_VAR_SIZE sizeof(uint16_t)
 /*! Position of the audio header in the audio packet. */
-#define SAC_PACKET_HEADER_OFFSET       (SAC_NODE_PAYLOAD_SIZE_OFFSET + SAC_NODE_PAYLOAD_SIZE_VAR_SIZE)
+#define SAC_PACKET_HEADER_OFFSET (SAC_NODE_PAYLOAD_SIZE_OFFSET + SAC_NODE_PAYLOAD_SIZE_VAR_SIZE)
 /*! Position of the packet data in the audio packet. */
-#define SAC_PACKET_DATA_OFFSET         (SAC_PACKET_HEADER_OFFSET + sizeof(sac_header_t))
+#define SAC_PACKET_DATA_OFFSET (SAC_PACKET_HEADER_OFFSET + sizeof(sac_header_t))
 /*! Minimum queue size necessary for a producer audio endpoint.
  *  Note: More memory will be allocated for processing purposes.
  */
 #define SAC_MIN_PRODUCER_QUEUE_SIZE 1
 /*! Number of bits required to store a byte. */
-#define SAC_BYTE_SIZE_BITS             8
+#define SAC_BYTE_SIZE_BITS 8
 /*! Number of bytes required to store an audio sample aligned to a CPU word. */
-#define SAC_WORD_SIZE_BYTE             4
+#define SAC_WORD_SIZE_BYTE 4
 /*! Number of bits required to store an audio sample aligned to a CPU word. */
-#define SAC_WORD_SIZE_BITS             ((SAC_WORD_SIZE_BYTE) * (SAC_BYTE_SIZE_BITS))
+#define SAC_WORD_SIZE_BITS ((SAC_WORD_SIZE_BYTE) * (SAC_BYTE_SIZE_BITS))
 
 /* MACROS *********************************************************************/
 /*! Get the audio payload size in the audio packet. */
-#define sac_node_get_payload_size(node) \
-        (*((uint16_t *)(queue_get_data_ptr(node, SAC_NODE_PAYLOAD_SIZE_OFFSET))))
+#define sac_node_get_payload_size(node) (*((uint16_t *)(queue_get_data_ptr(node, SAC_NODE_PAYLOAD_SIZE_OFFSET))))
 
 /*! Set the audio payload size in the audio packet. */
 #define sac_node_set_payload_size(node, payload_size) \
-        ((*((uint16_t *)(queue_get_data_ptr(node, SAC_NODE_PAYLOAD_SIZE_OFFSET)))) = (payload_size))
+    ((*((uint16_t *)(queue_get_data_ptr(node, SAC_NODE_PAYLOAD_SIZE_OFFSET)))) = (payload_size))
 
 /*! Get a pointer to the audio header in the audio packet. */
-#define sac_node_get_header(node) \
-        ((sac_header_t *)(queue_get_data_ptr(node, SAC_PACKET_HEADER_OFFSET)))
+#define sac_node_get_header(node) ((sac_header_t *)(queue_get_data_ptr(node, SAC_PACKET_HEADER_OFFSET)))
 
 /*! Get a pointer to the packet data in the audio packet. */
-#define sac_node_get_data(node) \
-        ((uint8_t *)(queue_get_data_ptr(node, SAC_PACKET_DATA_OFFSET)))
+#define sac_node_get_data(node) ((uint8_t *)(queue_get_data_ptr(node, SAC_PACKET_DATA_OFFSET)))
 
 /*! Return an array size aligned on a specific type. */
 #define sac_align_data_size(current_size, type_to_align) \
-        (sizeof(type_to_align) - ((current_size) % sizeof(type_to_align)))
+    (sizeof(type_to_align) - ((current_size) % sizeof(type_to_align)))
 
 /* TYPES **********************************************************************/
 typedef struct sac_pipeline sac_pipeline_t;
+typedef struct sac_processing sac_processing_t;
 
 /** @brief Audio Core Configuration.
  */
@@ -79,15 +77,6 @@ typedef struct sac_cfg {
     /*! Memory pool size in bytes. */
     size_t memory_pool_size;
 } sac_cfg_t;
-
-/** @brief Audio Core Hardware Abstraction Layer.
- */
-typedef struct sac_hal {
-    /*! Function the audio core uses to enter a critical section of the code. */
-    void (*enter_critical)(void);
-    /*! Function the audio core uses to exit a critical section of the code. */
-    void (*exit_critical)(void);
-} sac_hal_t;
 
 /** @brief Audio Core bit depth of an audio sample.
  */
@@ -127,14 +116,13 @@ typedef struct sac_sample_format {
 /** @brief Audio Core Header.
  */
 typedef struct sac_header {
-    /*! For clock drift compensation. Used by the recorder to notify the player that its TX audio buffer is filling up. */
-    uint8_t tx_queue_level_high:1;
-    /*! Indicates a fallback packet. */
-    uint8_t fallback:1;
-    /*! Reserved for future use. */
-    uint8_t reserved:2;
+    /*! For clock drift compensation. Used by the recorder to notify the player that its TX audio buffer is filling up.
+     */
+    uint8_t tx_queue_level_high : 1;
+    /*! Indicates the fallback mode of a packet.*/
+    uint8_t fallback : 3;
     /*! CRC4 of the header. */
-    uint8_t crc4:4;
+    uint8_t crc4 : 4;
     /*! Size of the payload (audio samples) expressed in bytes. */
     uint8_t payload_size;
 } sac_header_t;
@@ -151,8 +139,8 @@ typedef struct sac_processing_interface {
     uint16_t (*process)(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in, uint16_t size,
                         uint8_t *data_out, sac_status_t *status);
     /*! Function called by process_samples prior to process to determine if process will be executed or not. */
-    bool (*gate)(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in, uint16_t size,
-                 sac_status_t *status);
+    bool (*gate)(sac_processing_t *process, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,
+                 uint16_t size, sac_status_t *status);
 } sac_processing_interface_t;
 
 /** @brief Audio Core Processing.
@@ -196,7 +184,9 @@ typedef struct sac_endpoint_cfg {
      * False for only audio payloads (audio samples).
      */
     bool use_encapsulation;
-    /*! True if the endpoint requires a complete cycle to produce or consume data. False if the endpoint produces or consumes instantly. */
+    /*! True if the endpoint requires a complete cycle to produce or consume data. False if the endpoint produces or
+     * consumes instantly.
+     */
     bool delayed_action;
     /*! 1 if the endpoint produces or consumes mono audio payloads and 2 for interleaved stereo. */
     uint8_t channel_count;
@@ -230,6 +220,8 @@ typedef struct sac_endpoint {
         bool buffering_complete;
         /*! Internal: Extra queue size requested by processes if required. */
         uint8_t extra_queue_size;
+        /*! Total number of endpoints, stored in the first endpoint of the pipeline. */
+        uint8_t num_endpoints;
     } _internal;
 } sac_endpoint_t;
 
@@ -240,6 +232,10 @@ typedef struct sac_pipeline_cfg {
     bool do_initial_buffering;
     /*! Configure the pipeline with mixer's specific options. */
     sac_mixer_option_t mixer_option;
+    /*! Max payload size supported in the pipeline.
+     *  (Defaults to the maximum payload size between the producer and the consumer)
+     */
+    uint16_t max_payload_size;
 } sac_pipeline_cfg_t;
 
 /** @brief Audio Core Statistics.
@@ -289,6 +285,10 @@ typedef struct sac_pipeline {
         uint32_t samples_buffered_size;
         /*! Internal: Queue used for processing the pipeline. */
         queue_t *processing_queue;
+        /*! Internal: Number of samples produced. */
+        uint32_t current_sample_count;
+        /*! Internal: Used to track pending packets in the accumulator to be added to the CDC target queue length. */
+        uint32_t pending_packets;
     } _internal;
 } sac_pipeline_t;
 
@@ -296,10 +296,9 @@ typedef struct sac_pipeline {
 /** @brief Initialize the Audio Core.
  *
  *  @param[in]  cfg     Audio Core configuration.
- *  @param[in]  hal     Board specific functions.
  *  @param[out] status  Status code.
  */
-void sac_init(sac_cfg_t cfg, sac_hal_t *hal, sac_status_t *status);
+void sac_init(sac_cfg_t cfg, sac_status_t *status);
 
 /** @brief Initialize the SAC Mixer Module.
  *
@@ -483,13 +482,6 @@ void sac_pipeline_produce(sac_pipeline_t *pipeline, sac_status_t *status);
  */
 void sac_pipeline_consume(sac_pipeline_t *pipeline, sac_status_t *status);
 
-/** @brief Execute all the consume endpoints that contain data in their queue.
- *
- *  @param[in]  pipeline  Pipeline instance.
- *  @param[out] status    Status code.
- */
-void sac_pipeline_consume_all(sac_pipeline_t *pipeline, sac_status_t *status);
-
 /** @brief Get the number of bytes allocated in the memory pool.
  *
  *  @param[out] status  Status code.
@@ -506,6 +498,16 @@ uint32_t sac_get_allocated_bytes(sac_status_t *status);
  *  @return Number of bytes copied into the node.
  */
 uint16_t sac_node_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, sac_status_t *status);
+
+/** @brief Copy data into a node's data payload section.
+ *
+ *  @param[in]  dest_node  Node to copy data to.
+ *  @param[in]  data       Data payload to copy.
+ *  @param[in]  size       Size of the data payload to copy.
+ *  @param[out] status     Status code.
+ *  @return Number of bytes copied into the node's data payload section.
+ */
+uint16_t sac_node_data_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, sac_status_t *status);
 
 /** @brief Set endpoint internal queue extra.
  *

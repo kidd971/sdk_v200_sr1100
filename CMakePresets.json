@@ -14,13 +14,10 @@
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "CMAKE_CXX_FLAGS": "-g -O2",
-                "CMAKE_C_FLAGS": "-g -O2",
                 "RADIO_INTERFACE_QSPI": "OFF",
                 "RPC_ENABLED": "OFF",
                 "RTOS_ENABLED": "OFF",
                 "SWC_EXT_API_ENABLE": "OFF",
-                "TINY_USB_CFG": "TINY_USB_SINGLE_FS_BAREMETAL",
                 "WPS_ENABLE_PHY_STATS_PER_BANDS": "OFF"
             }
         },
@@ -46,6 +43,19 @@
             }
         },
         {
+            "name": "audio-bidirectional-quasar-usb_audio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Audio bidirectional example for SR11xx with Quasar USB AUDIO",
+            "cacheVariables": {
+                "APP": "Audio-Bidirectional",
+                "TRANSCEIVER": "SR1100",
+                "USB_AUDIO_ENABLED": "ON"
+            }
+        },
+        {
             "name": "audio-unidirectional-quasar",
             "inherits": [
                 "base",
@@ -55,6 +65,19 @@
             "cacheVariables": {
                 "APP": "Audio-Unidirectional",
                 "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "audio-unidirectional-quasar-usb_audio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Audio unidirectional example for SR11xx with Quasar USB AUDIO",
+            "cacheVariables": {
+                "APP": "Audio-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "USB_AUDIO_ENABLED": "ON"
             }
         },
         {
@@ -120,8 +143,32 @@
             "cacheVariables": {
                 "APP": "Hello-World-RTOS",
                 "TRANSCEIVER": "SR1100",
-                "TINY_USB_CFG": "TINY_USB_SINGLE_FS_RTOS",
                 "RTOS_ENABLED": "ON"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone headset example for SR11xx with Quasar",
+            "cacheVariables": {
+                "APP": "Puretone-Headset",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-usb_audio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone headset example for SR11xx with Quasar USB AUDIO",
+            "cacheVariables": {
+                "APP": "Puretone-Headset",
+                "TRANSCEIVER": "SR1100",
+                "USB_AUDIO_ENABLED": "ON"
             }
         },
         {
@@ -147,6 +194,19 @@
             ],
             "cacheVariables": {
                 "APP": "BSP-validator",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "profiler-tool-quasar",
+            "description": "Profiler tool with Quasar",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "cacheVariables": {
+                "APP": "Profiler",
                 "TRANSCEIVER": "SR1100"
             }
         }

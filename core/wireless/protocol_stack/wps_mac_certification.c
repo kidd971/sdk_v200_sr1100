@@ -1,7 +1,7 @@
 /** @file  wps_mac_certification.c
  *  @brief Wireless Protocol Stack MAC certification module.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -18,35 +18,37 @@
 #define PHY_CERTIF_BYTE1 0x0A
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static void wps_mac_certification_auto_reply_conn_config(wps_connection_t *conn_main,
-                                                         wps_connection_t *conn_auto);
+static void wps_mac_certification_auto_reply_conn_config(wps_connection_t *conn_main, wps_connection_t *conn_auto);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void wps_mac_certification_init(void *wps_mac)
 {
     wps_mac_t *mac = (wps_mac_t *)wps_mac;
 
-    wps_connection_t *connection_main;
-    wps_connection_t *connection_auto;
-    timeslot_t *prev_timeslot;
-    timeslot_t *current_timeslot;
-    timeslot_t *time_slot;
-    uint8_t initial_index = mac->scheduler.current_time_slot_num;
+    wps_connection_t *connection_main = NULL;
+    wps_connection_t *connection_auto = NULL;
+    timeslot_t *prev_timeslot = NULL;
+    timeslot_t *current_timeslot = NULL;
+    timeslot_t *time_slot = NULL;
+    uint8_t initial_index = 0;
     uint8_t current_index = 255;
-    uint32_t rx_air_time;
+    uint32_t rx_air_time = 0;
 
     mac->node_role = NETWORK_COORDINATOR;
+
+    /* Get first timeslots used by the node. */
+    link_scheduler_increment_time_slot(&mac->scheduler);
+    initial_index = mac->scheduler.current_time_slot_num;
 
     /* Update rx timeslot duration to delay ack by expected rx packet air time. */
     while (initial_index != current_index) {
         prev_timeslot = link_scheduler_get_previous_timeslot_index(&mac->scheduler);
         current_timeslot = link_scheduler_get_current_timeslot(&mac->scheduler);
         connection_main = link_scheduler_get_current_main_connection(&mac->scheduler, mac->main_connection_id);
-        if (connection_main != NULL) {
-            if ((connection_main->source_address != mac->local_address) && connection_main->ack_enable) {
-
+        if ((connection_main != NULL) && (!connection_main->certification_initialized)) {
+            if ((connection_main->cfg.source_address != mac->local_address) && connection_main->ack_enable) {
                 /* Update timeslot duration to delay ack by expected rx packet air time. */
-                uint32_t syncword_bits = mac->tdma_sync.sync_word_size_bits;
+                uint32_t sfd_bits = mac->tdma_sync.sfd_size_bits;
                 uint32_t preamble_bits = mac->tdma_sync.preamble_size_bits;
                 bool iook = (connection_main->frame_cfg.modulation == MODULATION_IOOK) ? true : false;
                 bool two_bit_ppm = (connection_main->frame_cfg.modulation == MODULATION_2BITPPM) ? true : false;
@@ -59,10 +61,10 @@ void wps_mac_certification_init(void *wps_mac)
 #else
                 uint8_t crc_bits = 31;
 #endif
-                rx_air_time = wps_utils_get_delayed_wakeup_event(preamble_bits, syncword_bits, iook, fec, two_bit_ppm,
+                rx_air_time = wps_utils_get_delayed_wakeup_event(preamble_bits, sfd_bits, iook, fec, two_bit_ppm,
                                                                  chip_repet, isi_mitig, address_bits,
                                                                  connection_main->payload_size +
-                                                                     connection_main->header_size,
+                                                                     connection_main->cfg.header_size,
                                                                  crc_bits, 0, 0, false, 0);
 
                 prev_timeslot->duration_pll_cycles += rx_air_time;
@@ -75,42 +77,47 @@ void wps_mac_certification_init(void *wps_mac)
 
     current_index = 255;
     while (initial_index != current_index) {
-        connection_main = link_scheduler_get_current_main_connection(&mac->scheduler,
-                                                                     mac->main_connection_id);
-        if (connection_main != NULL) {
-            if (connection_main->source_address == mac->local_address) {
+        connection_main = link_scheduler_get_current_main_connection(&mac->scheduler, mac->main_connection_id);
+        if ((connection_main != NULL) && (!connection_main->certification_initialized)) {
+            if (connection_main->cfg.source_address == mac->local_address) {
                 connection_main->certification_mode_enabled = true;
+                /* Disable Sync packet when device is not synced */
+                connection_main->send_sync_frame = false;
                 /* Disable connection acknowledge to avoid garanteed delivery conflitcts. */
                 connection_main->ack_enable = false;
                 connection_main->stop_and_wait_arq.enable = false;
                 wps_mac_certification_send(connection_main);
             } else if (connection_main->ack_enable) {
-                uint16_t temp = connection_main->source_address;
+                uint16_t temp = connection_main->cfg.source_address;
 
-                connection_main->source_address             = mac->local_address;
-                connection_main->destination_address        = temp;
-                connection_main->payload_size               = 0;
-                connection_main->header_size                = 0;
+                /* Disable Sync packet when device is not synced */
+                connection_main->send_sync_frame = false;
+                connection_main->cfg.source_address = mac->local_address;
+                connection_main->cfg.destination_address = temp;
+                connection_main->payload_size = 0;
+                connection_main->cfg.header_size = 0;
                 connection_main->certification_mode_enabled = true;
                 /* Disable connection acknowledge to avoid garanteed delivery conflitcts. */
                 connection_main->ack_enable = false;
                 connection_main->stop_and_wait_arq.enable = false;
                 wps_mac_certification_send(connection_main);
+                connection_main->certification_initialized = true;
             }
         }
-        connection_auto = link_scheduler_get_current_auto_connection(&mac->scheduler,
-                                                                     mac->auto_connection_id);
-        if (connection_auto != NULL) {
-            if (connection_auto->source_address == mac->local_address) {
+        connection_auto = link_scheduler_get_current_auto_connection(&mac->scheduler, mac->auto_connection_id);
+        if ((connection_auto != NULL) && (!connection_auto->certification_initialized)) {
+            if (connection_auto->cfg.source_address == mac->local_address) {
+                /* Copy auto-reply connection settings into main connection. */
                 wps_mac_certification_auto_reply_conn_config(connection_main, connection_auto);
                 time_slot = link_scheduler_get_current_timeslot(&mac->scheduler);
-                time_slot->auto_connection_count = 0;
-                time_slot->main_connection_count = 1;
+                time_slot->auto_conn_list.connection_count = 0;
+                time_slot->main_conn_list.connection_count = 1;
                 connection_main->certification_mode_enabled = true;
                 /* Disable connection acknowledge to avoid garanteed delivery conflitcts. */
                 connection_main->ack_enable = false;
                 connection_main->stop_and_wait_arq.enable = false;
                 wps_mac_certification_send(connection_main);
+                connection_auto->certification_initialized = true;
             }
         }
         link_scheduler_increment_time_slot(&mac->scheduler);
@@ -125,7 +132,7 @@ void wps_mac_certification_init(void *wps_mac)
 void wps_mac_certification_send(wps_connection_t *connection)
 {
     wps_error_t wps_err = WPS_NO_ERROR;
-    uint8_t *data       = NULL;
+    uint8_t *data = NULL;
 
     wps_get_free_slot(connection, &data, connection->payload_size, &wps_err);
     if ((wps_err != WPS_NO_ERROR) || (data == NULL)) {
@@ -156,11 +163,19 @@ void wps_mac_certification_fill_header(uint8_t *header, uint8_t header_size)
  *  @param[in] conn_main  Connection main.
  *  @param[in] conn_auto  Connection auto-reply.
  */
-static void wps_mac_certification_auto_reply_conn_config(wps_connection_t *conn_main,
-                                                         wps_connection_t *conn_auto)
+static void wps_mac_certification_auto_reply_conn_config(wps_connection_t *conn_main, wps_connection_t *conn_auto)
 {
+    rf_channel_t **channel_20_48 = NULL;
+    rf_channel_t **channel_40_96 = NULL;
+
+    /* Save the main connection channel settings. */
+    channel_20_48 = (rf_channel_t **)conn_main->channel_20_48;
+    channel_40_96 = (rf_channel_t **)conn_main->channel_40_96;
+    /* Use the main connection frame configuration. */
     memcpy(&conn_auto->frame_cfg, &conn_main->frame_cfg, sizeof(frame_cfg_t));
-    memcpy(&conn_auto->channel, &conn_main->channel,
-           sizeof(rf_channel_t) * conn_main->max_channel_count * WPS_RADIO_COUNT);
+    /* Copy auto-reply connection settings into main connection. */
     memcpy(conn_main, conn_auto, sizeof(wps_connection_t));
+    /* Restore the main connection channel settings. */
+    conn_main->channel_20_48 = (rf_channel_t(*)[WPS_RADIO_COUNT])channel_20_48;
+    conn_main->channel_40_96 = (rf_channel_t(*)[WPS_RADIO_COUNT])channel_40_96;
 }

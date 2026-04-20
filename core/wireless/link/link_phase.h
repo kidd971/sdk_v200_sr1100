@@ -1,7 +1,7 @@
 /** @file  link_phase.h
  *  @brief Link phases management module.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -40,10 +40,10 @@ typedef struct phase_info {
 /** @brief Phases value, last received preamble phase correlation data.
  */
 typedef struct phase_infos {
-   /*! Initiator's ranging data */
-   phase_info_t local_info;
-   /*! Responder's ranging data */
-   phase_info_t remote_info;
+    /*! Initiator's ranging data */
+    phase_info_t local_info;
+    /*! Responder's ranging data */
+    phase_info_t remote_info;
 } phase_infos_t;
 
 /** @brief Link phase structure.

@@ -1,7 +1,7 @@
 /** @file  pairing_state_coordinator.c
  *  @brief This file handles the functions related to the coordinator's pairing states.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -19,9 +19,9 @@
 #include "pairing_wireless.h"
 
 /* MACROS *********************************************************************/
-#define EXTRACT_PAN_ID(x) ((x >> (8 * 1)) & 0x0FFF)
+#define EXTRACT_PAN_ID(x)         ((x >> (8 * 1)) & 0x7FFF)
 #define EXTRACT_DEVICE_ADDRESS(x) ((x >> (8 * 0)) & 0xFF)
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+#define ARRAY_SIZE(a)             (sizeof(a) / sizeof(*(a)))
 
 /* PRIVATE GLOBALS ************************************************************/
 static pairing_authentication_message_t pairing_authentication_message;
@@ -162,7 +162,7 @@ static void authentication_send_message(void)
 {
     /* Prepare the authentication message. */
     pairing_authentication_message.pairing_command = PAIRING_COMMAND_AUTHENTICATION_MESSAGE;
-    pairing_authentication_message.app_code        = pairing_security_get_app_code();
+    pairing_authentication_message.app_code = pairing_security_get_app_code();
 
     pairing_wireless_send_message((uint8_t *)&pairing_authentication_message, sizeof(pairing_authentication_message));
 
@@ -274,9 +274,9 @@ static void addressing_send_message(void)
 {
     /* Prepare the addressing message. */
     pairing_addressing_message.pairing_command = PAIRING_COMMAND_ADDRESSING_MESSAGE;
-    pairing_addressing_message.pan_id          = pairing_address_get_pan_id();
-    pairing_addressing_message.coordinator_id  = pairing_address_get_coordinator_address();
-    pairing_addressing_message.node_id         = pairing_address_get_node_address();
+    pairing_addressing_message.pan_id = pairing_address_get_pan_id();
+    pairing_addressing_message.coordinator_id = pairing_address_get_coordinator_address();
+    pairing_addressing_message.node_id = pairing_address_get_node_address();
 
     pairing_wireless_send_message((uint8_t *)&pairing_addressing_message, sizeof(pairing_addressing_message));
 

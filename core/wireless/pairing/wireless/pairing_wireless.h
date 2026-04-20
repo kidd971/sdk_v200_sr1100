@@ -1,7 +1,7 @@
 /** @file  pairing_wireless.h
  *  @brief This file handles the wireless management for pairing module.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -19,7 +19,7 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /*! The maximum payload size in bytes during a wireless transfer. */
-#define PAIRING_MAX_PAYLOAD_SIZE  16
+#define PAIRING_MAX_PAYLOAD_SIZE 16
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Initialize the pairing wireless configuration.
@@ -77,6 +77,12 @@ void pairing_wireless_set_received_message_callback(void (*callback)(uint8_t *re
  *  @return The wireless core status.
  */
 swc_status_t pairing_wireless_get_status(void);
+
+/** @brief Get the wireless core error.
+ *
+ *  @return The wireless core error.
+ */
+swc_error_t pairing_wireless_get_error(void);
 
 #ifdef __cplusplus
 }

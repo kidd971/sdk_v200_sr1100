@@ -11,7 +11,7 @@
  *  decoder state information, thus allowing multiple instances of
  *  each to coexist.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -28,8 +28,8 @@ extern "C" {
 
 /* TYPES **********************************************************************/
 typedef struct state_variable {
-        int16_t predicted_sample;
-        uint8_t index;
+    int16_t predicted_sample;
+    uint8_t index;
 } __attribute__((packed)) state_variable_t;
 
 typedef union adpcm_state {

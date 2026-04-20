@@ -1,7 +1,7 @@
 /** @file  sr_pwr_up.h
  *  @brief SR1100 power up sequence.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is confidential and proprietary.
  *  @author    SPARK FW Team.
  */
@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "sr_access.h"
 #include "sr_def.h"
 
 #ifdef __cplusplus
@@ -35,17 +36,30 @@ static inline void sr_pwr_up(radio_t *radio, bool reset, sr_phy_error_t *err)
         sr_utils_wait_delay(10);
         sr_access_set_reset_pin(radio->radio_id);
         sr_utils_wait_delay(10);
+
+        /* Set the peripheral communication mode to SPI since the radio just got reset. */
+        sr_access_set_mode(radio->radio_id, SPI);
     }
 
     sr_access_write_reg16(radio->radio_id, REG16_HARDDISABLES_IOCONFIG,
                           radio->std_spi | radio->outimped | CHIP_RATE_20_48_MHZ | radio->irq_polarity |
-                              radio->clock_source.pll_clk_source | radio->clock_source.xtal_clk_source);
-    sr_access_write_reg16(radio->radio_id, REG16_PREAMB_DEBUG, REG16_PREAMB_DEBUG_OPT | SET_SUMRXADC(radio->sumrxadc));
+                              radio->clock_source.pll_clk_source | radio->clock_source.xtal_clk_source |
+                              radio->spi_mode_cfg);
 
-    uint16_t crc_30_16_value = sr_access_read_reg16(radio->radio_id, REG16_CRC_30_16);
+    /* Change the transfer mode to whatever is appropriate. */
+    sr_access_set_mode(radio->radio_id, RADIO_QSPI_ENABLED ? QSPI : SPI);
 
-    if (crc_30_16_value != REG16_CRC_30_16_DEFAULT) {
-        *err = PHY_MODEL_NOT_FOUND;
+    /* Configure the preamble debug register. */
+    sr_access_write_reg16(radio->radio_id, REG16_PREAMB_DEBUG,
+                          (SET_MAINDEBUG(MAIN_DEBUG_VAL_RX_TX_INFO_ON_SYNC_PIN) | MAXSIGLVL_OPTIMIZED_REG_VAL |
+                           SUMRXADC(CHIP_RATE_20_48_MHZ)));
+
+    if (reset) {
+        uint16_t crc_30_16_value = sr_access_read_reg16(radio->radio_id, REG16_CRC_30_16);
+
+        if (crc_30_16_value != REG16_CRC_30_16_DEFAULT) {
+            *err = PHY_MODEL_NOT_FOUND;
+        }
     }
 }
 

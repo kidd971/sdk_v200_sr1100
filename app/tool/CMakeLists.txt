@@ -1,0 +1,12 @@
+if (RTOS_ENABLED OR USB_AUDIO_ENABLED)
+    return()
+endif()
+
+if (APP STREQUAL "BSP-validator")
+    add_subdirectory(bsp_validator)
+elseif (APP STREQUAL "Profiler")
+    add_subdirectory(profiler)
+elseif (APP STREQUAL "All")
+    add_subdirectory(bsp_validator)
+    add_subdirectory(profiler)
+endif()

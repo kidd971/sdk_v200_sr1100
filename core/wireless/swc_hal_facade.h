@@ -13,7 +13,7 @@
  *  support for runtime polymorphism. This ensures tight integration with the
  *  build system and minimal overhead.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -76,8 +76,8 @@ void swc_hal_radio_2_context_switch(void);
  *  This function registers a internal SWC library function callback to be invoked when the IRQ pin
  *  interrupt for radio #1 is triggered.
  *
- * @param[in] callback A pointer to the callback function that will be executed upon
- *                     an interrupt from radio #1's IRQ pin.
+ *  @param[in] callback  A pointer to the callback function that will be executed upon
+ *                       an interrupt from radio #1's IRQ pin.
  */
 void swc_hal_set_radio_1_irq_callback(void (*callback)(void));
 
@@ -90,34 +90,34 @@ void swc_hal_set_radio_1_irq_callback(void (*callback)(void));
  *  This function registers a internal SWC library function callback to be invoked when the IRQ pin
  *  interrupt for radio #2 is triggered.
  *
- *  @param[in] callback A pointer to the callback function that will be executed upon
- *                      an interrupt from radio #2's IRQ pin.
+ *  @param[in] callback  A pointer to the callback function that will be executed upon
+ *                       an interrupt from radio #2's IRQ pin.
  */
 void swc_hal_set_radio_2_irq_callback(void (*callback)(void));
 
-/** @brief Sets the callback function for the DMA receive (RX) interrupt for radio #1.
+/** @brief Sets the callback function for the DMA or peripheral transfer done (RX or TX) interrupt for radio #1.
  *
  *  This function allows for the registration of a internal SWC library function callback
- *  to be invoked when the DMA RX operation for radio #1 completes,
+ *  to be invoked when the non-blocking memory transfer over DMA for radio #1 completes.
  *
- *  @param[in] callback A pointer to the callback function that will be executed upon the
- *                      completion of a DMA RX operation for radio #1.
+ *  @param[in] callback  A pointer to the callback function that will be executed upon the
+ *                       completion of a DMA or peripheral transfer done operation for radio #1.
  */
-void swc_hal_set_radio_1_dma_rx_callback(void (*callback)(void));
+void swc_hal_set_radio_1_non_blocking_transfer_callback(void (*callback)(void));
 
-/** @brief Sets the callback function for the DMA receive (RX) interrupt for radio #2.
+/** @brief Sets the callback function for the DMA or peripheral transfer done (RX or TX) interrupt for radio #2.
  *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  *
  *  This function allows for the registration of a internal SWC library function callback
- *  to be invoked when the DMA RX operation for radio #2 completes,
+ *  to be invoked when the non-blocking memory transfer over DMA for radio #2 completes.
  *
- *  @param[in] callback A pointer to the callback function that will be executed upon the
- *                      completion of a DMA RX operation for radio #2.
+ *  @param[in] callback  A pointer to the callback function that will be executed upon the
+ *                       completion of a DMA or peripheral transfer done operation for radio #2.
  */
-void swc_hal_set_radio_2_dma_rx_callback(void (*callback)(void));
+void swc_hal_set_radio_2_non_blocking_transfer_callback(void (*callback)(void));
 
 /** @brief Disables the IRQ external interrupt for radio #1.
  *
@@ -155,41 +155,41 @@ void swc_hal_radio_1_enable_irq_it(void);
  */
 void swc_hal_radio_2_enable_irq_it(void);
 
-/** @brief Disables the DMA SPI interrupt for radio #1.
+/** @brief Disables the non-blocking transfer interrupt for radio #1.
  *
- *  This function deactivates the interrupt request (IRQ) associated with the DMA SPI
- *  operation for radio #1, preventing DMA related interrupt handling.
+ *  This function deactivates the interrupt request (IRQ) associated with the DMA
+ *  operation for radio #1, preventing DMA or peripheral related interrupt handling.
  */
-void swc_hal_radio_1_disable_dma_irq_it(void);
+void swc_hal_radio_1_disable_non_blocking_transfer_irq_it(void);
 
-/** @brief Disables the DMA SPI interrupt for radio #2.
+/** @brief Disables the non-blocking transfer interrupt for radio #2.
  *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  *
- *  This function deactivates the interrupt request (IRQ) associated with the DMA SPI
- *  operation for radio #2, preventing DMA related interrupt handling.
+ *  This function deactivates the interrupt request (IRQ) associated with the DMA
+ *  operation for radio #2, preventing DMA or peripheral related interrupt handling.
  */
-void swc_hal_radio_2_disable_dma_irq_it(void);
+void swc_hal_radio_2_disable_non_blocking_transfer_irq_it(void);
 
-/** @brief Enables the DMA SPI interrupt for radio #1.
+/** @brief Enables the non-blocking transfer interrupt for radio #1.
  *
- *  This function activates the interrupt request (IRQ) for the DMA SPI operation for radio #1,
- *  allowing DMA related interrupt handling.
+ *  This function activates the interrupt request (IRQ) for the DMA operation for radio #1,
+ *  allowing DMA or peripheral related interrupt handling.
  */
-void swc_hal_radio_1_enable_dma_irq_it(void);
+void swc_hal_radio_1_enable_non_blocking_transfer_irq_it(void);
 
-/** @brief Enables the DMA SPI interrupt for radio #2.
+/** @brief Enables the non-blocking transfer interrupt for radio #2.
  *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  *
- *  This function activates the interrupt request (IRQ) for the DMA SPI operation for radio #2,
- *  allowing DMA related interrupt handling.
+ *  This function activates the interrupt request (IRQ) for the DMA operation for radio #2,
+ *  allowing DMA or peripheral related interrupt handling.
  */
-void swc_hal_radio_2_enable_dma_irq_it(void);
+void swc_hal_radio_2_enable_non_blocking_transfer_irq_it(void);
 /** @} */
 
 /* GPIO Controls for Radios */
@@ -202,8 +202,9 @@ void swc_hal_radio_2_enable_dma_irq_it(void);
  */
 
 /** @brief Reads the status of radio #1's IRQ pin.
- * @retval True   If the pin is high.
- * @retval False  If the pin is low.
+ *
+ *  @retval True  If the pin is high.
+ *  @retval False  If the pin is low.
  */
 bool swc_hal_radio_1_read_irq_pin(void);
 
@@ -213,8 +214,8 @@ bool swc_hal_radio_1_read_irq_pin(void);
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  *
- * @retval True   If the pin is high.
- * @retval False  If the pin is low.
+ *  @retval True  If the pin is high.
+ *  @retval False  If the pin is low.
  */
 bool swc_hal_radio_2_read_irq_pin(void);
 
@@ -244,49 +245,77 @@ void swc_hal_radio_1_reset_reset_pin(void);
 void swc_hal_radio_2_reset_reset_pin(void);
 /** @} */
 
-/* SPI Communication */
+/* SPI/QSPI Communication. */
 
-/** @defgroup SPICommunication SPI Communication
+/** @defgroup SPI_QSPICommunication SPI/QSPI Communication
  *
- *  SPI bus communication functions for data exchange between the MCU and ASIC radios,
+ *  SPI/QSPI bus communication functions for data exchange between the MCU and ASIC radios,
  *  underpinning wireless communication functionality.
  *  @{
  */
 
-/** @brief Set the on-board controller SPI chip-select pin of the radio #1.
- */
-void swc_hal_radio_1_spi_set_cs(void);
-
-/** @brief Set the on-board controller SPI chip-select pin of the radio #2.
+/** @brief Set the on-board controller SPI/QSPI chip-select pin of the radio #1.
  *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  */
-void swc_hal_radio_2_spi_set_cs(void);
+void swc_hal_radio_1_end_transfer(void);
 
-/** @brief Reset the on-board controller SPI chip-select pin of the radio #1.
- */
-void swc_hal_radio_1_spi_reset_cs(void);
-
-/** @brief Reset the on-board controller SPI chip-select pin of the radio #2.
+/** @brief Set the on-board controller SPI/QSPI chip-select pin of the radio #2.
  *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  */
-void swc_hal_radio_2_spi_reset_cs(void);
+void swc_hal_radio_2_end_transfer(void);
+
+/** @brief Reset the on-board controller SPI/QSPI chip-select pin of the radio #1.
+ */
+void swc_hal_radio_1_begin_transfer(void);
+
+/** @brief Reset the on-board controller SPI/QSPI chip-select pin of the radio #2.
+ *
+ *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
+ *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
+ *  an implementation for this function in their backend.
+ */
+void swc_hal_radio_2_begin_transfer(void);
+
+/** @brief Read data half duplex on the radio #1 in blocking mode.
+ *
+ *  @note This function is only required when using the QSPI peripheral.
+ *
+ *  @param[in]  command  Command byte of the transfer.
+ *  @param[out] rx_data  Data received.
+ *  @param[in]  size     Size of the data.
+ */
+void swc_hal_radio_1_transfer_half_duplex_rx_blocking(uint8_t command, uint8_t *rx_data, uint16_t size);
+
+/** @brief Write data half duplex on the radio #1 in blocking mode.
+ *
+ *  @note This function is only required when using the QSPI peripheral.
+ *
+ *  @param[in] command  Command byte of the transfer.
+ *  @param[in] tx_data  Data buffer to write.
+ *  @param[in] size     Size of the data.
+ */
+void swc_hal_radio_1_transfer_half_duplex_tx_blocking(uint8_t command, uint8_t *tx_data, uint16_t size);
 
 /** @brief Read and Write data full duplex on the radio #1 in blocking mode.
  *
+ *  @note This function is only required when using the SPI peripheral.
+ *
  *  @param[in]  tx_data  Data buffer to write.
  *  @param[out] rx_data  Data received.
  *  @param[in]  size     Size of the data.
  */
-void swc_hal_radio_1_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
+void swc_hal_radio_1_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
 
 /** @brief Read and Write data full duplex on the radio #2 in blocking mode.
  *
+ *  @note This function is only required when using the SPI peripheral.
+ *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
@@ -295,18 +324,42 @@ void swc_hal_radio_1_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t
  *  @param[out] rx_data  Data received.
  *  @param[in]  size     Size of the data.
  */
-void swc_hal_radio_2_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
+void swc_hal_radio_2_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
+
+/** @brief Read data half duplex on the radio #1 in non-blocking mode.
+ *
+ *  @note This function is only required when using the QSPI peripheral.
+ *
+ *  @param[in]  command  Command byte of the transfer.
+ *  @param[out] rx_data  Data received.
+ *  @param[in]  size     Size of the data.
+ */
+void swc_hal_radio_1_transfer_half_duplex_rx_non_blocking(uint8_t command, uint8_t *rx_data, uint16_t size);
+
+/** @brief Write data half duplex on the radio #1 in non-blocking mode.
+ *
+ *  @note This function is only required when using the QSPI peripheral.
+ *
+ *  @param[in] command  Command byte of the transfer.
+ *  @param[in] tx_data  Data buffer to write.
+ *  @param[in] size     Size of the data.
+ */
+void swc_hal_radio_1_transfer_half_duplex_tx_non_blocking(uint8_t command, uint8_t *tx_data, uint16_t size);
 
 /** @brief Read and Write data full duplex on the radio #1 in non-blocking mode.
  *
+ *  @note This function is only required when using the SPI peripheral.
+ *
  *  @param[in]  tx_data  Data buffer to write.
  *  @param[out] rx_data  Data received.
  *  @param[in]  size     Size of the data.
  */
-void swc_hal_radio_1_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
+void swc_hal_radio_1_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
 
 /** @brief Read and Write data full duplex on the radio #2 in non-blocking mode.
  *
+ *  @note This function is only required when using the SPI peripheral.
+ *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
@@ -315,38 +368,41 @@ void swc_hal_radio_1_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uin
  *  @param[out] rx_data  Data received.
  *  @param[in]  size     Size of the data.
  */
-void swc_hal_radio_2_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
+void swc_hal_radio_2_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size);
 
-/** @brief Read the status of the radio's SPI of the radio #1.
+/** @brief Read the status of the radio's SPI/QSPI of the radio #1.
  *
- *  @retval true   SPI is busy.
- *  @retval false  SPI is not busy.
+ *  @retval true  Transfer is busy.
+ *  @retval false  Transfer is not busy.
  */
-bool swc_hal_radio_1_is_spi_busy(void);
+bool swc_hal_radio_1_is_transfer_busy(void);
 
-/** @brief Read the status of the radio's SPI of the radio #2.
+/** @brief Read the status of the radio's SPI/QSPI of the radio #2.
  *
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  *
- *  @retval true   SPI is busy.
- *  @retval false  SPI is not busy.
+ *  @retval true  Transfer is busy.
+ *  @retval false  Transfer is not busy.
  */
-bool swc_hal_radio_2_is_spi_busy(void);
+bool swc_hal_radio_2_is_transfer_busy(void);
+
+/** @brief Set the way to communicate to radio #1 to be SPI.
+ *
+ *  @note This function is only required when using the QSPI peripheral.
+ */
+void swc_hal_radio_1_set_access_mode_spi(void);
+
+/** @brief Set the way to communicate to radio #1 to be QSPI.
+ *
+ *  @note This function is only required when using the QSPI peripheral.
+ *
+ */
+void swc_hal_radio_1_set_access_mode_qspi(void);
 /** @} */
 
 /* Timer and Delay Management */
-/** @brief Initializes the free running timer.
- *
- *  Sets up the timer used for obtaining a tick count, required for features like Stop and Wait.
- *  The timer resolution should be set to a tick frequency between 100Hz and 1MHz,
- *
- *  @note Users not using the Stop and Wait feature should implement a pseudo-version of
- *  this function that returns UINT64_MAX, ensuring backend compatibility with the facade.
- */
-void swc_hal_free_running_timer_init(void);
-
 /** @brief Get the free running timer tick count.
  *
  *  This function is ack as a watchdog timer for the Stop and Wait feature,
@@ -355,7 +411,7 @@ void swc_hal_free_running_timer_init(void);
  *  @note Users not using the Stop and Wait feature should implement a pseudo-version of
  *  this function that returns UINT64_MAX, ensuring backend compatibility with the facade.
  *
- * @return Tick count.
+ *  @return Tick count.
  */
 uint64_t swc_hal_get_tick_free_running_timer(void);
 
@@ -367,7 +423,7 @@ uint64_t swc_hal_get_tick_free_running_timer(void);
  *  @note Users not using the Stop and Wait feature should implement a pseudo-version of
  *  this function that returns 0, ensuring backend compatibility with the facade.
  *
- * @return The free running timer's configured frequency in Hz.
+ *  @return The free running timer's configured frequency in Hz.
  */
 uint32_t swc_hal_get_free_running_timer_frequency_hz(void);
 
@@ -377,7 +433,7 @@ uint32_t swc_hal_get_free_running_timer_frequency_hz(void);
  *¬
  *  Functions for managing a hardware timer specifically designed for synchronizing dual radio operations.
  *  This includes initializing the timer, setting timer periods, handling callbacks, and managing timer interrupts.
- * @{
+ *  @{
  */
 
 /** @brief Initializes the timer for dual-radio support.
@@ -391,7 +447,6 @@ uint32_t swc_hal_get_free_running_timer_frequency_hz(void);
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
- *
  */
 void swc_hal_multi_radio_timer_init(void);
 
@@ -404,7 +459,7 @@ void swc_hal_multi_radio_timer_init(void);
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
  *
- * @param[in] callback A pointer to the callback function that will be executed.
+ *  @param[in] callback  A pointer to the callback function that will be executed.
  */
 void swc_hal_set_multi_radio_timer_callback(void (*callback)(void));
 
@@ -415,7 +470,6 @@ void swc_hal_set_multi_radio_timer_callback(void (*callback)(void));
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
- *
  */
 void swc_hal_timer_multi_radio_timer_start(void);
 
@@ -426,7 +480,6 @@ void swc_hal_timer_multi_radio_timer_start(void);
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
- *
  */
 void swc_hal_timer_multi_radio_timer_stop(void);
 
@@ -441,7 +494,7 @@ void swc_hal_timer_multi_radio_timer_stop(void);
  *  an implementation for this function in their backend.
  *
  *
- * @param[in] period The timer period, in ticks.
+ *  @param[in] period  The timer period, in ticks.
  */
 void swc_hal_timer_multi_radio_timer_set_period(uint16_t period);
 
@@ -450,7 +503,6 @@ void swc_hal_timer_multi_radio_timer_set_period(uint16_t period);
  *  @note This function is part of a dual-radio support system, allowing a single MCU to manage
  *  two separate radio ASICs. Users implementing support for a single radio ASIC do not have to provide
  *  an implementation for this function in their backend.
- *
  */
 void swc_hal_timer_multi_radio_timer_set_max_period(void);
 
@@ -459,7 +511,7 @@ void swc_hal_timer_multi_radio_timer_set_max_period(void);
  *  Enables the Wireless Core to calculate accurate tick counts for delays and
  *  other timing-related operations by providing the multi radio timer's frequency in hertz.
  *
- * @return The multi radio timer's configured frequency in Hz.
+ *  @return The multi radio timer's configured frequency in Hz.
  */
 uint32_t swc_hal_get_timer_multi_frequency_hz(void);
 /** @} */

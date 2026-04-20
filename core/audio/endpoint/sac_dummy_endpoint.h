@@ -7,7 +7,7 @@
  *  queue of audio samples without actually processing them. This setup helps in maintaining the structure necessary for
  *  potentially more complex operations while using simple, non-functional placeholders.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
                Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.

@@ -1,7 +1,7 @@
 /** @file  connection_priority_node.c
  *  @brief This is a basic example of how to use the Wireless Core connection priority.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -11,8 +11,11 @@
 #include <stdio.h>
 #include "connection_priority_facade.h"
 #include "pairing_api.h"
+#include "pairing_cfg.h"
 #include "swc_api.h"
+#include "swc_cfg.h"
 #include "swc_cfg_node.h"
+#include "swc_error.h"
 #include "swc_stats.h"
 
 /* CONSTANTS ******************************************************************/
@@ -20,35 +23,50 @@
 #define MAX_BIG_PAYLOAD_SIZE_BYTE   15
 #define MAX_SMALL_PAYLOAD_SIZE_BYTE 8
 #define STATS_ARRAY_LENGTH          8000
-#define TIMER1_PACKET_RATE_US       1333
+#define TIMER1_PACKET_RATE_US       1250
 #define TIMER2_PACKET_RATE_US       5000
-#define TIMER_STAT_MS               500
+#define PRINT_INTERVAL_MS           1000
 #define TX_CID3_PRIORITY            0
 #define TX_CID4_PRIORITY            1
 #define RX_PRIORITY                 0
+/* Size of the buffer used to print errors. */
+#define ERROR_MESSAGE_BUFFER_SIZE 50
 
-/* The timeout in second after which the pairing procedure will abort. */
-#define PAIRING_TIMEOUT_IN_SECONDS 10
-/* The pairing device role is used for the coordinator's pairing discovery list. */
-#define PAIRING_DEVICE_ROLE 1
-/* The application code prevents unwanted devices from pairing with this application. */
-#define PAIRING_APP_CODE 0x0000000000000333
+/* TYPES **********************************************************************/
+/** @brief Enumeration representing device pairing states.
+ */
+typedef enum device_pairing_state {
+    /*! The device is unpaired with the Coordinator. */
+    DEVICE_UNPAIRED,
+    /*! The device pairing is active. */
+    DEVICE_PAIRING,
+    /*! The device is paired with the Coordinator. */
+    DEVICE_PAIRED,
+} device_pairing_state_t;
+
+/** @brief Enumeration representing the types of connection possible.
+ */
+typedef enum conn_type {
+    /*! A transmittion connection. */
+    TX_CONN,
+    /*! A reception connection. */
+    RX_CONN,
+} conn_type_t;
 
 /* PRIVATE GLOBALS ************************************************************/
 /* ** Wireless Core ** */
 static uint8_t swc_memory_pool[SWC_MEM_POOL_SIZE];
-static swc_node_t *node;
 static swc_connection_t *rx_cid0;
 static swc_connection_t *rx_cid1;
 static swc_connection_t *rx_cid2;
 static swc_connection_t *tx_cid3;
 static swc_connection_t *tx_cid4;
 
-static uint32_t timeslot_us[]       = SCHEDULE;
-static uint32_t channel_sequence[]  = CHANNEL_SEQUENCE;
+static uint32_t timeslot_us[] = SCHEDULE;
+static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
 static uint32_t channel_frequency[] = CHANNEL_FREQ;
-static int32_t rx_timeslots[]       = RX_TIMESLOTS;
-static int32_t tx_timeslots[]       = TX_TIMESLOTS;
+static int32_t tx_timeslots[] = NODE_TIMESLOTS;
+static int32_t rx_timeslots[] = COORD_TIMESLOTS;
 
 /* ** Application Specific ** */
 static uint32_t cid3_sent_count;
@@ -56,33 +74,51 @@ static uint32_t cid4_sent_count;
 static uint32_t cid3_dropped_count;
 static uint32_t cid4_dropped_count;
 
-static volatile bool print_stats_now;
 static volatile bool reset_stats_now;
 
-static bool device_state_paired;
+/* **** Application Specific **** */
+static facade_certification_mode_t certification_mode;
+/* Variables supporting pairing between the two devices. */
+static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
+static void app_init(void);
 static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err);
 static void cid3_tx_send_callback(void);
 static void cid4_tx_send_callback(void);
-static void rx_success_callback(void *conn);
+static void rx_success_callback(void *conn, void *arg);
+static void tx_success_callback(void *conn, void *arg);
+static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_address, swc_channel_cfg_t *channel_cfg,
+                                    conn_type_t conn_type, const char *conn_name, uint8_t prio,
+                                    void (*cb)(void *conn, void *arg));
+static void setup_connections(uint8_t local_address, uint8_t remote_address);
 
+static bool should_print_stats(void);
 static void print_stats(void);
 static void reset_stats(void);
-static void stats_callback(void);
 
 static void enter_pairing_mode(void);
 static void unpair_device(void);
 
 static void pairing_application_callback(void);
 static void abort_pairing_procedure(void);
+static void pairing_button_callback(void);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
 {
     facade_board_init();
+
+    /* Initialize wireless core context switch handler before pairing is available */
+    facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
+
+    facade_button_callbacks_t button_callbacks = {
+        .pairing_callback = pairing_button_callback,
+        .reset_stats_callback = reset_stats,
+    };
+    facade_set_button_callbacks(button_callbacks);
 
     /* Connection ID 3 (CID3) sends 750 pkt/s. */
     facade_packet_rate_timer1_init(TIMER1_PACKET_RATE_US);
@@ -92,44 +128,59 @@ int main(void)
     facade_packet_rate_timer2_init(TIMER2_PACKET_RATE_US);
     facade_packet_rate_set_timer2_callback(cid4_tx_send_callback);
 
-    facade_stats_timer_init(TIMER_STAT_MS);
-    facade_stats_set_timer_callback(stats_callback);
-    facade_stats_timer_start();
-
-    /* Initialize wireless core context switch handler before pairing is available */
-    facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
-
-    while (1) {
-        if (!device_state_paired) {
-            /* When the device is not paired, the only action possible for the user is the pairing. */
-            facade_button_handling(enter_pairing_mode, NULL, NULL, NULL);
-        } else {
-            /* When the device is paired, normal operations are executed. */
-            facade_button_handling(unpair_device, reset_stats, NULL, NULL);
-            if (print_stats_now) {
-                if (reset_stats_now) {
-                    swc_connection_reset_stats(rx_cid0);
-                    swc_connection_reset_stats(rx_cid1);
-                    swc_connection_reset_stats(rx_cid2);
-                    swc_connection_reset_stats(tx_cid3);
-                    swc_connection_reset_stats(tx_cid4);
-                    cid3_sent_count = 0;
-                    cid4_sent_count = 0;
-                    cid3_dropped_count = 0;
-                    cid4_dropped_count = 0;
-                    reset_stats_now = false;
-                } else {
-                    print_stats();
-                }
-                print_stats_now = false;
+    certification_mode = facade_get_node_certification_mode();
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        /* Init app in certification mode. */
+        app_init();
+        device_pairing_state = DEVICE_PAIRED;
+        while (1) {
+            /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
+            if (should_print_stats()) {
+                print_stats();
             }
         }
+    }
+
+    device_pairing_state = DEVICE_UNPAIRED;
+
+    /* Pairing occurs automatically when the device boots. */
+    enter_pairing_mode();
+
+    while (1) {
+        facade_button_handling();
+
+        /* Print received string and stats every PRINT_INTERVAL_MS */
+        if (should_print_stats()) {
+            print_stats();
+        }
+
+        /* Wait for an interrupt event. */
+        facade_wait_for_interrupt();
     }
 
     return 0;
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
+/** @brief Initialize the application.
+ */
+static void app_init(void)
+{
+    swc_error_t swc_err;
+
+    app_swc_core_init(&pairing_assigned_address, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connect(&swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Connection ID 3 (CID3) start sending packets. */
+    facade_packet_rate_timer1_start();
+
+    /* Connection ID 4 (CID4) start sending packets. */
+    facade_packet_rate_timer2_start();
+}
+
 /** @brief Initialize the Wireless Core.
  *
  *  @param[in]  app_pairing  Configure the Wireless Core with the pairing values.
@@ -140,6 +191,14 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     uint16_t local_address = app_pairing->node_address;
     uint16_t remote_address = app_pairing->coordinator_address;
 
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        app_pairing->coordinator_address = 0x1;
+        app_pairing->node_address = 0x2;
+        app_pairing->pan_id = 0xABC;
+        remote_address = 0x2;
+        local_address = 0x1;
+    }
+
     swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
@@ -149,210 +208,49 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
     };
-    swc_init(core_cfg, facade_context_switch_trigger, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
 
     swc_node_cfg_t node_cfg = {
-        .role = NETWORK_ROLE,
+        .role = SWC_ROLE_NODE,
         .pan_id = app_pairing->pan_id,
         .coordinator_address = remote_address,
         .local_address = local_address,
     };
-    node = swc_node_init(node_cfg, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
 
-    swc_radio_module_init(node, SWC_RADIO_ID_1, true, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, err);
+    ASSERT_SWC_STATUS(*err);
 
-    swc_channel_cfg_t rx_channel_cfg = {
-        .tx_pulse_count = TX_DATA_PULSE_COUNT,
-        .tx_pulse_width = TX_DATA_PULSE_WIDTH,
-        .tx_pulse_gain  = TX_DATA_PULSE_GAIN,
-        .rx_pulse_count = RX_ACK_PULSE_COUNT,
-    };
-    swc_channel_cfg_t tx_channel_cfg = {
-        .tx_pulse_count = TX_DATA_PULSE_COUNT,
-        .tx_pulse_width = TX_DATA_PULSE_WIDTH,
-        .tx_pulse_gain  = TX_DATA_PULSE_GAIN,
-        .rx_pulse_count = RX_ACK_PULSE_COUNT,
-    };
+    swc_radio_module_init(SWC_RADIO_ID_1, true, err);
+    ASSERT_SWC_STATUS(*err);
 
-    /* ** Node receiving from Coordinator Connection ID 0 ** */
-    swc_connection_cfg_t rx_cfg_cid0 = {
-        .name = "RX CID0 from Coordinator",
-        .source_address = remote_address,
-        .destination_address = local_address,
-        .max_payload_size = MAX_BIG_PAYLOAD_SIZE_BYTE,
-        .queue_size = RX_DATA_QUEUE_SIZE,
-        .timeslot_id = rx_timeslots,
-        .timeslot_count = ARRAY_SIZE(rx_timeslots),
-    };
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_module_init(SWC_RADIO_ID_2, true, err);
+    ASSERT_SWC_STATUS(*err);
+#endif
 
-    rx_cid0 = swc_connection_init(node, rx_cfg_cid0, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
+    setup_connections(local_address, remote_address);
 
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_cid0, node, rx_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
-    }
+    /* Handle certification mode. */
+    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, err);
+    ASSERT_SWC_STATUS(*err);
 
-    swc_connection_set_connection_priority(node, rx_cid0, RX_PRIORITY, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    swc_connection_set_rx_success_callback(rx_cid0, rx_success_callback, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    /* ** Node receiving from Coordinator Connection ID 1 ** */
-    swc_connection_cfg_t rx_cfg_cid1 = {
-        .name = "RX CID1 from Coordinator",
-        .source_address = remote_address,
-        .destination_address = local_address,
-        .max_payload_size = MAX_SMALL_PAYLOAD_SIZE_BYTE,
-        .queue_size = RX_DATA_QUEUE_SIZE,
-        .timeslot_id = rx_timeslots,
-        .timeslot_count = ARRAY_SIZE(rx_timeslots),
-    };
-
-    rx_cid1 = swc_connection_init(node, rx_cfg_cid1, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-    swc_connection_set_connection_priority(node, rx_cid1, RX_PRIORITY, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_cid1, node, rx_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
-    }
-
-    swc_connection_set_rx_success_callback(rx_cid1, rx_success_callback, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    /* ** Node receiving from Coordinator Connection ID 2 ** */
-    swc_connection_cfg_t rx_cfg_cid2 = {
-        .name = "RX CID2 from Coordinator",
-        .source_address = remote_address,
-        .destination_address = local_address,
-        .max_payload_size = MAX_BIG_PAYLOAD_SIZE_BYTE,
-        .queue_size = RX_DATA_QUEUE_SIZE,
-        .timeslot_id = rx_timeslots,
-        .timeslot_count = ARRAY_SIZE(rx_timeslots),
-    };
-
-    rx_cid2 = swc_connection_init(node, rx_cfg_cid2, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-    swc_connection_set_connection_priority(node, rx_cid2, RX_PRIORITY, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_cid2, node, rx_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
-    }
-
-    swc_connection_set_rx_success_callback(rx_cid2, rx_success_callback, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    /* ** Node sending to Coordinator Connection ID 3 ** */
-    swc_connection_cfg_t tx_cfg_cid3 = {
-        .name = "TX CID3 to Coordinator",
-        .source_address = local_address,
-        .destination_address = remote_address,
-        .max_payload_size = MAX_BIG_PAYLOAD_SIZE_BYTE,
-        .queue_size = TX_DATA_QUEUE_SIZE,
-        .timeslot_id = tx_timeslots,
-        .timeslot_count = ARRAY_SIZE(tx_timeslots),
-    };
-
-    tx_cid3 = swc_connection_init(node, tx_cfg_cid3, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-    swc_connection_set_connection_priority(node, tx_cid3, TX_CID3_PRIORITY, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
-        tx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_cid3, node, tx_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
-    }
-
-    /* ** Node sending to Coordinator Connection ID 4 ** */
-    swc_connection_cfg_t tx_cfg_cid4 = {
-        .name = "TX CID4 to Coordinator",
-        .source_address = local_address,
-        .destination_address = remote_address,
-        .max_payload_size = MAX_SMALL_PAYLOAD_SIZE_BYTE,
-        .queue_size = TX_DATA_QUEUE_SIZE,
-        .timeslot_id = tx_timeslots,
-        .timeslot_count = ARRAY_SIZE(tx_timeslots),
-    };
-
-    tx_cid4 = swc_connection_init(node, tx_cfg_cid4, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-    swc_connection_set_connection_priority(node, tx_cid4, TX_CID4_PRIORITY, err);
-    if (*err != SWC_ERR_NONE) {
-        return;
-    }
-
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_sequence); i++) {
-        tx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_cid4, node, tx_channel_cfg, err);
-        if (*err != SWC_ERR_NONE) {
-            return;
-        }
-    }
-
-    swc_setup(node, err);
+    swc_setup(err);
+    ASSERT_SWC_STATUS(*err);
 }
 
 /** @brief Callback function when it is time to send a payload on Connection ID 3 (CID3).
  */
 static void cid3_tx_send_callback(void)
 {
-    swc_error_t swc_err;
-    uint8_t *payload_buf;
+    swc_error_t swc_err = SWC_ERR_NONE;
+    uint8_t *payload_buf = NULL;
 
-    swc_connection_allocate_payload_buffer(tx_cid3, &payload_buf, MAX_BIG_PAYLOAD_SIZE_BYTE, &swc_err);
+    swc_connection_get_payload_buffer(tx_cid3, &payload_buf, &swc_err);
+
     if (payload_buf != NULL) {
         snprintf((char *)payload_buf, MAX_BIG_PAYLOAD_SIZE_BYTE, "%s", "CID3");
         swc_connection_send(tx_cid3, payload_buf, MAX_BIG_PAYLOAD_SIZE_BYTE, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
         cid3_sent_count++;
     } else {
         cid3_dropped_count++;
@@ -363,13 +261,16 @@ static void cid3_tx_send_callback(void)
  */
 static void cid4_tx_send_callback(void)
 {
-    swc_error_t swc_err;
-    uint8_t *payload_buf;
+    swc_error_t swc_err = SWC_ERR_NONE;
+    uint8_t *payload_buf = NULL;
 
-    swc_connection_allocate_payload_buffer(tx_cid4, &payload_buf, MAX_SMALL_PAYLOAD_SIZE_BYTE, &swc_err);
+    swc_connection_get_payload_buffer(tx_cid4, &payload_buf, &swc_err);
+
     if (payload_buf != NULL) {
         snprintf((char *)payload_buf, MAX_SMALL_PAYLOAD_SIZE_BYTE, "%s", "CID4");
         swc_connection_send(tx_cid4, payload_buf, MAX_SMALL_PAYLOAD_SIZE_BYTE, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
         cid4_sent_count++;
     } else {
         cid4_dropped_count++;
@@ -379,44 +280,214 @@ static void cid4_tx_send_callback(void)
 /** @brief Callback function when a frame has been successfully received.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
+ * @param[in] arg   Additional argument for the callback function.
  */
-static void rx_success_callback(void *conn)
+static void rx_success_callback(void *conn, void *arg)
 {
-    swc_error_t err;
+    swc_error_t err = SWC_ERR_NONE;
+
+    (void)arg;
 
     swc_connection_receive_complete(conn, &err);
+    ASSERT_SWC_STATUS(err);
+
+    facade_rx_conn_status();
+}
+
+/** @brief Callback function when a frame has been successfully transmitted.
+ *
+ *  @param[in] conn  Connection the callback function has been linked to.
+ */
+static void tx_success_callback(void *conn, void *arg)
+{
+    (void)conn;
+    (void)arg;
+
+    facade_tx_conn_status();
+}
+
+static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_address, swc_channel_cfg_t *channel_cfg,
+                                    conn_type_t conn_type, const char *conn_name, uint8_t prio,
+                                    void (*cb)(void *conn, void *arg))
+{
+    if (channel_cfg == NULL) {
+        facade_print_error_string("An invalid channel config was given to setup a connection.");
+        while (1);
+    }
+
+    swc_error_t err = SWC_ERR_NONE;
+    swc_connection_t *conn = NULL;
+
+    /* Connection config. */
+    swc_connection_cfg_t conn_cfg = {
+        .name = conn_name,
+        .source_address = conn_type == TX_CONN ? local_address : remote_address,
+        .destination_address = conn_type == TX_CONN ? remote_address : local_address,
+        .max_payload_size = MAX_BIG_PAYLOAD_SIZE_BYTE,
+        .queue_size = SWC_QUEUE_SIZE,
+        .timeslot_id = conn_type == TX_CONN ? tx_timeslots : rx_timeslots,
+        .timeslot_count = conn_type == TX_CONN ? ARRAY_SIZE(tx_timeslots) : ARRAY_SIZE(rx_timeslots),
+    };
+
+    conn = swc_connection_init(conn_cfg, &err);
+    ASSERT_SWC_STATUS(err);
+
+    swc_connection_set_connection_priority(conn, prio, &err);
+    ASSERT_SWC_STATUS(err);
+
+    switch (conn_type) {
+    case TX_CONN:
+        swc_connection_set_tx_success_callback(conn, cb, NULL, &err);
+        break;
+    case RX_CONN:
+        swc_connection_set_rx_success_callback(conn, cb, NULL, &err);
+        break;
+    default:
+        facade_print_error_string("An invalid connection type was provided to setup a connection.");
+        while (1);
+    }
+    ASSERT_SWC_STATUS(err);
+
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
+        channel_cfg->frequency = channel_frequency[i];
+        swc_connection_add_channel(conn, *channel_cfg, &err);
+        ASSERT_SWC_STATUS(err);
+    }
+
+    return conn;
+}
+
+static void setup_connections(uint8_t local_address, uint8_t remote_address)
+{
+    swc_channel_cfg_t rx_ch_cfg = {
+        .tx_pulse_count = TX_DATA_PULSE_COUNT,
+        .tx_pulse_width = TX_DATA_PULSE_WIDTH,
+        .tx_pulse_gain = TX_DATA_PULSE_GAIN,
+        .rx_pulse_count = RX_ACK_PULSE_COUNT,
+    };
+    swc_channel_cfg_t tx_ch_cfg = {
+        .tx_pulse_count = TX_DATA_PULSE_COUNT,
+        .tx_pulse_width = TX_DATA_PULSE_WIDTH,
+        .tx_pulse_gain = TX_DATA_PULSE_GAIN,
+        .rx_pulse_count = RX_ACK_PULSE_COUNT,
+    };
+
+    const char *cid0_name = "RX CID0 from Coord";
+    const char *cid1_name = "RX CID1 from Coord";
+    const char *cid2_name = "RX CID2 from Coord";
+    const char *cid3_name = "TX CID3 to Coord";
+    const char *cid4_name = "TX CID4 to Coord";
+
+    switch (certification_mode) {
+    case FACADE_CERTIF_NONE:
+        /* clang-format off */
+        rx_cid0 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid0_name, RX_PRIORITY, rx_success_callback);
+        rx_cid1 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid1_name, RX_PRIORITY, rx_success_callback);
+        rx_cid2 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid2_name, RX_PRIORITY, rx_success_callback);
+        tx_cid3 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid3_name, TX_CID3_PRIORITY, tx_success_callback);
+        tx_cid4 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid4_name, TX_CID4_PRIORITY, tx_success_callback);
+        /* clang-format on */
+        break;
+    case FACADE_CERTIF_CONNECTION_ID_3:
+        tx_cid3 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid3_name, 0, tx_success_callback);
+        rx_cid0 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid0_name, 1, rx_success_callback);
+        rx_cid1 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid1_name, 1, rx_success_callback);
+        rx_cid2 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid2_name, 1, rx_success_callback);
+        tx_cid4 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid4_name, 1, tx_success_callback);
+        break;
+    case FACADE_CERTIF_CONNECTION_ID_4:
+        tx_cid4 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid4_name, 0, tx_success_callback);
+        rx_cid0 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid0_name, 1, rx_success_callback);
+        rx_cid1 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid1_name, 1, rx_success_callback);
+        rx_cid2 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid2_name, 1, rx_success_callback);
+        tx_cid3 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid3_name, 1, tx_success_callback);
+        break;
+    default:
+        facade_print_error_string("Encountered unknown certification mode while setting up connections.");
+        while (1);
+    }
+}
+
+/** @brief Check if stats should be printed.
+ *
+ *  @retval 0  Stats should not be printed.
+ *  @retval 1  Stats should be printed.
+ */
+static bool should_print_stats(void)
+{
+    static uint32_t tick_start;
+    uint32_t current_tick = facade_get_tick_ms();
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        tick_start = current_tick;
+        return false;
+    }
+
+    if ((current_tick - tick_start) >= PRINT_INTERVAL_MS) {
+        tick_start = current_tick;
+        return true;
+    }
+
+    return false;
 }
 
 /** @brief Print the available statistics.
  */
 static void print_stats(void)
 {
-    char stats_string[STATS_ARRAY_LENGTH];
-    uint32_t total_payload_count;
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+
+    static char stats_string[STATS_ARRAY_LENGTH];
+    uint32_t total_payload_count = 0;
     int string_length = 0;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
-    const char *device_str          = "\n\r<  NODE  >\n\r";
-    const char *app_stats_str       = "<<  Connection Priority App Statistics  >>\n\r";
-    const char *data_rate_str       = "<<< Connections Transmission Rate >>>\n\r";
-    const char *total_cid3_str      = "Payload Generated on CID3:\t%10lu\n\r";
-    const char *total_cid4_str      = "Payload Generated on CID4:\t%10lu\n\r";
-    const char *payload_sent_str    = "  Payload Sent:\t\t\t%10lu (%05.2f%%)\n\r";
+    const char *device_str = "\n\r<  NODE  >\n\r";
+    const char *certification_mode_str = "Cert. Mode %i\r\n";
+    const char *app_stats_str = "<<  Connection Priority App Statistics  >>\n\r";
+    const char *data_rate_str = "<<< Connections Transmission Rate >>>\n\r";
+    const char *total_cid3_str = "Payload Generated on CID3:\t%10lu\n\r";
+    const char *total_cid4_str = "Payload Generated on CID4:\t%10lu\n\r";
+    const char *payload_sent_str = "  Payload Sent:\t\t\t%10lu (%05.2f%%)\n\r";
     const char *payload_dropped_str = "  Payload Dropped:\t\t%10lu (%05.2f%%)\n\r";
-    const char *overview_str        = "<<< Connections Transmission Overview >>>\n\r";
-    const char *cid3_sent_str       = "Payload Sent on CID3:\t\t%10lu (%05.2f%%)\n\r";
-    const char *cid4_sent_str       = "Payload Sent on CID4:\t\t%10lu (%05.2f%%)\n\r";
-    const char *wireless_stats_str  = "<<  Wireless Core Statistics  >>\n\r";
+    const char *overview_str = "<<< Connections Transmission Overview >>>\n\r";
+    const char *cid3_sent_str = "Payload Sent on CID3:\t\t%10lu (%05.2f%%)\n\r";
+    const char *cid4_sent_str = "Payload Sent on CID4:\t\t%10lu (%05.2f%%)\n\r";
+    const char *wireless_stats_str = "<<  Wireless Core Statistics  >>\n\r";
 
-    swc_connection_update_stats(rx_cid0);
-    swc_connection_update_stats(rx_cid1);
-    swc_connection_update_stats(rx_cid2);
-    swc_connection_update_stats(tx_cid3);
-    swc_connection_update_stats(tx_cid4);
+    memset(stats_string, 0, sizeof(stats_string));
+
+    swc_connection_update_stats(rx_cid0, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(rx_cid1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(rx_cid2, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(tx_cid3, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_update_stats(tx_cid4, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
     total_payload_count = (cid3_sent_count + cid4_sent_count);
 
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
+                                  certification_mode_str, certification_mode);
+    }
+
     /* Device role */
-    string_length = snprintf(stats_string, sizeof(stats_string), device_str);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, device_str);
+
+    if (certification_mode != FACADE_CERTIF_NONE) {
+        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
+                                  certification_mode_str, certification_mode);
+    }
 
     /* Application statistics */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, app_stats_str);
@@ -424,67 +495,122 @@ static void print_stats(void)
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, data_rate_str);
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, total_cid3_str,
                               cid3_sent_count + cid3_dropped_count);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_sent_str, cid3_sent_count,
-                              (double)cid3_sent_count * 100 / (cid3_sent_count + cid3_dropped_count));
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_dropped_str, cid3_dropped_count,
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_sent_str,
+                              cid3_sent_count, (double)cid3_sent_count * 100 / (cid3_sent_count + cid3_dropped_count));
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_dropped_str,
+                              cid3_dropped_count,
                               (double)cid3_dropped_count * 100 / (cid3_sent_count + cid3_dropped_count));
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, total_cid4_str,
                               cid4_sent_count + cid4_dropped_count);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_sent_str, cid4_sent_count,
-                              (double)cid4_sent_count * 100 / (cid4_sent_count + cid4_dropped_count));
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_dropped_str, cid4_dropped_count,
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_sent_str,
+                              cid4_sent_count, (double)cid4_sent_count * 100 / (cid4_sent_count + cid4_dropped_count));
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_dropped_str,
+                              cid4_dropped_count,
                               (double)cid4_dropped_count * 100 / (cid4_sent_count + cid4_dropped_count));
     /* Link capacity utilization */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, overview_str);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, cid3_sent_str, cid3_sent_count,
-                              (double)cid3_sent_count * 100 / total_payload_count);
-    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, cid4_sent_str, cid4_sent_count,
-                              (double)cid4_sent_count * 100 / total_payload_count);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, cid3_sent_str,
+                              cid3_sent_count, (double)cid3_sent_count * 100 / total_payload_count);
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, cid4_sent_str,
+                              cid4_sent_count, (double)cid4_sent_count * 100 / total_payload_count);
 
     /* Wireless statistics */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
-    string_length += swc_connection_format_stats(rx_cid0, node, stats_string + string_length, sizeof(stats_string) - string_length);
-    string_length += swc_connection_format_stats(rx_cid1, node, stats_string + string_length, sizeof(stats_string) - string_length);
-    string_length += swc_connection_format_stats(rx_cid2, node, stats_string + string_length, sizeof(stats_string) - string_length);
-    string_length += swc_connection_format_stats(tx_cid3, node, stats_string + string_length, sizeof(stats_string) - string_length);
-    string_length += swc_connection_format_stats(tx_cid4, node, stats_string + string_length, sizeof(stats_string) - string_length);
+    string_length += swc_connection_format_stats(rx_cid0, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(rx_cid1, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(rx_cid2, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(tx_cid3, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    string_length += swc_connection_format_stats(tx_cid4, stats_string + string_length,
+                                                 sizeof(stats_string) - string_length, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
     facade_print_string(stats_string);
+
+    if (reset_stats_now) {
+        swc_connection_reset_stats(rx_cid0, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
+        swc_connection_reset_stats(rx_cid1, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
+        swc_connection_reset_stats(rx_cid2, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
+        swc_connection_reset_stats(tx_cid3, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
+        swc_connection_reset_stats(tx_cid4, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+
+        cid3_sent_count = 0;
+        cid4_sent_count = 0;
+        cid3_dropped_count = 0;
+        cid4_dropped_count = 0;
+        reset_stats_now = false;
+    }
 }
 
 /** @brief Reset the TX and RX statistics.
  */
 static void reset_stats(void)
 {
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+
     if (reset_stats_now == false) {
         reset_stats_now = true;
     }
 }
 
-/** @brief Callback handling when the stats have to be printed.
+/** @brief Handle pairing button callback.
  */
-static void stats_callback(void)
+static void pairing_button_callback(void)
 {
-    print_stats_now = true;
+    switch (device_pairing_state) {
+    case DEVICE_PAIRED:
+        unpair_device();
+        break;
+    case DEVICE_PAIRING:
+        abort_pairing_procedure();
+        break;
+    case DEVICE_UNPAIRED:
+        enter_pairing_mode();
+        break;
+    default:
+        break;
+    }
 }
 
 /** @brief Enter in Pairing Mode using the Pairing Module.
  */
 static void enter_pairing_mode(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
     pairing_error_t pairing_err = PAIRING_ERR_NONE;
+    pairing_event_t pairing_event = PAIRING_EVENT_NONE;
 
-    pairing_event_t pairing_event;
+    /* Set the application's state. */
+    device_pairing_state = DEVICE_PAIRING;
 
     facade_notify_enter_pairing();
 
     /* The Wireless Core must be stopped before starting the pairing procedure. */
     if (swc_get_status() == SWC_STATUS_RUNNING) {
         swc_disconnect(&swc_err);
-        if ((swc_err != SWC_ERR_NONE) && (swc_err != SWC_ERR_NOT_CONNECTED)) {
-            while (1);
-        }
+        ASSERT_SWC_STATUS(swc_err);
     }
 
     /* Give the information to the Pairing Module. */
@@ -494,9 +620,10 @@ static void enter_pairing_mode(void)
     app_pairing_cfg.application_callback = pairing_application_callback;
     app_pairing_cfg.memory_pool = swc_memory_pool;
     app_pairing_cfg.memory_pool_size = SWC_MEM_POOL_SIZE;
-    app_pairing_cfg.uwb_regulation = SWC_REGULATION_FCC;
-    pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE, &pairing_err);
+    pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE_NODE,
+                                       &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
+        facade_print_error_string("An error occured during the pairing process.");
         while (1);
     }
 
@@ -505,23 +632,8 @@ static void enter_pairing_mode(void)
     case PAIRING_EVENT_SUCCESS:
         facade_notify_pairing_successful();
 
-        app_swc_core_init(&pairing_assigned_address, &swc_err);
-        if (swc_err != SWC_ERR_NONE) {
-            while (1);
-        }
-
-        swc_connect(&swc_err);
-        if (swc_err != SWC_ERR_NONE) {
-            while (1);
-        }
-
-        /* Connection ID 3 (CID3) start sending packets. */
-        facade_packet_rate_timer1_start();
-
-        /* Connection ID 4 (CID4) start sending packets. */
-        facade_packet_rate_timer2_start();
-
-        device_state_paired = true;
+        app_init();
+        device_pairing_state = DEVICE_PAIRED;
 
         break;
     case PAIRING_EVENT_TIMEOUT:
@@ -530,7 +642,7 @@ static void enter_pairing_mode(void)
     default:
         /* Indicate that the pairing process was unsuccessful. */
         facade_notify_not_paired();
-        device_state_paired = false;
+        device_pairing_state = DEVICE_UNPAIRED;
         break;
     }
 }
@@ -539,14 +651,12 @@ static void enter_pairing_mode(void)
  */
 static void unpair_device(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
-    device_state_paired = false;
+    device_pairing_state = DEVICE_UNPAIRED;
 
     swc_disconnect(&swc_err);
-    if ((swc_err != SWC_ERR_NONE) && (swc_err != SWC_ERR_NOT_CONNECTED)) {
-        while (1);
-    }
+    ASSERT_SWC_STATUS(swc_err);
 
     /* Connection ID 3 (CID3) stop sending packets. */
     facade_packet_rate_timer1_stop();
@@ -567,7 +677,7 @@ static void pairing_application_callback(void)
      *       executes the registered application callback, which might take
      *       a variable amount of time.
      */
-    facade_button_handling(abort_pairing_procedure, NULL, NULL, NULL);
+    facade_button_handling();
 }
 
 /** @brief Abort the pairing procedure once started.
@@ -575,4 +685,14 @@ static void pairing_application_callback(void)
 static void abort_pairing_procedure(void)
 {
     pairing_abort();
+}
+
+void swc_error_handler(swc_error_t swc_status)
+{
+    char buffer[ERROR_MESSAGE_BUFFER_SIZE];
+
+    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    facade_print_error_string(buffer);
+
+    while (1);
 }

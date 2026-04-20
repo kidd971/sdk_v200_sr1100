@@ -2,7 +2,7 @@
  *  @brief Clock drift compensation processing stage using audio buffer load averaging for
  *         detecting the drift and interpolation for correcting it.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -10,11 +10,17 @@
 
 /* INCLUDES *******************************************************************/
 #include "sac_cdc.h"
+#include <inttypes.h>
 #include <stdio.h>
+#include "sac_utils.h"
 
 /* CONSTANTS ******************************************************************/
-#define DECIMAL_FACTOR 100
+/* Decimal factor to use for queue averaging. */
+#define DECIMAL_FACTOR 1000
+/* Number of extra nodes to add to the queue for monitoring its size. */
 #define CDC_DEFAULT_EXTRA_QUEUE_SIZE 3
+/* Seconds to microseconds conversion factor. */
+#define S_TO_US 1000000
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void detect_drift(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline, sac_header_t *header);
@@ -82,8 +88,9 @@ void sac_cdc_init(void *instance, const char *name, sac_pipeline_t *pipeline, me
 
     /* Configure threshold. */
     cdc->_internal.sample_amount = pipeline->consumer->cfg.audio_payload_size /
-                                  (pipeline->consumer->cfg.channel_count * cdc->_internal.size_of_buffer_type);
-    cdc->_internal.normal_queue_size = pipeline->consumer->cfg.queue_size * cdc->_internal.sample_amount * DECIMAL_FACTOR;
+                                   (pipeline->consumer->cfg.channel_count * cdc->_internal.size_of_buffer_type);
+    cdc->_internal.normal_queue_size = pipeline->consumer->cfg.queue_size * cdc->_internal.sample_amount *
+                                       DECIMAL_FACTOR;
     cdc->_internal.max_queue_offset = 3 * DECIMAL_FACTOR; /* 3 samples. */
 
     /* Initialize the statistics. */
@@ -122,7 +129,7 @@ uint16_t sac_cdc_process(void *instance, sac_pipeline_t *pipeline, sac_header_t 
 {
     sac_cdc_instance_t *cdc = instance;
     uint16_t original_sample_count = size / cdc->_internal.size_of_buffer_type;
-    uint16_t new_sample_count;
+    uint16_t new_sample_count = 0;
 
     *status = SAC_OK;
 
@@ -138,22 +145,46 @@ uint16_t sac_cdc_process(void *instance, sac_pipeline_t *pipeline, sac_header_t 
     return (new_sample_count * cdc->_internal.size_of_buffer_type);
 }
 
-int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size)
+int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status)
 {
     int string_length = 0;
     const char *cdc_inflated_packets_count_str = "CDC Inflated Packets Count";
     const char *cdc_deflated_packets_count_str = "CDC Deflated Packets Count";
+    *status = SAC_OK;
+
+    SAC_CHECK_STATUS(cdc == NULL, status, SAC_ERR_NULL_PTR, return 0);
+    SAC_CHECK_STATUS(buffer == NULL, status, SAC_ERR_NULL_PTR, return 0);
 
     string_length = snprintf(buffer, size,
-                             "\n<< CDC STATS >>\r\n"
-                             "  %s:\t%10lu\r\n"
-                             "  %s:\t%10lu\r\n",
+                             "<< CDC Statistics >>\r\n"
+                             "  %s:\t\t%10" PRIu32 "\r\n"
+                             "  %s:\t\t%10" PRIu32 "\r\n"
+                             "  %s:\t%10" PRIu32 "\r\n"
+                             "  %s:\t%10" PRIu32 "\r\n",
+                             "Normal queue size", cdc->_internal.normal_queue_size / cdc->_internal.sample_amount,
+                             "Average queue size", cdc->_internal.avg_val / cdc->_internal.sample_amount,
                              cdc_inflated_packets_count_str,
                              cdc->_internal.sac_cdc_resampling_stats.cdc_inflated_packets_count,
                              cdc_deflated_packets_count_str,
                              cdc->_internal.sac_cdc_resampling_stats.cdc_deflated_packets_count);
 
     return string_length;
+}
+
+uint32_t sac_cdc_calculate_queue_average_size(uint8_t max_drift_ppm, uint32_t sample_rate, uint32_t sample_count,
+                                              uint32_t resampling_length)
+{
+    /* Difference in number of samples per second for the maximum drift value. */
+    uint32_t max_drift_sample_per_s = ((uint32_t)(((float)sample_rate * ((max_drift_ppm / 1000000.0))) + 0.5));
+    /* Maximum time between resampling events to be able to compensate drift. */
+    uint32_t max_resampling_period_us = S_TO_US / max_drift_sample_per_s;
+    /* Amount of time in an rx audio payload. */
+    uint32_t rx_payload_us = S_TO_US * sample_count / sample_rate;
+    /* Amount of time for a resampling event to complete. */
+    uint32_t resampling_length_us = S_TO_US * resampling_length / sample_rate;
+
+    /* Maximum number of payload possible to average between resampling events. */
+    return (max_resampling_period_us - resampling_length_us) / rx_payload_us;
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -189,7 +220,8 @@ static void detect_drift(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline, sac_
                 if (cdc->_internal.avg_val > (cdc->_internal.normal_queue_size + cdc->_internal.max_queue_offset)) {
                     resampling_start(&cdc->_internal.resampling_instance, RESAMPLING_REMOVE_SAMPLE);
                     cdc->_internal.count = 0;
-                } else if (cdc->_internal.avg_val < (cdc->_internal.normal_queue_size - cdc->_internal.max_queue_offset)) {
+                } else if (cdc->_internal.avg_val <
+                           (cdc->_internal.normal_queue_size - cdc->_internal.max_queue_offset)) {
                     resampling_start(&cdc->_internal.resampling_instance, RESAMPLING_ADD_SAMPLE);
                     cdc->_internal.count = 0;
                 }
@@ -228,7 +260,9 @@ static uint16_t correct_drift(sac_cdc_instance_t *cdc, uint8_t *data_in, uint16_
  */
 static void update_queue_avg(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline)
 {
-    uint16_t current_queue_length = pipeline->_internal.samples_buffered_size / (pipeline->consumer->cfg.channel_count * cdc->_internal.size_of_buffer_type);
+    uint16_t current_queue_length = pipeline->_internal.samples_buffered_size /
+                                    (pipeline->consumer->cfg.channel_count * cdc->_internal.size_of_buffer_type);
+    current_queue_length += (pipeline->_internal.pending_packets * cdc->_internal.sample_amount);
     uint16_t avg_idx = cdc->_internal.avg_idx;
 
     /* Update Rolling Avg */
@@ -249,12 +283,8 @@ static void update_queue_avg(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline)
  */
 static void validate_sac_bit_depth(sac_bit_depth_t bit_depth, sac_status_t *status)
 {
-    if ((bit_depth != SAC_16BITS) &&
-        (bit_depth != SAC_18BITS) &&
-        (bit_depth != SAC_20BITS) &&
-        (bit_depth != SAC_24BITS) &&
-        (bit_depth != SAC_32BITS)) {
+    if ((bit_depth != SAC_16BITS) && (bit_depth != SAC_18BITS) && (bit_depth != SAC_20BITS) &&
+        (bit_depth != SAC_24BITS) && (bit_depth != SAC_32BITS)) {
         *status = SAC_ERR_BIT_DEPTH;
     }
 }
-

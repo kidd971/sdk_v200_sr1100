@@ -1,1 +1,1 @@
-add_subdirectory(tiny_usb)
+add_subdirectory(tinyusb)

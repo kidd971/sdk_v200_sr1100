@@ -4,7 +4,7 @@
  *
  *  @note This processing stage should be the last processing stage on an audio receiving pipeline.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -32,7 +32,8 @@ void sac_mute_on_underflow_init(void *instance, const char *name, sac_pipeline_t
     }
 
     sac_mute_on_underflow_instance->_internal.counter = 0;
-    sac_mute_on_underflow_instance->_internal.underflow_count = sac_pipeline_get_consumer_buffer_underflow_count(pipeline);
+    sac_mute_on_underflow_instance->_internal.underflow_count = sac_pipeline_get_consumer_buffer_underflow_count(
+        pipeline, status);
 }
 
 uint32_t sac_mute_on_underflow_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg,
@@ -61,13 +62,16 @@ uint16_t sac_mute_on_underflow_process(void *instance, sac_pipeline_t *pipeline,
     (void)header;
     (void)data_in;
 
-    uint32_t current_underflow_count;
+    uint32_t current_underflow_count = 0;
     uint16_t return_size = 0;
     sac_mute_on_underflow_instance_t *sac_mute_on_underflow_instance = instance;
 
     *status = SAC_OK;
 
-    current_underflow_count = sac_pipeline_get_consumer_buffer_underflow_count(pipeline);
+    current_underflow_count = sac_pipeline_get_consumer_buffer_underflow_count(pipeline, status);
+    if (*status != SAC_OK) {
+        return 0;
+    }
 
     if ((current_underflow_count != sac_mute_on_underflow_instance->_internal.underflow_count) &&
         (current_underflow_count != 0)) {

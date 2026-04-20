@@ -1,7 +1,7 @@
 /** @file  sac_packing.h
  *  @brief SPARK Audio Core packing/unpacking for 18/20/24 bits audio processing stage.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -35,8 +35,16 @@ typedef enum sac_packing_mode {
     SAC_PACK_20BITS_16BITS,
     /*! Packing 32-bit words containing 24-bit audio samples into 16-bit audio samples. */
     SAC_PACK_24BITS_16BITS,
+    /*! Packing 32-bit words containing 24-bit audio samples into 20-bit audio samples. */
+    SAC_PACK_24BITS_20BITS,
     /*! Scale packed 24-bit audio samples into packed 16-bit audio samples. */
     SAC_SCALE_24BITS_16BITS,
+    /*! Scale packed 24-bit audio samples into packed 20-bit audio samples. */
+    SAC_SCALE_24BITS_20BITS,
+    /*! Scale packed 20-bit audio samples into packed 24-bit audio samples. */
+    SAC_SCALE_20BITS_24BITS,
+    /*! Scale packed 16-bit audio samples into packed 24-bit audio samples. */
+    SAC_SCALE_16BITS_24BITS,
     /*! Unpacking 18-bit audio samples into 32-bit words containing 18-bit audio. */
     SAC_UNPACK_18BITS,
     /*! Unpacking 20-bit audio samples into 32-bit words containing 20-bit audio. */
@@ -47,6 +55,8 @@ typedef enum sac_packing_mode {
     SAC_UNPACK_20BITS_16BITS,
     /*! Unpacking 16-bit audio samples into 32-bit words containing 24-bit audio. */
     SAC_UNPACK_24BITS_16BITS,
+    /*! Unpacking 20-bit audio samples into 32-bit words containing 24-bit audio. */
+    SAC_UNPACK_24BITS_20BITS,
     /*! Extend 18-bit value's sign bit into 32-bit word. */
     SAC_EXTEND_18BITS,
     /*! Extend 20-bit value's sign bit into 32-bit word. */

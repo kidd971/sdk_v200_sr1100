@@ -1,7 +1,7 @@
 /** @file  wps_mac_xlayer.h
  *  @brief Wireless Protocol Stack MAC xlayer component.
  *
- *  @copyright Copyright (C) 2024 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -22,11 +22,11 @@ extern "C" {
  *  @param[in]  wps_mac     MAC Layer instance.
  *  @param[out] xlayer_cfg  Current xlayer node to update.
  */
-static inline void wps_max_xlayer_update_sync(wps_mac_t *wps_mac, xlayer_cfg_internal_t *xlayer_cfg)
+static inline void wps_mac_xlayer_update_sync(wps_mac_t *wps_mac, xlayer_cfg_internal_t *xlayer_cfg)
 {
     xlayer_cfg->power_up_delay = link_tdma_sync_get_pwr_up(&wps_mac->tdma_sync);
-    xlayer_cfg->rx_timeout     = link_tdma_sync_get_timeout(&wps_mac->tdma_sync);
-    xlayer_cfg->sleep_time     = link_tdma_sync_get_sleep_cycles(&wps_mac->tdma_sync);
+    xlayer_cfg->rx_timeout = link_tdma_sync_get_timeout(&wps_mac->tdma_sync);
+    xlayer_cfg->sleep_time = link_tdma_sync_get_sleep_cycles(&wps_mac->tdma_sync);
 }
 
 /** @brief Update the main connection xlayer gain loop value for PHY.
@@ -36,8 +36,8 @@ static inline void wps_max_xlayer_update_sync(wps_mac_t *wps_mac, xlayer_cfg_int
  */
 static inline void wps_mac_xlayer_update_main_link_parameter(wps_mac_t *wps_mac, xlayer_t *xlayer)
 {
-    xlayer->frame.destination_address = wps_mac->main_connection->destination_address;
-    xlayer->frame.source_address      = wps_mac->main_connection->source_address;
+    xlayer->frame.destination_address = wps_mac->main_connection->cfg.destination_address;
+    xlayer->frame.source_address = wps_mac->main_connection->cfg.source_address;
 }
 
 /** @brief Update the main connection xlayer gain loop value for PHY.
@@ -45,12 +45,11 @@ static inline void wps_mac_xlayer_update_main_link_parameter(wps_mac_t *wps_mac,
  *  @param[in] wps_mac MAC Layer instance.
  *  @param[in] xlayer  xlayer node to update.
  */
-static inline void wps_mac_xlayer_update_auto_reply_link_parameter(wps_mac_t *wps_mac,
-                                                                   xlayer_t *xlayer)
+static inline void wps_mac_xlayer_update_auto_reply_link_parameter(wps_mac_t *wps_mac, xlayer_t *xlayer)
 {
     if (xlayer != NULL) {
-        xlayer->frame.destination_address = wps_mac->auto_connection->destination_address;
-        xlayer->frame.source_address      = wps_mac->auto_connection->source_address;
+        xlayer->frame.destination_address = wps_mac->auto_connection->cfg.destination_address;
+        xlayer->frame.source_address = wps_mac->auto_connection->cfg.source_address;
     }
 }
 
@@ -61,7 +60,7 @@ static inline void wps_mac_xlayer_update_auto_reply_link_parameter(wps_mac_t *wp
  */
 static inline void update_xlayer_modem_feat(wps_mac_t *wps_mac, xlayer_cfg_internal_t *xlayer_cfg)
 {
-    xlayer_cfg->fec        = wps_mac->main_connection->frame_cfg.fec;
+    xlayer_cfg->fec = wps_mac->main_connection->frame_cfg.fec;
     xlayer_cfg->modulation = wps_mac->main_connection->frame_cfg.modulation;
     xlayer_cfg->chip_repet = wps_mac->main_connection->frame_cfg.chip_repet;
 }
@@ -149,8 +148,8 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_empty_tx_auto(wps_mac_t *wps_mac, wps_co
 static inline void wps_mac_xlayer_update_empty_auto_conn_reply_link_parameter(wps_mac_t *wps_mac, xlayer_t *xlayer)
 {
     if (xlayer != NULL) {
-        xlayer->frame.destination_address = wps_mac->main_connection->source_address;
-        xlayer->frame.source_address = wps_mac->main_connection->destination_address;
+        xlayer->frame.destination_address = wps_mac->main_connection->cfg.source_address;
+        xlayer->frame.source_address = wps_mac->main_connection->cfg.destination_address;
     }
 }
 

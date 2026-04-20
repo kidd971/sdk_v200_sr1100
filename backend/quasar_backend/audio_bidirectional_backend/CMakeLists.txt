@@ -1,2 +1,10 @@
-target_link_libraries(audio_bidirectional_backend PRIVATE hardware module_tinyusb_baremetal max98091_driver)
+target_link_libraries(audio_bidirectional_backend PRIVATE hardware module_tinyusb_baremetal)
 target_sources(audio_bidirectional_backend PRIVATE audio_bidirectional_backend.c)
+
+if (USB_AUDIO_ENABLED)
+    target_link_libraries(audio_bidirectional_backend PRIVATE middleware_tinyusb module_tinyusb_audio)
+    target_sources(audio_bidirectional_backend PRIVATE audio_bidirectional_tinyusb_backend.c)
+else()
+    target_link_libraries(audio_bidirectional_backend PRIVATE max98091_driver)
+    target_sources(audio_bidirectional_backend PRIVATE audio_bidirectional_i2s_backend.c)
+endif()

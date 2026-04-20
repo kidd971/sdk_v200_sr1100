@@ -1,7 +1,7 @@
 /** @file  sac_compression.h
  *  @brief SPARK Audio Core ADPCM compression / decompression processing stage.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -18,6 +18,8 @@ extern "C" {
 #endif
 
 /* MACROS *********************************************************************/
+/* Audio sample resolution when compressed. */
+#define SAC_COMPRESSION_SAMPLE_RESOLUTION 4
 /* Calculate the size of the ADPCM compression header needed for audio samples. */
 #define SAC_COMPRESSION_HEADER_SIZE(nb_ch) ((nb_ch) * sizeof(adpcm_state_t))
 

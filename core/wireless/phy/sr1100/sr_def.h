@@ -3,7 +3,7 @@
  *
  *  Wrapper files for top level that need register definition.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is confidential and proprietary.
  *  @author    SPARK FW Team.
  */

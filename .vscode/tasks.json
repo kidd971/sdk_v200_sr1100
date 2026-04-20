@@ -4,70 +4,9 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Install Micromamba Extension",
+            "label": "[DFU/STM32] Flash binary",
             "type": "shell",
-            "hide": true,
-            "command": "code --install-extension corker.vscode-micromamba",
-            "problemMatcher": []
-        },
-        {
-            "label": "Run bootstrap script",
-            "presentation": {
-                "reveal": "always"
-            },
-            "hide": true,
-            "type": "shell",
-            "command": "source script/bootstrap.sh",
-            "windows": {
-                "command": "script\\bootstrap.bat"
-            },
-        },
-        {
-            "label": "Activate Environment",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "hide": true,
-            "command": [
-                "${command:corker.micromamba.activate.environment}"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "label": "Delay",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "hide": true,
-            "type": "shell",
-            "command": "sleep 1",
-            "windows": {
-                "command": "Start-Sleep 1"
-            },
-        },
-        {
-            "label": "Reload Window",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "hide": true,
-            "command": "${command:workbench.action.reloadWindow}",
-            "problemMatcher": []
-        },
-        {
-            "label": "Create SPARK Environment",
-            "type": "shell",
-            "dependsOrder": "sequence",
-            "dependsOn": [
-                "Install Micromamba Extension",
-                "Run bootstrap script",
-                "Activate Environment",
-                "Delay",
-                "Reload Window"
-            ],
+            "command": "python ${workspaceFolder}/script/dfu-util.py ${command:cmake.selectLaunchTarget}",
             "problemMatcher": []
         }
     ]

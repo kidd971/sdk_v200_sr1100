@@ -1,6 +1,6 @@
 SPARK Microsystems Software EULA v1.0
 
-Copyright (c) 2016-2024, SPARK Microsystems International Inc.
+Copyright (c) 2016-2025, SPARK Microsystems International Inc.
 
 All rights reserved.
 

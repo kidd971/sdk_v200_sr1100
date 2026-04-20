@@ -1,0 +1,2 @@
+target_link_libraries(profiler_backend PRIVATE hardware)
+target_sources(profiler_backend PRIVATE profiler_backend.c)

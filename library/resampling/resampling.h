@@ -8,7 +8,7 @@
  *      Use the resample() function to copy a certain amount of samples from an input buffer into an output buffer.
  *      Use the resample_get_state() to get the current state of the resampling module.
  *
- *  @copyright Copyright (C) 2019 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -45,7 +45,7 @@ typedef enum resampling_errors {
  *  This enum contains all the sample bit depth supported by this library.
  */
 typedef enum resampling_buffer_type {
-    BUFFER_8BITS  = 7,
+    BUFFER_8BITS = 7,
     BUFFER_16BITS = 15,
     BUFFER_20BITS = 19,
     BUFFER_24BITS = 23,

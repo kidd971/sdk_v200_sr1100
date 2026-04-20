@@ -1,7 +1,7 @@
 /** @file  pairing_timer.h
  *  @brief This file handles the time management for pairing module such as the timeout.
  *
- *  @copyright Copyright (C) 2023 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -17,11 +17,11 @@ extern "C" {
 #endif
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
-/** @brief Initialize the time manager module.
+/** @brief Set the timeout duration and begin counting the ticks to monitor the timeout.
  *
  *  @param[in] timeout_sec  The duration in seconds after which the timeout occurs.
  */
-void pairing_timer_init(uint16_t timeout_sec);
+void pairing_start_timeout_counter(uint16_t timeout_sec);
 
 /** @brief Get the current tick count from the HAL free running timer.
  *

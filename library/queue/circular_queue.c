@@ -1,5 +1,5 @@
 /** @file circular_queue.c
- *  @brief Cross layer circular queue
+ *  @brief Circular queue functions.
  *
  *  @copyright Copyright (C) 2020-2021 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
@@ -16,12 +16,12 @@
 void circular_queue_init(circular_queue_t *queue, void *buffer, uint32_t capacity, uint32_t size)
 {
     queue->buffer_begin = (char *)buffer;
-    queue->buffer_end   = (char *)buffer + capacity * size;
-    queue->enqueue_it   = queue->buffer_begin;
-    queue->dequeue_it   = queue->buffer_begin;
-    queue->item_size    = size;
-    queue->capacity     = capacity;
-    queue->free_space   = capacity;
+    queue->buffer_end = (char *)buffer + capacity * size;
+    queue->enqueue_it = queue->buffer_begin;
+    queue->dequeue_it = queue->buffer_begin;
+    queue->item_size = size;
+    queue->capacity = capacity;
+    queue->free_space = capacity;
 }
 
 void *circular_queue_front_raw(circular_queue_t *queue)
@@ -31,7 +31,7 @@ void *circular_queue_front_raw(circular_queue_t *queue)
 
 void *circular_queue_front(circular_queue_t *queue)
 {
-    void *ret;
+    void *ret = NULL;
 
     CRITICAL_SECTION_ENTER();
     if (circular_queue_is_empty((queue))) {
@@ -51,7 +51,7 @@ void *circular_queue_get_free_slot_raw(circular_queue_t *queue)
 
 void *circular_queue_get_free_slot(circular_queue_t *queue)
 {
-    void *ret;
+    void *ret = NULL;
 
     CRITICAL_SECTION_ENTER();
     if (circular_queue_is_full(queue)) {

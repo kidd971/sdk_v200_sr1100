@@ -1,7 +1,7 @@
 /** @file link_gain_loop.c
  *  @brief Gain loop module.
  *
- *  @copyright Copyright (C) 2022 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -22,7 +22,6 @@
 #define RF_OA_GAIN_OFFSET            0
 #define PLACE_HOLDER_RSSI_TENTH_DB   44
 
-
 /* PRIVATE GLOBALS ************************************************************/
 static const gain_entry_t gain_lookup_table[GAIN_ENTRY_COUNT] = {
     {(0 << RF_BUF_GAIN_OFFSET) | (0 << RF_MIX_GAIN_OFFSET) | (3 << RF_OA_GAIN_OFFSET), 0, 235, 0},
@@ -40,9 +39,9 @@ static const gain_entry_t gain_lookup_table[GAIN_ENTRY_COUNT] = {
 /* PUBLIC FUNCTIONS ***********************************************************/
 void link_gain_loop_init(gain_loop_t *gain_loop, bool fixed_gain_enable, uint8_t rx_gain)
 {
-    gain_loop->gain_index        = 0;
+    gain_loop->gain_index = 0;
     gain_loop->fixed_gain_enable = fixed_gain_enable;
-    gain_loop->rx_gain           = rx_gain;
+    gain_loop->rx_gain = rx_gain;
 }
 
 void link_gain_loop_update(gain_loop_t *gain_loop, frame_outcome_t frame_outcome, uint8_t rssi)

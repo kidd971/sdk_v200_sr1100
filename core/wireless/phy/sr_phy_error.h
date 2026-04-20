@@ -1,7 +1,7 @@
 /** @file  sr_phy_error.h
  *  @brief SPARK Radio phy error codes.
  *
- *  @copyright Copyright (C) 2021 SPARK Microsystems International Inc. All rights reserved.
+ *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
  *  @license   This source code is proprietary and subject to the SPARK Microsystems
  *             Software EULA found in this package in file EULA.txt.
  *  @author    SPARK FW Team.
@@ -43,6 +43,8 @@ typedef enum sr_phy_error {
     SR_SPECTRAL_ERROR_INVALID_SPACING,
     /*! Maximum number of pulse cfg is 3. */
     SR_SPECTRAL_ERROR_INVALID_PULSE_CFG,
+    /*! Pulse count should be between MIN_PULSE_COUNT to MAX_PULSE_COUNT. */
+    SR_SPECTRAL_ERROR_INVALID_PULSE_COUNT,
 
     /******************************************************************************/
     /*                                 Phy model error                            */
