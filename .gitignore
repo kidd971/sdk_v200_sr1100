@@ -1,28 +1,4 @@
-# Prerequisites
-
-# Object files
-*.o
-*.ko
-*.obj
-
-
-
-
-# Shared objects (inc. Windows DLLs)
-
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-
-/build
-/.environment
-/.micromamba
-/app/usb_hid_host/build
+.micromamba/
+build/
+/.claude
+/pyocd.yml
