@@ -1,4 +1,4 @@
-target_link_libraries(audio_bidirectional_backend PRIVATE hardware module_tinyusb_baremetal)
+target_link_libraries(audio_bidirectional_backend PRIVATE hardware module_tinyusb_baremetal at_cmd_core)
 target_sources(audio_bidirectional_backend PRIVATE audio_bidirectional_backend.c)
 
 if (USB_AUDIO_ENABLED)

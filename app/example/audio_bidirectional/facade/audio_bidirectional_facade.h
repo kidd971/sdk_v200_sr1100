@@ -201,6 +201,22 @@ uint32_t facade_get_coord_usb_audio_tx_fifo_sample_count(void);
 uint32_t facade_get_node_usb_audio_tx_fifo_sample_count(void);
 #endif
 
+/** @brief Set the I2S MUX selection.
+ *
+ *  @param[in] use_ext  true = external codec port, false = onboard codec.
+ */
+void facade_set_i2s_mux(bool use_ext);
+
+/** @brief Initialize the ADC peripheral for battery level monitoring.
+ */
+void facade_battery_init(void);
+
+/** @brief Read the current battery level.
+ *
+ *  @return Battery level as a percentage (0-100).
+ */
+uint8_t facade_read_battery_level_pct(void);
+
 #ifdef __cplusplus
 }
 #endif

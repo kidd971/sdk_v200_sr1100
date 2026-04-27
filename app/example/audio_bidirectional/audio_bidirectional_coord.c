@@ -12,6 +12,7 @@
 
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
+#include "at_cmd_core.h"
 #include "audio_bidirectional_facade.h"
 #include "pairing_api.h"
 #include "pairing_cfg.h"
@@ -95,6 +96,10 @@ typedef struct user_data {
     bool button_state;
     /*! The link margin to monitor link quality. */
     uint8_t link_margin;
+    /*! Pending command from node: 0=none, 1=next_track, 2=pre_track. */
+    uint8_t cmd_type;
+    /*! Battery level of the node (0-100%). */
+    uint8_t battery_pct;
 } user_data_t;
 
 /* PRIVATE GLOBALS ************************************************************/
@@ -239,6 +244,15 @@ static void print_stats(void);
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
 
+/* **** AT Command Core Callbacks **** */
+static void at_start_pairing(void);
+static void at_start_connect(void);
+static void at_start_disconnect(void);
+static void at_start_shutdown(void);
+static bool at_get_link_status(void);
+static int32_t at_get_link_margin(void);
+static void at_set_vol(uint8_t vol);
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
 {
@@ -258,6 +272,18 @@ int main(void)
         .volume_down_callback = volume_down,
     };
     facade_set_button_callbacks(button_callbacks);
+
+    at_cmd_core_init();
+    at_cmd_core_set_device_role(AT_DEVICE_ROLE_COORDINATOR);
+    at_cmd_core_register_pair_cb(at_start_pairing);
+    at_cmd_core_register_connect_cb(at_start_connect);
+    at_cmd_core_register_disconnect_cb(at_start_disconnect);
+    at_cmd_core_register_shutdown_cb(at_start_shutdown);
+    at_cmd_core_register_link_status_cb(at_get_link_status);
+    at_cmd_core_register_link_margin_cb(at_get_link_margin);
+
+    at_cmd_core_register_vol_cb(at_set_vol);
+    at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */
     facade_audio_process_main_channel_timer_init(audio_process_main_channel_callback);
@@ -287,6 +313,7 @@ int main(void)
 
     while (1) {
         facade_button_handling();
+        at_cmd_core_process();
 
         if (device_pairing_state == DEVICE_PAIRED) {
             fallback_led_handler();
@@ -667,6 +694,20 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* The fallback state is updated. */
         sac_fallback_set_rx_link_margin(&main_channel_fallback_instance, received_user_data.link_margin, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
+
+        /* Forward commands from node to SOC via UART. */
+        if (received_user_data.cmd_type == 1) {
+            at_cmd_core_notify_next_track_received();
+        } else if (received_user_data.cmd_type == 2) {
+            at_cmd_core_notify_pre_track_received();
+        } else if (received_user_data.cmd_type == 3) {
+            at_cmd_core_notify_play_received();
+        } else if (received_user_data.cmd_type == 4) {
+            at_cmd_core_notify_stop_received();
+        }
+
+        /* Cache battery level reported by node. */
+        at_cmd_core_set_battery_level(received_user_data.battery_pct);
     }
 }
 
@@ -1548,6 +1589,7 @@ static void pairing_process_callback(void)
      *       callback, which might take a variable amount of time.
      */
     facade_button_handling();
+    at_cmd_core_process();
 }
 
 /** @brief Abort the pairing procedure.
@@ -1630,6 +1672,9 @@ static void app_init(void)
     swc_connect(&swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
+    at_cmd_core_set_device_address(pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address);
+    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_CONNECTED);
+
     /* Initialize Audio Core. */
     app_audio_core_init();
     /* Initialize GPIOs and peripherals for audio operations. */
@@ -1647,6 +1692,108 @@ static void app_init(void)
 
     /* Start data and statistics timer. */
     facade_data_timer_start();
+}
+
+static void at_start_pairing(void)
+{
+    if (device_pairing_state == DEVICE_PAIRING) {
+        return;
+    }
+    if (device_pairing_state == DEVICE_PAIRED) {
+        unpair_device();
+        return;
+    }
+    enter_pairing_mode();
+}
+
+static void at_start_connect(void)
+{
+    if (device_pairing_state == DEVICE_PAIRED) {
+        return;
+    }
+    if (pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address == 0) {
+        return;
+    }
+    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_CONNECTING);
+    app_init();
+    device_pairing_state = DEVICE_PAIRED;
+}
+
+static void at_start_disconnect(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+    sac_status_t sac_status = SAC_OK;
+
+    if (device_pairing_state == DEVICE_UNPAIRED) {
+        return;
+    }
+    device_pairing_state = DEVICE_UNPAIRED;
+
+    facade_audio_process_main_channel_timer_stop();
+    facade_audio_process_back_channel_timer_stop();
+    facade_data_timer_stop();
+
+    swc_disconnect(&swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    tx_audio_conn = NULL;
+    rx_audio_conn = NULL;
+    tx_data_conn = NULL;
+    rx_data_conn = NULL;
+
+    sac_pipeline_stop(main_channel_sac_pipeline, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_pipeline_stop(back_channel_sac_pipeline, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
+    main_channel_sac_pipeline = NULL;
+    back_channel_sac_pipeline = NULL;
+
+    facade_audio_deinit();
+    facade_led_all_off();
+    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
+}
+
+static void at_start_shutdown(void)
+{
+    at_start_disconnect();
+}
+
+static bool at_get_link_status(void)
+{
+    return device_pairing_state == DEVICE_PAIRED;
+}
+
+static int32_t at_get_link_margin(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+    swc_fallback_info_t info;
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return 0;
+    }
+    info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
+    return (int32_t)info.link_margin;
+}
+
+
+
+static void at_set_vol(uint8_t vol)
+{
+    sac_status_t sac_status = SAC_OK;
+    uint8_t steps;
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+    /* SAC_VOLUME_TICK = 0.1, so steps = vol/10 (rounded), max 10 steps = 100%. */
+    steps = (vol + 5) / 10;
+    sac_processing_ctrl(back_channel_volume_processing, back_channel_sac_pipeline,
+                        SAC_VOLUME_MUTE, SAC_NO_ARG, &sac_status);
+    for (uint8_t i = 0; i < steps; i++) {
+        sac_processing_ctrl(back_channel_volume_processing, back_channel_sac_pipeline,
+                            SAC_VOLUME_INCREASE, SAC_NO_ARG, &sac_status);
+    }
 }
 
 void sac_error_handler(sac_status_t sac_status)
