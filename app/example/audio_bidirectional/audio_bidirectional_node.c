@@ -286,6 +286,7 @@ int main(void)
     at_cmd_core_register_pre_track_cb(at_pre_track);
     at_cmd_core_register_battery_cb(facade_read_battery_level_pct);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
+    at_cmd_core_register_i2s_fmt_cb(facade_set_i2s_fmt);
     at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */

@@ -34,6 +34,8 @@ static max98091_i2c_hal_t codec_hal = {
     .read = codec_i2c_read,
     .write = codec_i2c_write,
 };
+static sai_cfg_t              s_sai_cfg;
+static quasar_sai_protocol_t  s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void facade_audio_coord_init(void)
@@ -43,6 +45,7 @@ void facade_audio_coord_init(void)
         .rx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
         .tx_nb_ch = BACK_CHANNEL_CHANNEL_COUNT,
     };
+    s_sai_cfg = sai_cfg;
 
     /* Initialize the Codec's I2C interface. */
     quasar_audio_init_i2c();
@@ -65,6 +68,7 @@ void facade_audio_node_init(void)
         .rx_nb_ch = BACK_CHANNEL_CHANNEL_COUNT,
         .tx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
     };
+    s_sai_cfg = sai_cfg;
 
     /* Initialize the Codec's I2C interface. */
     quasar_audio_init_i2c();
@@ -94,6 +98,24 @@ void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_cal
 {
     quasar_audio_set_sai_tx_dma_cplt_callback(tx_callback);
     quasar_audio_set_sai_rx_dma_cplt_callback(rx_callback);
+}
+
+void facade_set_i2s_fmt(uint8_t fmt)
+{
+    static const quasar_sai_protocol_t protocols[] = {
+        [1] = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED,
+        [2] = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED,
+        [3] = QUASAR_SAI_PROTOCOL_I2S_STANDARD,
+    };
+    quasar_bsp_status_t quasar_err = QUASAR_OK;
+
+    if (fmt < 1 || fmt > 3) {
+        return;
+    }
+    s_sai_protocol = protocols[fmt];
+    quasar_audio_deinit_sai(&quasar_err);
+    ASSERT_QUASAR_BSP_STATUS(quasar_err);
+    configure_sai(s_sai_cfg);
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -204,7 +226,7 @@ static void configure_sai(sai_cfg_t sai_cfg)
 
     quasar_sai_config_t sai_config = {
         .sai_mode = QUASAR_SAI_SLAVE_MODE_MCLK,
-        .sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED,
+        .sai_protocol = s_sai_protocol,
     };
 
     /* Configure SAI bit depth. */

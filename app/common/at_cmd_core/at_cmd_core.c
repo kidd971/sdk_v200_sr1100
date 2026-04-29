@@ -33,6 +33,7 @@ static bool handler_stop(const char *args, char *resp, uint16_t resp_size);
 static bool handler_next_track(const char *args, char *resp, uint16_t resp_size);
 static bool handler_pre_track(const char *args, char *resp, uint16_t resp_size);
 static bool handler_battery(const char *args, char *resp, uint16_t resp_size);
+static bool handler_i2s_fmt(const char *args, char *resp, uint16_t resp_size);
 static void at_cmd_core_fallback(void);
 
 /* PRIVATE VARIABLES **********************************************************/
@@ -56,6 +57,8 @@ static void               (*s_disconnect_cb)(void)      = NULL;
 static void               (*s_shutdown_cb)(void)        = NULL;
 static uint8_t            (*s_battery_cb)(void)         = NULL;
 static bool                 s_i2s_mux_is_ext   = true; /* default: EXT; AT+I2S_MUX toggles to ON_BOARD */
+static uint8_t              s_i2s_fmt          = 1;    /* 1=RJF(default), 2=LJF, 3=I2S standard */
+static void               (*s_i2s_fmt_cb)(uint8_t fmt) = NULL;
 static bool                 s_pair_requested   = false;
 static bool                 s_reset_requested  = false;
 static bool                 s_connect_requested    = false;
@@ -98,6 +101,7 @@ void at_cmd_core_init(void)
     at_server_register("NEXT_TRACK",      handler_next_track);
     at_server_register("PRE_TRACK",       handler_pre_track);
     at_server_register("BATTERY",         handler_battery);
+    at_server_register("I2S_FMT",         handler_i2s_fmt);
 
     at_module_set_fallback_handler(at_cmd_core_fallback);
 }
@@ -122,6 +126,11 @@ void at_cmd_core_register_link_margin_cb(int32_t (*cb)(void))
 void at_cmd_core_register_i2s_mux_cb(void (*cb)(bool use_ext))
 {
     s_i2s_mux_cb = cb;
+}
+
+void at_cmd_core_register_i2s_fmt_cb(void (*cb)(uint8_t fmt))
+{
+    s_i2s_fmt_cb = cb;
 }
 
 void at_cmd_core_register_cmd_tx_cb(void (*cb)(uint8_t cmd_type, uint8_t value))
@@ -437,6 +446,28 @@ static bool handler_i2s_mux(const char *args, char *resp, uint16_t resp_size)
     return true;
 }
 
+/** @brief AT+I2S_FMT=[1-3] / AT+I2S_FMT? — set or query SAI audio format (1=RJF, 2=LJF, 3=I2S standard). */
+static bool handler_i2s_fmt(const char *args, char *resp, uint16_t resp_size)
+{
+    static const char * const names[] = {"", "RJF", "LJF", "I2S"};
+
+    if (args[0] == '?') {
+        snprintf(resp, resp_size, "+I2S_FMT: %s", names[s_i2s_fmt]);
+        return true;
+    }
+    int mode;
+    if (sscanf(args, "=%d", &mode) != 1 || mode < 1 || mode > 3) {
+        snprintf(resp, resp_size, "ERROR");
+        return true;
+    }
+    s_i2s_fmt = (uint8_t)mode;
+    if (s_i2s_fmt_cb != NULL) {
+        s_i2s_fmt_cb(s_i2s_fmt);
+    }
+    snprintf(resp, resp_size, "+I2S_FMT: %s", names[s_i2s_fmt]);
+    return true;
+}
+
 /** @brief AT+UWB_SHUTDOWN — disconnect and assert hardware shutdown pin on UWB radio(s). */
 static bool handler_uwb_shutdown(const char *args, char *resp, uint16_t resp_size)
 {
@@ -580,6 +611,8 @@ static bool handler_help(const char *args, char *resp, uint16_t resp_size)
         "  AT+MODULE_RESET\r\n",
         //"  AT+CONN_LM? (internal)\r\n",
         "  AT+I2S_MUX\r\n",
+        "  AT+I2S_FMT=[1-3] (1=RJF, 2=LJF, 3=I2S)\r\n",
+        "  AT+I2S_FMT?\r\n",
         "  AT+UWB_CONNECT\r\n",
         "  AT+UWB_DISCONNECT\r\n",
         "  AT+UWB_SHUTDOWN\r\n",
