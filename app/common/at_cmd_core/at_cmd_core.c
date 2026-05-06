@@ -59,8 +59,9 @@ static uint8_t            (*s_battery_cb)(void)         = NULL;
 static bool                 s_i2s_mux_is_ext   = true; /* default: EXT; AT+I2S_MUX toggles to ON_BOARD */
 static uint8_t              s_i2s_fmt          = 1;    /* 1=RJF(default), 2=LJF, 3=I2S standard */
 static void               (*s_i2s_fmt_cb)(uint8_t fmt) = NULL;
-static bool                 s_pair_requested   = false;
-static bool                 s_reset_requested  = false;
+static bool                 s_pair_requested        = false;
+static bool                 s_reset_requested       = false;
+static bool                 s_i2s_fmt_save_requested = false;
 static bool                 s_connect_requested    = false;
 static uint32_t             s_connect_start_tick   = 0;
 static bool                 s_link_quality_weak    = false;
@@ -131,6 +132,13 @@ void at_cmd_core_register_i2s_mux_cb(void (*cb)(bool use_ext))
 void at_cmd_core_register_i2s_fmt_cb(void (*cb)(uint8_t fmt))
 {
     s_i2s_fmt_cb = cb;
+}
+
+void at_cmd_core_set_i2s_fmt(uint8_t fmt)
+{
+    if (fmt >= 1 && fmt <= 3) {
+        s_i2s_fmt = fmt;
+    }
 }
 
 void at_cmd_core_register_cmd_tx_cb(void (*cb)(uint8_t cmd_type, uint8_t value))
@@ -273,6 +281,14 @@ void at_cmd_core_process(void)
     if (s_reset_requested) {
         s_reset_requested = false;
         facade_system_reset();
+    }
+
+    /* Save I2S fmt to flash and reset — deferred so the OK response is sent first. */
+    if (s_i2s_fmt_save_requested) {
+        s_i2s_fmt_save_requested = false;
+        if (s_i2s_fmt_cb != NULL) {
+            s_i2s_fmt_cb(s_i2s_fmt);
+        }
     }
 
     /* Invoke connect callback deferred — after at_module_process() has sent OK. */
@@ -461,9 +477,7 @@ static bool handler_i2s_fmt(const char *args, char *resp, uint16_t resp_size)
         return true;
     }
     s_i2s_fmt = (uint8_t)mode;
-    if (s_i2s_fmt_cb != NULL) {
-        s_i2s_fmt_cb(s_i2s_fmt);
-    }
+    s_i2s_fmt_save_requested = true;
     snprintf(resp, resp_size, "+I2S_FMT: %s", names[s_i2s_fmt]);
     return true;
 }

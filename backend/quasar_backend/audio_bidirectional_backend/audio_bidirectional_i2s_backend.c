@@ -13,6 +13,10 @@
 #include "quasar.h"
 #include "sac_cfg.h"
 
+/* CONSTANTS ******************************************************************/
+#define I2S_FMT_FLASH_ADDR  0x083FE000U
+#define I2S_FMT_FLASH_MAGIC 0xA5U
+
 /* TYPES **********************************************************************/
 /** @brief SAI configuration structure.
  */
@@ -27,6 +31,8 @@ static void codec_i2c_write(uint8_t dev_addr, uint8_t mem_addr, uint8_t data);
 static void codec_i2c_read(uint8_t dev_addr, uint8_t mem_addr, uint8_t *data);
 static void configure_max98091(bool input_enabled, bool output_enabled);
 static void configure_sai(sai_cfg_t sai_cfg);
+//static uint8_t i2s_fmt_flash_load(void);
+static void    i2s_fmt_flash_save(uint8_t fmt);
 
 /* PRIVATE GLOBALS ************************************************************/
 static max98091_i2c_hal_t codec_hal = {
@@ -36,6 +42,7 @@ static max98091_i2c_hal_t codec_hal = {
 };
 static sai_cfg_t              s_sai_cfg;
 static quasar_sai_protocol_t  s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
+static quasar_i2s_mux_select_t s_mux_select  = QUASAR_SELECT_ON_BOARD_CODEC;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void facade_audio_coord_init(void)
@@ -100,22 +107,26 @@ void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_cal
     quasar_audio_set_sai_rx_dma_cplt_callback(rx_callback);
 }
 
+void facade_i2s_backend_track_mux(quasar_i2s_mux_select_t select)
+{
+    s_mux_select = select;
+}
+
 void facade_set_i2s_fmt(uint8_t fmt)
 {
-    static const quasar_sai_protocol_t protocols[] = {
-        [1] = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED,
-        [2] = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED,
-        [3] = QUASAR_SAI_PROTOCOL_I2S_STANDARD,
-    };
-    quasar_bsp_status_t quasar_err = QUASAR_OK;
-
     if (fmt < 1 || fmt > 3) {
         return;
     }
-    s_sai_protocol = protocols[fmt];
-    quasar_audio_deinit_sai(&quasar_err);
-    ASSERT_QUASAR_BSP_STATUS(quasar_err);
-    configure_sai(s_sai_cfg);
+    i2s_fmt_flash_save(fmt);
+}
+
+uint8_t facade_get_i2s_fmt(void)
+{
+    switch (s_sai_protocol) {
+    case QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED: return 2;
+    case QUASAR_SAI_PROTOCOL_I2S_STANDARD:     return 3;
+    default:                                    return 1;
+    }
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -286,4 +297,41 @@ static void configure_sai(sai_cfg_t sai_cfg)
     /* Initialize the SAI peripheral. */
     quasar_audio_init_sai(sai_config, &quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
+}
+
+/** @brief Load I2S format index from flash.
+ *
+ *  @return Stored format (1–3), or 1 if flash is blank/invalid.
+ */
+// static uint8_t i2s_fmt_flash_load(void)
+// {
+//     uint32_t buf[4] = {0};
+
+//     quasar_memory_read(I2S_FMT_FLASH_ADDR, buf, sizeof(buf));
+
+//     uint8_t magic = (buf[0] >> 8) & 0xFF;
+//     uint8_t fmt   = buf[0] & 0xFF;
+
+//     if (magic == I2S_FMT_FLASH_MAGIC && fmt >= 1 && fmt <= 3) {
+//         return fmt;
+//     }
+//     return 1;
+// }
+
+/** @brief Save I2S format index to flash then reset the device.
+ *
+ *  Erases the dedicated page and writes a 16-byte quad-word containing
+ *  the magic byte and format index so they survive a power cycle.
+ *
+ *  @param[in] fmt  Format index (1–3).
+ */
+static void i2s_fmt_flash_save(uint8_t fmt)
+{
+    uint32_t buf[4] = {0};
+
+    buf[0] = ((uint32_t)I2S_FMT_FLASH_MAGIC << 8) | fmt;
+
+    quasar_memory_erase(I2S_FMT_FLASH_ADDR);
+    quasar_memory_write(I2S_FMT_FLASH_ADDR, buf, sizeof(buf));
+    quasar_memory_invalidate_cache();
 }

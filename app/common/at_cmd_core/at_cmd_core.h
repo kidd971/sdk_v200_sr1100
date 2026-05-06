@@ -168,6 +168,16 @@ void at_cmd_core_register_i2s_mux_cb(void (*cb)(bool use_ext));
 void at_cmd_core_register_i2s_fmt_cb(void (*cb)(uint8_t fmt));
 
 /**
+ * @brief Override the current I2S format index reported by AT+I2S_FMT?.
+ *
+ * Call once at startup with facade_get_i2s_fmt() so the query reflects
+ * the hardcoded or boot-time format.
+ *
+ * @param[in] fmt  Format index 1-3.
+ */
+void at_cmd_core_set_i2s_fmt(uint8_t fmt);
+
+/**
  * @brief Register a link margin getter polled by AT+CONN_LM?.
  *
  * The callback should call swc_connection_update_stats() on the application's

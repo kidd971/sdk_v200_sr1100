@@ -324,9 +324,14 @@ void facade_uwb_shutdown(void)
     quasar_radio_2_set_shutdown_pin();
 }
 
+void facade_i2s_backend_track_mux(quasar_i2s_mux_select_t select);
+
 void facade_set_i2s_mux(bool use_ext)
 {
-    quasar_audio_set_i2s_mux_selection(use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC);
+    quasar_i2s_mux_select_t select = use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC;
+
+    quasar_audio_set_i2s_mux_selection(select);
+    facade_i2s_backend_track_mux(select);
 }
 
 void facade_battery_init(void)

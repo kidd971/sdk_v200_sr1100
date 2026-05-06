@@ -216,6 +216,10 @@ void facade_set_i2s_mux(bool use_ext);
  */
 void facade_set_i2s_fmt(uint8_t fmt);
 
+/** @brief Get the current SAI format index (1=RJF, 2=LJF, 3=I2S standard).
+ */
+uint8_t facade_get_i2s_fmt(void);
+
 /** @brief Initialize the ADC peripheral for battery level monitoring.
  */
 void facade_battery_init(void);
