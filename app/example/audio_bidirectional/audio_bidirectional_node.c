@@ -1251,6 +1251,9 @@ static void main_channel_audio_tx_complete_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
 
+    if (main_channel_sac_pipeline == NULL) {
+        return;
+    }
     /* The codec consumes audio samples produced by the SWC (which receives them from the Coordinator). */
     sac_pipeline_consume(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -1265,6 +1268,9 @@ static void back_channel_audio_rx_complete_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
 
+    if (back_channel_sac_pipeline == NULL) {
+        return;
+    }
     /* The codec produces audio samples when it receives input audio. */
     sac_pipeline_produce(back_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -1280,6 +1286,9 @@ static void audio_process_main_channel_callback(void)
     sac_status_t sac_status = SAC_OK;
     uint32_t buffer_load = 0;
 
+    if (main_channel_sac_pipeline == NULL) {
+        return;
+    }
     buffer_load = sac_pipeline_get_producer_buffer_load(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
@@ -1310,6 +1319,9 @@ static void audio_process_back_channel_callback(void)
     sac_status_t sac_status = SAC_OK;
     uint32_t buffer_load = 0;
 
+    if (back_channel_sac_pipeline == NULL) {
+        return;
+    }
     buffer_load = sac_pipeline_get_producer_buffer_load(back_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
