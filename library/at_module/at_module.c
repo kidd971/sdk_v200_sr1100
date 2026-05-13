@@ -206,6 +206,10 @@ static void line_accumulate(uint8_t byte)
         return;
     }
 
+    if (byte < 0x20) {
+        return; /* drop control characters (e.g. Ctrl+C from terminal copy) */
+    }
+
     if (s_line_idx < AT_LINE_MAX_LEN - 1) {
         s_line_buf[s_line_idx++] = (char)byte;
     }
@@ -225,6 +229,9 @@ static void line_dispatch(const char *line)
 {
     /* Incoming AT command → always handled by server. */
     if (strncasecmp(line, "AT", 2) == 0) {
+        //s_tx_fn("+DBG OK: [");
+        //s_tx_fn((char *)line);
+        //s_tx_fn("]\r\n");
         server_process(line);
         return;
     }
@@ -256,6 +263,9 @@ static void line_dispatch(const char *line)
         client_append_resp(line);
     } else {
         if (s_fallback_fn != NULL) {
+            s_tx_fn("+DBG RECV: [");
+            s_tx_fn((char *)line);
+            s_tx_fn("]\r\n");
             s_fallback_fn();
         } else {
             s_tx_fn("+CME ERROR: INVALID_CMD\r\n");
