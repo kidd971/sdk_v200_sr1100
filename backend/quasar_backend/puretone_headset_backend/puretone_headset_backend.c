@@ -9,10 +9,15 @@
 
 /* INCLUDES *******************************************************************/
 #include "puretone_headset_facade.h"
+#include "at_cmd_core_facade.h"
 #include "quasar.h"
+#include "quasar_adc.h"
 #include "sac_cfg.h"
+#include <string.h>
 
 /* CONSTANTS ******************************************************************/
+#define EXPANSION_UART_TX_TIMEOUT_MS                  1000
+
 #define IRQ_PRIORITY_TIMER_MAIN_CHANNEL_AUDIO_PROCESS QUASAR_IRQ_PRIORITY_13
 #define IRQ_PRIORITY_TIMER_BACK_CHANNEL_AUDIO_PROCESS QUASAR_IRQ_PRIORITY_14
 #define IRQ_PRIORITY_TIMER_DATA                       QUASAR_IRQ_PRIORITY_15
@@ -42,6 +47,9 @@ typedef struct button_handle {
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void led1_blink(uint8_t blink_count);
 static void handle_button_state(button_handle_t *button_handle, void (*button_callback)(void));
+
+/* Forward declaration from i2s backend */
+void facade_i2s_backend_track_mux(quasar_i2s_mux_select_t select);
 
 /* PRIVATE GLOBALS ************************************************************/
 static facade_button_callbacks_t local_button_callbacks;
@@ -274,6 +282,95 @@ void facade_notify_pairing_successful(void)
 {
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_GREEN);
     quasar_rgb_set();
+}
+
+void facade_expansion_uart_init(uint32_t baud_rate)
+{
+    quasar_gpio_config_t gpio_tx = {
+        .port      = QUASAR_DEF_EXPANSION_UART_TX_PORT,
+        .pin       = QUASAR_DEF_EXPANSION_UART_TX_PIN,
+        .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+        .type      = QUASAR_GPIO_TYPE_PP,
+        .pull      = QUASAR_GPIO_PULL_UP,
+        .speed     = QUASAR_GPIO_SPEED_LOW,
+        .alternate = QUASAR_GPIO_ALTERNATE_AF7,
+    };
+    quasar_gpio_config_t gpio_rx = {
+        .port      = QUASAR_DEF_EXPANSION_UART_RX_PORT,
+        .pin       = QUASAR_DEF_EXPANSION_UART_RX_PIN,
+        .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+        .type      = QUASAR_GPIO_TYPE_OD,
+        .pull      = QUASAR_GPIO_PULL_UP,
+        .speed     = QUASAR_GPIO_SPEED_LOW,
+        .alternate = QUASAR_GPIO_ALTERNATE_AF7,
+    };
+    quasar_uart_config_t uart_cfg = {
+        .uart_selection = QUASAR_DEF_UART_SELECTION_EXPANSION,
+        .baud_rate      = baud_rate,
+        .parity         = QUASAR_UART_PARITY_NONE,
+        .stop           = QUASAR_UART_STOP_BITS_1B,
+        .irq_priority   = QUASAR_IRQ_PRIORITY_0,
+        .gpio_config_tx = gpio_tx,
+        .gpio_config_rx = gpio_rx,
+    };
+    quasar_uart_init(uart_cfg);
+}
+
+void facade_expansion_uart_write(char *string)
+{
+    quasar_bsp_status_t err;
+
+    quasar_uart_transmit_blocking(QUASAR_DEF_UART_SELECTION_EXPANSION,
+                                  (uint8_t *)string, strlen(string),
+                                  EXPANSION_UART_TX_TIMEOUT_MS, &err);
+}
+
+uint8_t facade_expansion_uart_read_byte(void)
+{
+    return quasar_uart_receive_irq(QUASAR_DEF_UART_SELECTION_EXPANSION);
+}
+
+void facade_system_reset(void)
+{
+    quasar_system_reset();
+}
+
+void facade_uwb_shutdown(void)
+{
+    quasar_radio_1_set_shutdown_pin();
+    quasar_radio_2_set_shutdown_pin();
+}
+
+void facade_set_i2s_mux(bool use_ext)
+{
+    quasar_i2s_mux_select_t select = use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC;
+
+    quasar_audio_set_i2s_mux_selection(select);
+    facade_i2s_backend_track_mux(select);
+}
+
+void facade_battery_init(void)
+{
+    quasar_bsp_status_t err;
+
+    quasar_adc_init(&err);
+}
+
+uint8_t facade_read_battery_level_pct(void)
+{
+    quasar_bsp_status_t err;
+    uint16_t mv;
+    int32_t pct;
+
+    mv = quasar_adc_get_battery_level_mv_polling(&err);
+    if (err != QUASAR_OK) {
+        return 0;
+    }
+    /* Li-ion: 3000mV=0%, 4200mV=100% */
+    pct = ((int32_t)mv - 3000) * 100 / 1200;
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    return (uint8_t)pct;
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/

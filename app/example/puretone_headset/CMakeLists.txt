@@ -22,6 +22,7 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
             audio_core
             puretone_headset_backend
             swc
+            at_cmd_core
     )
     add_custom_command(TARGET puretone_dongle.elf
         POST_BUILD
@@ -35,6 +36,7 @@ target_link_libraries(puretone_headset.elf
         audio_core
         puretone_headset_backend
         swc
+        at_cmd_core
 )
 add_custom_command(TARGET puretone_headset.elf
     POST_BUILD
