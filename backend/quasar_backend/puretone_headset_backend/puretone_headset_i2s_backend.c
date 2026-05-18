@@ -21,9 +21,11 @@
 /** @brief SAI configuration structure.
  */
 typedef struct sai_cfg {
-    uint8_t bit_depth;
-    uint8_t tx_nb_ch;
-    uint8_t rx_nb_ch;
+    uint8_t                bit_depth;
+    uint8_t                tx_nb_ch;
+    uint8_t                rx_nb_ch;
+    quasar_sai_mode_t      sai_mode;
+    quasar_sai_frequency_t sai_frequency;
 } sai_cfg_t;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
@@ -40,7 +42,10 @@ static max98091_i2c_hal_t codec_hal = {
     .write = codec_i2c_write,
 };
 static sai_cfg_t               s_sai_cfg;
-static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
+static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;   //default RJF
+//static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED; //LJF
+//static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;     //STD
+
 static quasar_i2s_mux_select_t s_mux_select   = QUASAR_SELECT_ON_BOARD_CODEC;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -48,8 +53,9 @@ void facade_audio_coord_init(void)
 {
     sai_cfg_t sai_cfg = {
         .bit_depth = I2S_BIT_DEPTH,
-        .rx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
-        .tx_nb_ch = BACK_CHANNEL_CHANNEL_COUNT,
+        .rx_nb_ch  = MAIN_CHANNEL_CHANNEL_COUNT,
+        .tx_nb_ch  = BACK_CHANNEL_CHANNEL_COUNT,
+        .sai_mode  = QUASAR_SAI_SLAVE_MODE_MCLK,
     };
     s_sai_cfg = sai_cfg;
 
@@ -70,9 +76,13 @@ void facade_audio_coord_init(void)
 void facade_audio_node_init(void)
 {
     sai_cfg_t sai_cfg = {
-        .bit_depth = I2S_BIT_DEPTH,
-        .rx_nb_ch = BACK_CHANNEL_CHANNEL_COUNT,
-        .tx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
+        .bit_depth     = I2S_BIT_DEPTH,
+        .rx_nb_ch      = BACK_CHANNEL_CHANNEL_COUNT,
+        .tx_nb_ch      = MAIN_CHANNEL_CHANNEL_COUNT,
+        .sai_mode      = QUASAR_SAI_MASTER_MODE,
+        //.sai_mode      = QUASAR_SAI_SLAVE_MODE_MCLK,
+
+        .sai_frequency = QUASAR_SAI_AUDIO_FREQUENCY_96K,
     };
     s_sai_cfg = sai_cfg;
 
@@ -235,8 +245,9 @@ static void configure_sai(sai_cfg_t sai_cfg)
     quasar_bsp_status_t quasar_err = QUASAR_OK;
 
     quasar_sai_config_t sai_config = {
-        .sai_mode = QUASAR_SAI_SLAVE_MODE_MCLK,
-        .sai_protocol = s_sai_protocol,
+        .sai_mode            = sai_cfg.sai_mode,
+        .sai_audio_frequency = sai_cfg.sai_frequency,
+        .sai_protocol        = s_sai_protocol,
     };
 
     /* Configure SAI bit depth. */

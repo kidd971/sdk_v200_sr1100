@@ -141,7 +141,7 @@ void quasar_audio_init_sai(quasar_sai_config_t sai_config, quasar_bsp_status_t *
         hsai_tx.Init.AudioFrequency = sai_config.sai_audio_frequency;
         /* Initialize audio mode. */
         hsai_tx.Init.AudioMode = SAI_MODEMASTER_TX;
-        hsai_tx.Init.MckOutput = SAI_MCK_OUTPUT_DISABLE;
+        hsai_tx.Init.MckOutput = SAI_MCK_OUTPUT_ENABLE;
     } else {
         /* Initialize MCK frequency to SAI_CLK. */
         hsai_tx.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_MCKDIV;
@@ -196,6 +196,8 @@ void quasar_audio_init_sai(quasar_sai_config_t sai_config, quasar_bsp_status_t *
         __HAL_SAI_ENABLE(&hsai_tx);
         /* Dummy data transfer to activate clocks. */
         hsai_tx.Instance->DR = 0;
+        /* Lock RX to the first FS frame to prevent L/R inversion at boot. */
+        __HAL_SAI_ENABLE(&hsai_rx);
     } else {
         /* Set the frame synchronization polarity to active-low (falling edge). The STM32U5 HAL function
          * hardcodes it to active-high (rising edge) when the protocol is SAI_I2S_LSBJUSTIFIED, hence the
@@ -326,15 +328,18 @@ void quasar_audio_sai_read_non_blocking(uint8_t *data, uint16_t size)
 {
     /* Check SAI error flags. */
     if (hsai_rx.Instance->SR & (SAI_xSR_LFSDET | SAI_xSR_AFSDET | SAI_xSR_OVRUDR)) {
-        /* Error detected. */
-        do {
-            /* Disable SAI block and make sure it is fully disabled. */
-            hsai_rx.Instance->CR1 &= ~SAI_xCR1_SAIEN;
-        } while ((hsai_rx.Instance->CR1 & SAI_xCR1_SAIEN));
-        /* Flush FIFO. */
-        hsai_rx.Instance->CR2 |= SAI_xCR2_FFLUSH;
-        /* Clear Error flags. */
-        hsai_rx.Instance->CLRFR |= (SAI_xCLRFR_CLFSDET | SAI_xCLRFR_CAFSDET | SAI_xCLRFR_COVRUDR);
+        if (hsai_tx.Init.AudioMode == SAI_MODEMASTER_TX) {
+            /* Master: flush only — disabling RX breaks the FS phase lock set at init. */
+            hsai_rx.Instance->CR2 |= SAI_xCR2_FFLUSH;
+            hsai_rx.Instance->CLRFR |= (SAI_xCLRFR_CLFSDET | SAI_xCLRFR_CAFSDET | SAI_xCLRFR_COVRUDR);
+        } else {
+            /* Slave: disable → flush → re-enable. */
+            do {
+                hsai_rx.Instance->CR1 &= ~SAI_xCR1_SAIEN;
+            } while ((hsai_rx.Instance->CR1 & SAI_xCR1_SAIEN));
+            hsai_rx.Instance->CR2 |= SAI_xCR2_FFLUSH;
+            hsai_rx.Instance->CLRFR |= (SAI_xCLRFR_CLFSDET | SAI_xCLRFR_CAFSDET | SAI_xCLRFR_COVRUDR);
+        }
     }
 
     sai_dma_start_it(&hdma_sai_rx, (uint32_t)&hsai_rx.Instance->DR, (uint32_t)data, size);
