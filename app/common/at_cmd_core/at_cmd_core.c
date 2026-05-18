@@ -56,7 +56,7 @@ static void               (*s_pre_track_hw_cb)(void)                     = NULL;
 static void               (*s_disconnect_cb)(void)      = NULL;
 static void               (*s_shutdown_cb)(void)        = NULL;
 static uint8_t            (*s_battery_cb)(void)         = NULL;
-static bool                 s_i2s_mux_is_ext   = true; /* default: EXT; AT+I2S_MUX toggles to ON_BOARD */
+static bool                 s_i2s_mux_is_ext   = false; /* default: ON_BOARD; AT+I2S_MUX toggles to EXT */
 static uint8_t              s_i2s_fmt          = 1;    /* 1=RJF(default), 2=LJF, 3=I2S standard */
 static void               (*s_i2s_fmt_cb)(uint8_t fmt) = NULL;
 static bool                 s_pair_requested        = false;

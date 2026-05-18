@@ -1695,8 +1695,6 @@ static void app_init(void)
     app_audio_core_init();
     /* Initialize GPIOs and peripherals for audio operations. */
     facade_audio_node_init();
-    /* Override MUX to external port after audio init (which defaults to onboard). */
-    facade_set_i2s_mux(true);
 
     /* Start audio pipelines. */
     sac_pipeline_start(main_channel_sac_pipeline, &sac_status);

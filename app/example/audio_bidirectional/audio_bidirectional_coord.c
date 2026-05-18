@@ -284,6 +284,7 @@ int main(void)
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
 
     at_cmd_core_register_vol_cb(at_set_vol);
+    at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
     at_cmd_core_register_i2s_fmt_cb(at_i2s_fmt_change);
     at_cmd_core_set_i2s_fmt(facade_get_i2s_fmt());
     at_cmd_core_notify_uwb_ready();
