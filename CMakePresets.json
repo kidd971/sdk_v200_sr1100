@@ -185,6 +185,60 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-master-rjf",
+            "inherits": ["puretone-headset-quasar"],
+            "description": "Puretone headset I2S master, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-master-ljf",
+            "inherits": ["puretone-headset-quasar"],
+            "description": "Puretone headset I2S master, LJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-master-std",
+            "inherits": ["puretone-headset-quasar"],
+            "description": "Puretone headset I2S master, I2S standard format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-slave-rjf",
+            "inherits": ["puretone-headset-quasar"],
+            "description": "Puretone headset I2S slave, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-slave-ljf",
+            "inherits": ["puretone-headset-quasar"],
+            "description": "Puretone headset I2S slave, LJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-slave-std",
+            "inherits": ["puretone-headset-quasar"],
+            "description": "Puretone headset I2S slave, I2S standard format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
             "name": "bsp-validator-tool-quasar",
             "description": "BSP Validator tool with Quasar",
             "hidden": false,

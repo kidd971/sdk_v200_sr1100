@@ -39,6 +39,14 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(USB_AUDIO_ENABLED=0)
     endif()
 
+    if (DEFINED I2S_MASTER_MODE)
+        add_compile_definitions(I2S_MASTER_MODE=${I2S_MASTER_MODE})
+    endif()
+
+    if (DEFINED I2S_FMT_DEFAULT)
+        add_compile_definitions(I2S_FMT_DEFAULT=${I2S_FMT_DEFAULT})
+    endif()
+
     project(IDP CXX C ASM)
     add_subdirectory(library)
     add_subdirectory(third-party)

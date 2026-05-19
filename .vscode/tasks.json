@@ -4,6 +4,16 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "CMake: Clean Rebuild All Puretone Variants (12 bins)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-variants",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
             "label": "[DFU/STM32] Flash binary",
             "type": "shell",
             "command": "python ${workspaceFolder}/script/dfu-util.py ${command:cmake.selectLaunchTarget}",
