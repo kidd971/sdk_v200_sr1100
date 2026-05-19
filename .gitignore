@@ -1,4 +1,6 @@
 .micromamba/
 build/
+dist/
 /.claude
 /pyocd.yml
+/document

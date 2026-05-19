@@ -41,21 +41,32 @@ static max98091_i2c_hal_t codec_hal = {
     .read = codec_i2c_read,
     .write = codec_i2c_write,
 };
-static sai_cfg_t               s_sai_cfg;
-static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;   //default RJF
-//static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED; //LJF
-//static quasar_sai_protocol_t   s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;     //STD
+static sai_cfg_t s_sai_cfg;
+/* I2S_FMT_DEFAULT: 0=RJF (default), 1=LJF, 2=STD — controlled via cmake -DI2S_FMT_DEFAULT=N */
+#if defined(I2S_FMT_DEFAULT) && (I2S_FMT_DEFAULT) == 1
+static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED;
+#elif defined(I2S_FMT_DEFAULT) && (I2S_FMT_DEFAULT) == 2
+static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;
+#else
+static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
+#endif
+
+//static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED;
+// static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;
+// static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
+
 
 static quasar_i2s_mux_select_t s_mux_select   = QUASAR_SELECT_ON_BOARD_CODEC;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-void facade_audio_coord_init(void)
+void facade_audio_coord_init(bool i2s_master_mode)
 {
     sai_cfg_t sai_cfg = {
-        .bit_depth = I2S_BIT_DEPTH,
-        .rx_nb_ch  = MAIN_CHANNEL_CHANNEL_COUNT,
-        .tx_nb_ch  = BACK_CHANNEL_CHANNEL_COUNT,
-        .sai_mode  = QUASAR_SAI_SLAVE_MODE_MCLK,
+        .bit_depth     = I2S_BIT_DEPTH,
+        .rx_nb_ch      = MAIN_CHANNEL_CHANNEL_COUNT,
+        .tx_nb_ch      = BACK_CHANNEL_CHANNEL_COUNT,
+        .sai_mode      = i2s_master_mode ? QUASAR_SAI_MASTER_MODE : QUASAR_SAI_SLAVE_MODE_MCLK,
+        .sai_frequency = QUASAR_SAI_AUDIO_FREQUENCY_96K,
     };
     s_sai_cfg = sai_cfg;
 
@@ -73,15 +84,13 @@ void facade_audio_coord_init(void)
     configure_max98091(true, true);
 }
 
-void facade_audio_node_init(void)
+void facade_audio_node_init(bool i2s_master_mode)
 {
     sai_cfg_t sai_cfg = {
         .bit_depth     = I2S_BIT_DEPTH,
         .rx_nb_ch      = BACK_CHANNEL_CHANNEL_COUNT,
         .tx_nb_ch      = MAIN_CHANNEL_CHANNEL_COUNT,
-        .sai_mode      = QUASAR_SAI_MASTER_MODE,
-        //.sai_mode      = QUASAR_SAI_SLAVE_MODE_MCLK,
-
+        .sai_mode      = i2s_master_mode ? QUASAR_SAI_MASTER_MODE : QUASAR_SAI_SLAVE_MODE_MCLK,
         .sai_frequency = QUASAR_SAI_AUDIO_FREQUENCY_96K,
     };
     s_sai_cfg = sai_cfg;

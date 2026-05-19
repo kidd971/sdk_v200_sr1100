@@ -2145,7 +2145,11 @@ static void app_init(void)
     /* Initialize Audio Core. */
     app_audio_core_init();
     /* Initialize GPIOs and peripherals for audio operations. */
-    facade_audio_coord_init();
+#if (I2S_MASTER_MODE)
+    facade_audio_coord_init(true);
+#else
+    facade_audio_coord_init(false);
+#endif
 
     /* Start audio pipelines. */
     sac_pipeline_start(main_channel_sac_pipeline, &sac_status);

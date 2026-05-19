@@ -54,15 +54,17 @@ typedef struct facade_button_callbacks {
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Initialize the Coordinator's audio peripherals.
  *
+ *  @param[in] i2s_master_mode  True to initialize as I2S master; false for slave with MCLK output.
  *  @note Configure the serial audio interface to Mono or Stereo.
  */
-void facade_audio_coord_init(void);
+void facade_audio_coord_init(bool i2s_master_mode);
 
 /** @brief Initialize the Node's SAI peripheral.
  *
+ *  @param[in] i2s_master_mode  True to initialize as I2S master; false for slave with MCLK output.
  *  @note Configure the serial audio interface to Mono or Stereo.
  */
-void facade_audio_node_init(void);
+void facade_audio_node_init(bool i2s_master_mode);
 
 /** @brief Deinitialize the audio peripherals.
  */

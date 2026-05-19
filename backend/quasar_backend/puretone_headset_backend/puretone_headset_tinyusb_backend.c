@@ -18,13 +18,15 @@
 static uint16_t app_expected_rx_payload_size;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-void facade_audio_coord_init(void)
+void facade_audio_coord_init(bool i2s_master_mode)
 {
+    (void)i2s_master_mode;
     /* Nothing to initialize. */
 }
 
-void facade_audio_node_init(void)
+void facade_audio_node_init(bool i2s_master_mode)
 {
+    (void)i2s_master_mode;
     /* Nothing to initialize. */
 }
 
