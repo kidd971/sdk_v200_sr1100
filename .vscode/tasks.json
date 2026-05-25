@@ -4,6 +4,29 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "CMake: Build Puretone Master RJF (incremental)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run build-puretone-master-rjf",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "CMake: Clean Rebuild Puretone Master RJF",
+            "type": "shell",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-master-rjf",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
             "label": "CMake: Clean Rebuild All Puretone Variants (12 bins)",
             "type": "shell",
             "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-variants",
@@ -16,7 +39,10 @@
         {
             "label": "[DFU/STM32] Flash binary",
             "type": "shell",
-            "command": "python ${workspaceFolder}/script/dfu-util.py ${command:cmake.selectLaunchTarget}",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run flash ${command:cmake.selectLaunchTarget}",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "problemMatcher": []
         }
     ]
