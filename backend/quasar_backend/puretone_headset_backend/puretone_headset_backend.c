@@ -337,8 +337,10 @@ void facade_system_reset(void)
 
 void facade_uwb_shutdown(void)
 {
+#if !defined(STM32U535xx)
     quasar_radio_1_set_shutdown_pin();
     quasar_radio_2_set_shutdown_pin();
+#endif
 }
 
 void facade_set_i2s_mux(bool use_ext)

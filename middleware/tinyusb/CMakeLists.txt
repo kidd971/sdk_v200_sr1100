@@ -40,7 +40,18 @@ if(USB_AUDIO_ENABLED)
     )
 endif()
 
-if(${HARDWARE} STREQUAL "QUASAR")
+if(${HARDWARE} STREQUAL "QUASAR" AND STM32U5_MCU_MODEL STREQUAL "STM32U535xx")
+    # STM32U535 has USB Full Speed Device (FSDEV), not OTG HS (DWC2)
+    target_include_directories(middleware_tinyusb
+        PUBLIC
+            src/src/portable/st/stm32_fsdev
+    )
+    target_sources(middleware_tinyusb
+        PRIVATE
+            src/src/portable/st/stm32_fsdev/dcd_stm32_fsdev.c
+    )
+    target_compile_definitions(middleware_tinyusb PUBLIC TUP_MEM_CONST_ADDR)
+elseif(${HARDWARE} STREQUAL "QUASAR")
     target_include_directories(middleware_tinyusb
         PUBLIC
             src/src/portable/synopsys/dwc2

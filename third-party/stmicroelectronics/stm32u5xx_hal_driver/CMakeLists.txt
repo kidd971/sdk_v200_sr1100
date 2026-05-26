@@ -1,6 +1,6 @@
 add_library(stm32u5xx_hal_driver "")
-# Suppress the unused parameter warning for this target
-target_compile_options(stm32u5xx_hal_driver PRIVATE -Wno-unused-parameter)
+# Suppress warnings for this third-party target
+target_compile_options(stm32u5xx_hal_driver PRIVATE -Wno-unused-parameter -Wno-return-type)
 
 set(U5_DRIVER_PATH ${CMAKE_CURRENT_LIST_DIR}/src)
 

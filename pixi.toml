@@ -51,6 +51,22 @@ cmd = """python -c "import subprocess, os; presets=['puretone-headset-quasar-mas
 description = "Clean rebuild all 6 puretone headset I2S variants (12 bins total)"
 cmd = """python -c "import subprocess, os, shutil; presets=['puretone-headset-quasar-master-rjf','puretone-headset-quasar-master-ljf','puretone-headset-quasar-master-std','puretone-headset-quasar-slave-rjf','puretone-headset-quasar-slave-ljf','puretone-headset-quasar-slave-std']; run=lambda p: [shutil.rmtree('build/'+p, ignore_errors=True), subprocess.run(['cmake', '--preset='+p, '-G', 'Ninja'], check=True), subprocess.run(['cmake', '--build', 'build/'+p], check=True)]; [run(p) for p in presets]; os.makedirs('dist', exist_ok=True); [shutil.copy2('build/'+p+'/app/example/puretone_headset/'+n+'.bin', 'dist/'+n+'_'+p.replace('puretone-headset-quasar-','').replace('-','_')+'.bin') or print('Collected: dist/'+n+'_'+p.replace('puretone-headset-quasar-','').replace('-','_')+'.bin') for p in presets for n in ['puretone_headset','puretone_dongle']]" """
 
+[feature.spark-sdk-build.tasks.build-puretone-u535-master-rjf]
+description = "Incremental build puretone headset U535 I2S master RJF variant (2 bins)"
+cmd = """python -c "import subprocess; p='puretone-headset-quasar-u535-master-rjf'; subprocess.run(['cmake', '--preset='+p, '-G', 'Ninja'], check=True); subprocess.run(['cmake', '--build', 'build/'+p], check=True)" """
+
+[feature.spark-sdk-build.tasks.clean-build-puretone-u535-master-rjf]
+description = "Clean rebuild puretone headset U535 I2S master RJF variant (2 bins)"
+cmd = """python -c "import subprocess, shutil; p='puretone-headset-quasar-u535-master-rjf'; shutil.rmtree('build/'+p, ignore_errors=True); subprocess.run(['cmake', '--preset='+p, '-G', 'Ninja'], check=True); subprocess.run(['cmake', '--build', 'build/'+p], check=True)" """
+
+[feature.spark-sdk-build.tasks.build-puretone-u535-variants]
+description = "Build all 6 puretone headset U535 I2S variants (master/slave x RJF/LJF/STD)"
+cmd = """python -c "import subprocess; presets=['puretone-headset-quasar-u535-master-rjf','puretone-headset-quasar-u535-master-ljf','puretone-headset-quasar-u535-master-std','puretone-headset-quasar-u535-slave-rjf','puretone-headset-quasar-u535-slave-ljf','puretone-headset-quasar-u535-slave-std']; run=lambda p: [subprocess.run(['cmake', '--preset='+p, '-G', 'Ninja'], check=True), subprocess.run(['cmake', '--build', 'build/'+p], check=True)]; [run(p) for p in presets]" """
+
+[feature.spark-sdk-build.tasks.clean-build-puretone-u535-variants]
+description = "Clean rebuild all 6 puretone headset U535 I2S variants (12 bins total)"
+cmd = """python -c "import subprocess, os, shutil; presets=['puretone-headset-quasar-u535-master-rjf','puretone-headset-quasar-u535-master-ljf','puretone-headset-quasar-u535-master-std','puretone-headset-quasar-u535-slave-rjf','puretone-headset-quasar-u535-slave-ljf','puretone-headset-quasar-u535-slave-std']; run=lambda p: [shutil.rmtree('build/'+p, ignore_errors=True), subprocess.run(['cmake', '--preset='+p, '-G', 'Ninja'], check=True), subprocess.run(['cmake', '--build', 'build/'+p], check=True)]; [run(p) for p in presets]; os.makedirs('dist', exist_ok=True); [shutil.copy2('build/'+p+'/app/example/puretone_headset/'+n+'.bin', 'dist/'+n+'_'+p.replace('puretone-headset-quasar-u535-','u535_').replace('-','_')+'.bin') or print('Collected: dist/'+n+'_'+p.replace('puretone-headset-quasar-u535-','u535_').replace('-','_')+'.bin') for p in presets for n in ['puretone_headset','puretone_dongle']]" """
+
 [feature.spark-sdk-flash.tasks.flash]
 description = "Flash a binary to the device (DFU)"
 cmd = "python script/dfu-util.py"

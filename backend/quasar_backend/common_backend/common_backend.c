@@ -89,7 +89,11 @@ __attribute__((weak)) void facade_print_error_string(char *string)
     quasar_rgb_set();
 
     /* Set to highest priority. */
+#if defined(STM32U535xx)
+    HAL_NVIC_SetPriority(USB_IRQn, 0, 0);
+#else
     HAL_NVIC_SetPriority(OTG_HS_IRQn, 0, 0);
+#endif
     facade_print_string(string);
 }
 

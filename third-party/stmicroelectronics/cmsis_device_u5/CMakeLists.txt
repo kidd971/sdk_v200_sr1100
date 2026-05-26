@@ -11,5 +11,5 @@ target_sources(cmsis_device_u5
 )
 
 target_link_libraries(cmsis_device_u5 PUBLIC cmsis_5)
-target_compile_definitions(cmsis_device_u5 PUBLIC ${STM32U5_MCU_MODEL} USE_HAL_DRIVER STM32U5A5xx)
+target_compile_definitions(cmsis_device_u5 PUBLIC ${STM32U5_MCU_MODEL} USE_HAL_DRIVER)
 target_include_directories(cmsis_device_u5 PUBLIC ${CMSIS_U5_PATH}/Include)
