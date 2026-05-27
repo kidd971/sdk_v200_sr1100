@@ -80,6 +80,9 @@ bool quasar_button_read_state(quasar_button_selection_t button_selection)
 {
     quasar_gpio_config_t button_config = button_get_config(button_selection);
 
+    /* Return false for buttons without a pin defined on this board variant. */
+    if (button_config.port == NULL) return false;
+
     bool button_state = quasar_gpio_read_state(button_config.port, button_config.pin);
 
     return button_state;

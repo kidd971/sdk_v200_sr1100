@@ -19,21 +19,9 @@ static quasar_gpio_config_t led_get_config(quasar_led_peripherals_t led_peripher
 /* PUBLIC FUNCTIONS ***********************************************************/
 void quasar_led_init(void)
 {
+    /* Only initialize LEDs with pins defined in quasar_def.h for this board variant. */
     led_init(QUASAR_LED_USB);
-    led_init(QUASAR_LED_LINEIN);
-    led_init(QUASAR_LED_HPJACK);
-    led_init(QUASAR_LED_USER_1);
-    led_init(QUASAR_LED_USER_2);
-    led_init(QUASAR_LED_USER_3);
-    led_init(QUASAR_LED_USER_4);
-
     quasar_led_clear(QUASAR_LED_USB);
-    quasar_led_clear(QUASAR_LED_LINEIN);
-    quasar_led_clear(QUASAR_LED_HPJACK);
-    quasar_led_clear(QUASAR_LED_USER_1);
-    quasar_led_clear(QUASAR_LED_USER_2);
-    quasar_led_clear(QUASAR_LED_USER_3);
-    quasar_led_clear(QUASAR_LED_USER_4);
 }
 
 void quasar_led_deinit(void)
@@ -50,6 +38,7 @@ void quasar_led_deinit(void)
 void quasar_led_set(quasar_led_peripherals_t led_peripheral)
 {
     quasar_gpio_config_t led_config = led_get_config(led_peripheral);
+    if (led_config.port == NULL) return;
     /* The LED lights on if the GPIO is pull-down. */
     quasar_gpio_clear(led_config.port, led_config.pin);
 }
@@ -57,6 +46,7 @@ void quasar_led_set(quasar_led_peripherals_t led_peripheral)
 void quasar_led_clear(quasar_led_peripherals_t led_peripheral)
 {
     quasar_gpio_config_t led_config = led_get_config(led_peripheral);
+    if (led_config.port == NULL) return;
     /* The LED lights off if the GPIO is pull-up. */
     quasar_gpio_set(led_config.port, led_config.pin);
 }
@@ -64,7 +54,7 @@ void quasar_led_clear(quasar_led_peripherals_t led_peripheral)
 void quasar_led_toggle(quasar_led_peripherals_t led_peripheral)
 {
     quasar_gpio_config_t led_config = led_get_config(led_peripheral);
-
+    if (led_config.port == NULL) return;
     quasar_gpio_toggle(led_config.port, led_config.pin);
 }
 
@@ -100,7 +90,8 @@ static void led_deinit(quasar_led_peripherals_t led_peripheral)
  */
 static quasar_gpio_config_t led_get_config(quasar_led_peripherals_t led_peripheral)
 {
-    quasar_gpio_config_t config;
+    /* Default to NULL port — callers must check before using. */
+    quasar_gpio_config_t config = {0};
 
     switch (led_peripheral) {
     /* The LED_USB lights on if the USB port is the source of the audio. */

@@ -43,6 +43,153 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u5a5",
+            "hidden": true,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone headset example for SR11xx with Quasar U5A5",
+            "cacheVariables": {
+                "APP": "Puretone-Headset",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-master-rjf",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S master, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-master-ljf",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S master, LJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-master-std",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S master, I2S standard format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-slave-rjf",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S slave, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-slave-ljf",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S slave, LJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-slave-std",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S slave, I2S standard format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535",
+            "hidden": true,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "Puretone headset example for SR11xx with Quasar U535",
+            "cacheVariables": {
+                "APP": "Puretone-Headset",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-rjf",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-ljf",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, LJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-std",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, I2S standard format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-rjf",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-ljf",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, LJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-std",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, I2S standard format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u5a5-usb_audio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone headset U5A5, USB Audio",
+            "cacheVariables": {
+                "APP": "Puretone-Headset",
+                "TRANSCEIVER": "SR1100",
+                "USB_AUDIO_ENABLED": "ON"
+            }
+        },
+        {
             "name": "audio-bidirectional-quasar",
             "inherits": [
                 "base",
@@ -145,6 +292,19 @@
             }
         },
         {
+            "name": "hello-world-quasar-u535",
+            "description": "Hello-World example for SR11xx with Quasar U535",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "cacheVariables": {
+                "APP": "Hello-World",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
             "name": "hello-world-rtos-quasar",
             "description": "Hello-World RTOS example for SR11xx with Quasar",
             "hidden": false,
@@ -159,31 +319,6 @@
             }
         },
         {
-            "name": "puretone-headset-quasar",
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "Puretone headset example for SR11xx with Quasar",
-            "cacheVariables": {
-                "APP": "Puretone-Headset",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-usb_audio",
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "Puretone headset example for SR11xx with Quasar USB AUDIO",
-            "cacheVariables": {
-                "APP": "Puretone-Headset",
-                "TRANSCEIVER": "SR1100",
-                "USB_AUDIO_ENABLED": "ON"
-            }
-        },
-        {
             "name": "star-network-quasar",
             "description": "Star Network example for SR11xx with Quasar",
             "hidden": false,
@@ -194,60 +329,6 @@
             "cacheVariables": {
                 "APP": "Star-Network",
                 "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-master-rjf",
-            "inherits": ["puretone-headset-quasar"],
-            "description": "Puretone headset I2S master, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-master-ljf",
-            "inherits": ["puretone-headset-quasar"],
-            "description": "Puretone headset I2S master, LJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "1"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-master-std",
-            "inherits": ["puretone-headset-quasar"],
-            "description": "Puretone headset I2S master, I2S standard format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "2"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-slave-rjf",
-            "inherits": ["puretone-headset-quasar"],
-            "description": "Puretone headset I2S slave, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-slave-ljf",
-            "inherits": ["puretone-headset-quasar"],
-            "description": "Puretone headset I2S slave, LJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "1"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-slave-std",
-            "inherits": ["puretone-headset-quasar"],
-            "description": "Puretone headset I2S slave, I2S standard format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "2"
             }
         },
         {
@@ -274,72 +355,6 @@
             "cacheVariables": {
                 "APP": "Profiler",
                 "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535",
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "Puretone headset example for SR11xx with Quasar U535",
-            "cacheVariables": {
-                "APP": "Puretone-Headset",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-master-rjf",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S master, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-master-ljf",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S master, LJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "1"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-master-std",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S master, I2S standard format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "2"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-slave-rjf",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-slave-ljf",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, LJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "1"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-slave-std",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, I2S standard format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "2"
             }
         }
     ]
