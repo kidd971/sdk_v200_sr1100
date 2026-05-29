@@ -286,6 +286,7 @@ void facade_notify_pairing_successful(void)
 
 void facade_expansion_uart_init(uint32_t baud_rate)
 {
+#if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
     quasar_gpio_config_t gpio_tx = {
         .port      = QUASAR_DEF_EXPANSION_UART_TX_PORT,
         .pin       = QUASAR_DEF_EXPANSION_UART_TX_PIN,
@@ -314,20 +315,31 @@ void facade_expansion_uart_init(uint32_t baud_rate)
         .gpio_config_rx = gpio_rx,
     };
     quasar_uart_init(uart_cfg);
+#else
+    (void)baud_rate;  /* Expansion UART not available on this board variant. */
+#endif
 }
 
 void facade_expansion_uart_write(char *string)
 {
+#if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
     quasar_bsp_status_t err;
 
     quasar_uart_transmit_blocking(QUASAR_DEF_UART_SELECTION_EXPANSION,
                                   (uint8_t *)string, strlen(string),
                                   EXPANSION_UART_TX_TIMEOUT_MS, &err);
+#else
+    (void)string;  /* Expansion UART not available on this board variant. */
+#endif
 }
 
 uint8_t facade_expansion_uart_read_byte(void)
 {
+#if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
     return quasar_uart_receive_irq(QUASAR_DEF_UART_SELECTION_EXPANSION);
+#else
+    return 0;  /* Expansion UART not available on this board variant. */
+#endif
 }
 
 void facade_system_reset(void)

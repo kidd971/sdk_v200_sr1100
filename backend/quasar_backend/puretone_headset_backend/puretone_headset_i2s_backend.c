@@ -14,7 +14,11 @@
 #include "sac_cfg.h"
 
 /* CONSTANTS ******************************************************************/
-#define I2S_FMT_FLASH_ADDR  0x083FE000U
+#if defined(STM32U535xx)
+#define I2S_FMT_FLASH_ADDR  0x0807E000U  /* U535: 512KB flash, last 8KB page */
+#else
+#define I2S_FMT_FLASH_ADDR  0x083FE000U  /* U5A5: 4MB flash, last 8KB page */
+#endif
 #define I2S_FMT_FLASH_MAGIC 0xA5U
 
 /* TYPES **********************************************************************/

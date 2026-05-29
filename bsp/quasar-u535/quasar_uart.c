@@ -86,6 +86,9 @@ void quasar_uart_init(quasar_uart_config_t uart_config)
     USART_TypeDef *uart_instance = uart_get_instance(uart_config.uart_selection);
     IRQn_Type uart_irq;
 
+    /* Guard: USART2/USART6 do not exist on STM32U535 — skip silently. */
+    if (uart_instance == NULL) return;
+
     /* Initialize GPIOs used for UART. */
     quasar_gpio_init(uart_config.gpio_config_rx);
     quasar_gpio_init(uart_config.gpio_config_tx);
@@ -124,6 +127,9 @@ void quasar_uart_deinit(quasar_uart_config_t uart_config)
 {
     USART_TypeDef *uart_instance = uart_get_instance(uart_config.uart_selection);
     IRQn_Type uart_irq;
+
+    /* Guard: USART2/USART6 do not exist on STM32U535 — skip silently. */
+    if (uart_instance == NULL) return;
 
     /* Disable the UART receive interrupt flag. */
     if (uart_config.irq_priority != QUASAR_IRQ_PRIORITY_NONE) {
@@ -182,6 +188,7 @@ void quasar_uart_set_rx_callback(quasar_uart_selection_t uart_selection, void (*
 void quasar_uart_transmit_byte_irq(quasar_uart_selection_t uart_selection, uint8_t data_to_transmit)
 {
     USART_TypeDef *uart_instance = uart_get_instance(uart_selection);
+    if (uart_instance == NULL) return;
 
     quasar_it_enter_critical();
     /* Push each element of the array into the associated FIFO buffer. */
@@ -196,6 +203,7 @@ void quasar_uart_transmit_bytes_irq(quasar_uart_selection_t uart_selection, uint
                                     uint32_t size)
 {
     USART_TypeDef *uart_instance = uart_get_instance(uart_selection);
+    if (uart_instance == NULL) return;
 
     quasar_it_enter_critical();
     /* Push each element of the array into the associated FIFO buffer. */
@@ -211,6 +219,7 @@ void quasar_uart_transmit_bytes_irq(quasar_uart_selection_t uart_selection, uint
 void quasar_uart_transmit_string_irq(quasar_uart_selection_t uart_selection, char *string_to_transmit, uint32_t size)
 {
     USART_TypeDef *uart_instance = uart_get_instance(uart_selection);
+    if (uart_instance == NULL) return;
 
     quasar_it_enter_critical();
     /* Push each element of the array into the associated FIFO buffer. */
@@ -244,6 +253,7 @@ void quasar_uart_transmit_dma(quasar_uart_selection_t uart_selection, uint8_t *d
     *err = QUASAR_OK;
 
     UART_HandleTypeDef *uart_handle = quasar_uart_get_selected_handle(uart_selection);
+    if (uart_handle == NULL) return;
 
     QUASAR_BSP_CHECK_ERROR(HAL_UART_Transmit_DMA(uart_handle, data, size) != HAL_OK, err, QUASAR_ERR_UART_TRANSMIT_DMA,
                            return);
@@ -258,6 +268,7 @@ uint8_t quasar_uart_receive_dma(quasar_uart_selection_t uart_selection)
 {
     uint8_t received_data = 0;
     UART_HandleTypeDef *uart_handle = quasar_uart_get_selected_handle(uart_selection);
+    if (uart_handle == NULL) return 0;
 
     if (HAL_UART_Receive_DMA(uart_handle, &received_data, 1) != HAL_OK) {
         return 0;
@@ -272,6 +283,7 @@ void quasar_uart_transmit_blocking(quasar_uart_selection_t uart_selection, uint8
     *err = QUASAR_OK;
 
     UART_HandleTypeDef *uart_handle = quasar_uart_get_selected_handle(uart_selection);
+    if (uart_handle == NULL) return;
 
     QUASAR_BSP_CHECK_ERROR(HAL_UART_Transmit(uart_handle, data, size, timeout) != HAL_OK, err,
                            QUASAR_ERR_UART_TRANSMIT_BLOCKING, return);
@@ -280,6 +292,7 @@ void quasar_uart_transmit_blocking(quasar_uart_selection_t uart_selection, uint8
 uint8_t quasar_uart_receive_blocking(quasar_uart_selection_t uart_selection, uint16_t timeout)
 {
     UART_HandleTypeDef *uart_handle = quasar_uart_get_selected_handle(uart_selection);
+    if (uart_handle == NULL) return 0;
     uint8_t received_data = 0;
 
     if (HAL_UART_Receive(uart_handle, &received_data, 1, timeout) != HAL_OK) {

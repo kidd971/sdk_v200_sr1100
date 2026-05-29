@@ -113,6 +113,8 @@ extern "C" {
  *  should be set to HIGH. By default, the I2S signals are
  *  only connected to the onboard codec and the GPIO MUX_SEL
  *  is pulled down with a resistor.
+ *  U535: PC2 is NC on this board — I2S goes directly to expansion port pins.
+ *  Codec connection requires a jumper; no MUX GPIO control needed.
  */
 // #define QUASAR_DEF_I2S_MUX_SEL_PORT GPIOC
 // #define QUASAR_DEF_I2S_MUX_SEL_PIN  QUASAR_GPIO_PIN_2
@@ -255,7 +257,11 @@ extern "C" {
 #define QUASAR_DEF_I2C_SELECTON_EEROM_RADIO_1 QUASAR_I2C_SELECTION_I2C1
 #define QUASAR_DEF_I2C_SELECTION_CODEC        QUASAR_I2C_SELECTION_I2C2
 
-#define QUASAR_DEF_UART_SELECTION_EXPANSION   QUASAR_UART_SELECTION_USART2
+/* U535: USART2 does not exist on STM32U535xx. PA2/PA3 (expansion port) have no
+ *       available UART via AF7 on this device. Expansion UART is not supported.
+ *       All quasar_uart_* calls with QUASAR_UART_SELECTION_USART2 are silently
+ *       no-op'd by the NULL guard in quasar_uart.c. */
+// #define QUASAR_DEF_UART_SELECTION_EXPANSION   QUASAR_UART_SELECTION_USART2
 #define QUASAR_DEF_SPI_SELECTION_EXPANSION    QUASAR_SPI_SELECTION_SPI3
 #define QUASAR_DEF_UART_SELECTION_DEBUG       QUASAR_UART_SELECTION_UART4
 
