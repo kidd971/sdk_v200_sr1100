@@ -13,12 +13,16 @@
 #include "sac_utils.h"
 
 /* CONSTANTS ******************************************************************/
+/* **** Sine Wave Test Tone (optional) **** */
+/* Uncomment to replace the I2S line-in source with an internally generated
+ * 1 kHz / 96 kHz / 24-bit stereo sine wave. Comment out to restore normal I2S input.
+ */
+ #define AUDIO_PRODUCER_SINE_WAVE
+
 /* **** Main Channel Settings. **** */
 
 #define MAIN_CHANNEL_SAMPLE_RATE_HZ 96000
 #define MAIN_CHANNEL_SAMPLE_COUNT   40
-#define MAIN_CHANNEL_CHANNEL_COUNT  2
-#define MAIN_CHANNEL_SAMPLE_RATE_HZ 96000
 #define MAIN_CHANNEL_CHANNEL_COUNT  2
 #define MAIN_CHANNEL_BIT_DEPTH      24
 /* Maximum Latency. */

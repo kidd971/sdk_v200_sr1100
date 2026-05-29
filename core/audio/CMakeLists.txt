@@ -10,6 +10,7 @@ target_sources(audio_core
         api/sac_utils.c
         endpoint/sac_dummy_endpoint.c
         endpoint/sac_sinus_endpoint.c
+        endpoint/sac_sinus_endpoint_96k.c
         endpoint/sac_endpoint_swc.c
         gate/sac_fallback_gate.c
         module/sac_mixer_module.c
@@ -26,6 +27,7 @@ target_sources(audio_core
     PUBLIC
         endpoint/sac_dummy_endpoint.h
         endpoint/sac_sinus_endpoint.h
+        endpoint/sac_sinus_endpoint_96k.h
         endpoint/sac_endpoint_swc.h
         gate/sac_fallback_gate.h
         module/sac_mixer_module.h

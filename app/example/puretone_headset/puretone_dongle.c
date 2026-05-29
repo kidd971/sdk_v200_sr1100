@@ -31,6 +31,9 @@
 #include "sac_src_cmsis.h"
 #include "sac_stats.h"
 #include "sac_volume.h"
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+#include "sac_sinus_endpoint_96k.h"
+#endif
 #include "swc_api.h"
 #include "swc_cfg.h"
 #include "swc_cfg_coord.h"
@@ -843,9 +846,18 @@ static void app_audio_core_init(void)
     sac_processing_interface_t back_channel_volume_iface = {0};
 
     sac_endpoint_swc_init(&back_channel_swc_producer_iface, &main_channel_swc_consumer_iface);
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+    /* Sine wave mode: back channel consumer (headphone output) still uses I2S; producer is internal. */
+    sac_facade_audio_endpoint_init(NULL, &back_channel_consumer_iface);
+    main_channel_producer_iface.action = ep_sinus_96k_produce;
+    main_channel_producer_iface.start  = ep_sinus_96k_start;
+    main_channel_producer_iface.stop   = ep_sinus_96k_stop;
+    facade_set_audio_complete_callback(back_channel_audio_tx_complete_callback, NULL);
+#else
     sac_facade_audio_endpoint_init(&main_channel_producer_iface, &back_channel_consumer_iface);
     facade_set_audio_complete_callback(back_channel_audio_tx_complete_callback,
                                        main_channel_audio_rx_complete_callback);
+#endif
 
     app_audio_core_fallback_interface_init(&fallback_iface);
     app_audio_core_downsampling_interface_init(&main_channel_downsampling_iface);
@@ -961,7 +973,11 @@ static void app_audio_core_init(void)
     /* Initialize codec producer endpoint. */
     sac_endpoint_cfg_t main_channel_producer_cfg = {
         .use_encapsulation = false,
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+        .delayed_action = false,
+#else
         .delayed_action = !USB_AUDIO_ENABLED,
+#endif
         .channel_count = MAIN_CHANNEL_CHANNEL_COUNT,
         .audio_payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_SWC_PAYLOAD_SIZE : MAIN_CHANNEL_I2S_PAYLOAD_SIZE,
         .queue_size = SAC_MIN_PRODUCER_QUEUE_SIZE + (USB_AUDIO_ENABLED ? MAIN_CHANNEL_USB_FS_PRODUCER_BUFFERING : 0),
@@ -1701,6 +1717,12 @@ static void audio_process_main_channel_callback(void)
     sac_status_t sac_status = SAC_OK;
     uint32_t buffer_load = 0;
 
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+    /* No DMA callback drives production; generate one packet on each timer invocation. */
+    sac_pipeline_produce(main_channel_sac_pipeline, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
+
     buffer_load = sac_pipeline_get_producer_buffer_load(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
@@ -1722,6 +1744,11 @@ static void audio_process_main_channel_callback(void)
         sac_pipeline_consume(main_channel_sac_pipeline, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
     }
+
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+    /* No DMA RX callback to retrigger; self-retrigger to maintain audio packet cadence. */
+    facade_audio_process_main_channel_timer_trigger();
+#endif
 }
 
 /** @brief Callback handling the audio process that triggers with the app timer.
@@ -2162,6 +2189,10 @@ static void app_init(void)
     /* Start timers used for audio processes. */
     facade_audio_process_main_channel_timer_start();
     facade_audio_process_back_channel_timer_start();
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+    /* Sine wave mode has no DMA RX callback to fire the first produce; trigger manually. */
+    facade_audio_process_main_channel_timer_trigger();
+#endif
 
     /* Start data and statistics timer. */
     facade_data_timer_start();
