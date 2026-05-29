@@ -1744,11 +1744,6 @@ static void audio_process_main_channel_callback(void)
         sac_pipeline_consume(main_channel_sac_pipeline, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
     }
-
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-    /* No DMA RX callback to retrigger; self-retrigger to maintain audio packet cadence. */
-    facade_audio_process_main_channel_timer_trigger();
-#endif
 }
 
 /** @brief Callback handling the audio process that triggers with the app timer.
@@ -2187,6 +2182,10 @@ static void app_init(void)
     ASSERT_SAC_STATUS(sac_status);
 
     /* Start timers used for audio processes. */
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+    /* Reconfigure main channel timer to the audio packet period before starting. */
+    facade_audio_sine_wave_timer_reconfig();
+#endif
     facade_audio_process_main_channel_timer_start();
     facade_audio_process_back_channel_timer_start();
 #ifdef AUDIO_PRODUCER_SINE_WAVE

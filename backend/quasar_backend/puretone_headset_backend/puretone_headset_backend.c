@@ -194,6 +194,19 @@ void facade_audio_process_main_channel_timer_init(void (*callback)(void))
     quasar_it_set_timer16_callback(callback);
 }
 
+void facade_audio_sine_wave_timer_reconfig(void)
+{
+    /* Reconfigure main channel timer to fire at the audio packet period (96 kHz / 40 = 417 μs).
+     * Call this only on the DG side in AUDIO_PRODUCER_SINE_WAVE mode. */
+    quasar_timer_config_t timer_config = {
+        .timer_selection = TIMER_SELECTION_MAIN_CHANNEL_AUDIO_PROCESS,
+        .time_base = QUASAR_TIMER_TIME_BASE_MICROSECOND,
+        .time_period = 416,
+        .irq_priority = IRQ_PRIORITY_TIMER_MAIN_CHANNEL_AUDIO_PROCESS,
+    };
+    quasar_timer_init(&timer_config);
+}
+
 void facade_audio_process_back_channel_timer_init(void (*callback)(void))
 {
     quasar_timer_config_t timer_config = {

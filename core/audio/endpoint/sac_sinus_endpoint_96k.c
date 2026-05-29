@@ -41,7 +41,9 @@ uint16_t ep_sinus_96k_produce(void *instance, uint8_t *samples, uint16_t size)
     uint32_t frame_count = size / (sizeof(int32_t) * 2); /* stereo: 2 × int32_t per frame */
 
     for (uint32_t i = 0; i < frame_count; i++) {
-        int32_t val = sine_1khz_96ks_24bit[s_phase];
+        /* Left-justify the 24-bit value in the 32-bit word to match STM32 SAI DMA format
+         * (audio in bits[31:8], lower 8 bits = 0), as expected by the packing stage. */
+        int32_t val = sine_1khz_96ks_24bit[s_phase] << 8;
         out[i * 2]     = val; /* Left  */
         out[i * 2 + 1] = val; /* Right */
         s_phase = (s_phase + 1 >= SINE_TABLE_LEN) ? 0 : s_phase + 1;
