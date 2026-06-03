@@ -8,7 +8,7 @@
             "request": "launch",
             "type": "cortex-debug",
             "runToEntryPoint": "main",
-            "showDevDebugOutput": "none",
+            "showDevDebugOutput": "parsed",
             "servertype": "pyocd",
             "svdFile": "${workspaceRoot}/.vscode/STM32U5xx.svd",
             "serverArgs": [
@@ -33,7 +33,7 @@
             "request": "launch",
             "type": "cortex-debug",
             "runToEntryPoint": "main",
-            "showDevDebugOutput": "none",
+            "showDevDebugOutput": "parsed",
             "servertype": "pyocd",
             "svdFile": "${workspaceRoot}/.vscode/STM32U5xx.svd",
             "serverArgs": [
@@ -58,7 +58,7 @@
             "request": "launch",
             "type": "cortex-debug",
             "runToEntryPoint": "main",
-            "showDevDebugOutput": "none",
+            "showDevDebugOutput": "parsed",
             "servertype": "pyocd",
             "svdFile": "${workspaceRoot}/.vscode/STM32U5xx.svd",
             "serverArgs": [

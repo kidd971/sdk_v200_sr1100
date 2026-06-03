@@ -163,6 +163,14 @@ quasar_revision_t quasar_get_board_revision(void)
 static void patch_board_revision(quasar_revision_t board_revision)
 {
     /* The GPIO that had been initialized as output for LDO enable is deinitialized. */
+#if defined(AV_IND)
+    /* AV IND board has no ADC voltage divider for revision detection.
+     * Deinit both LDO MCU EN GPIOs so neither conflicts with Radio2 SPI pins.
+     */
+    quasar_gpio_deinit(QUASAR_DEF_LDO_MCU_EN_PORT_REVA, QUASAR_DEF_LDO_MCU_EN_PIN_REVA);
+    quasar_gpio_deinit(QUASAR_DEF_LDO_MCU_EN_PORT_REVB, QUASAR_DEF_LDO_MCU_EN_PIN_REVB);
+    (void)board_revision;
+#else
     switch (board_revision) {
     case QUASAR_REVA:
         quasar_gpio_deinit(QUASAR_DEF_LDO_MCU_EN_PORT_REVB, QUASAR_DEF_LDO_MCU_EN_PIN_REVB);
@@ -174,4 +182,5 @@ static void patch_board_revision(quasar_revision_t board_revision)
         /* Unsupported revision. */
         Error_Handler();
     }
+#endif
 }

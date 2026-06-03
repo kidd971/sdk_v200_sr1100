@@ -47,6 +47,14 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(I2S_FMT_DEFAULT=${I2S_FMT_DEFAULT})
     endif()
 
+    if (DEFINED AV_IND)
+        add_compile_definitions(AV_IND=${AV_IND})
+    endif()
+
+    if (DEFINED SAI_CLKGEN_TEST)
+        add_compile_definitions(SAI_CLKGEN_TEST=${SAI_CLKGEN_TEST})
+    endif()
+
     project(IDP CXX C ASM)
     add_subdirectory(library)
     add_subdirectory(third-party)

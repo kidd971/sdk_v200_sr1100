@@ -240,6 +240,37 @@
             }
         },
         {
+            "name": "audio-unidir-quasar-avind-slave-rjf",
+            "inherits": ["audio-unidirectional-quasar"],
+            "description": "Audio unidirectional U5A5, AV IND board, I2S slave, RJF format, no codec",
+            "cacheVariables": {
+                "AV_IND": "1",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "audio-unidir-quasar-avind-master-rjf",
+            "inherits": ["audio-unidirectional-quasar"],
+            "description": "Audio unidirectional U5A5, AV IND board, I2S master, RJF format, no codec",
+            "cacheVariables": {
+                "AV_IND": "1",
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "audio-unidir-sai-clkgen-test",
+            "inherits": ["audio-unidirectional-quasar"],
+            "description": "SAI master clock gen test: outputs BCLK/LRCLK on expansion port without pairing. Flash on SPARK EVK #2, wire to AVIND slave board.",
+            "cacheVariables": {
+                "AV_IND": "1",
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "0",
+                "SAI_CLKGEN_TEST": "1"
+            }
+        },
+        {
             "name": "connection-priority-quasar",
             "description": "Connection priority example for SR11xx with Quasar",
             "hidden": false,

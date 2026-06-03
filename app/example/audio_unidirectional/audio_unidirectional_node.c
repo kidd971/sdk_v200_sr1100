@@ -167,6 +167,15 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
+#ifdef SAI_CLKGEN_TEST
+    /* Test mode: output SAI master clocks + 1kHz sine wave on expansion port without pairing.
+     * Flash SPARK EVK with AV_IND=1, I2S_MASTER_MODE=1, SAI_CLKGEN_TEST=1.
+     * Wire expansion port BCLK/LRCLK/SDOUT/GND to AVIND coordinator slave board.
+     */
+    facade_audio_node_init();
+    while (1);
+#endif
+
     /* Initialize wireless core context switch handler before pairing is available */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
