@@ -50,6 +50,12 @@ __attribute__((weak)) void facade_board_init(void)
     quasar_init(quasar_cfg, &quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 
+    /* Boot indication: single blue blink */
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+    quasar_rgb_set();
+    quasar_timer_delay_ms(200);
+    quasar_rgb_clear();
+
 #if (RTOS_ENABLED == 1)
     tinyusb_freertos_task_setup();
 #else

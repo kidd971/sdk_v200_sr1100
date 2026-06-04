@@ -64,7 +64,7 @@ void quasar_init(quasar_config_t quasar_config, quasar_bsp_status_t *err)
 
     /* Initialize LEDs and buttons. */
     quasar_led_init();
-    // quasar_rgb_init();
+    quasar_rgb_init();
     quasar_button_init();
 
     if (!quasar_config.adc_enabled) {

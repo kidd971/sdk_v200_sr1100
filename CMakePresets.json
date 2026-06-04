@@ -43,6 +43,15 @@
             }
         },
         {
+            "name": "quasar-u535-91evb",
+            "description": "Base configuration quasar-u535 91_535_evb board target",
+            "hidden": true,
+            "inherits": ["quasar-u535"],
+            "cacheVariables": {
+                "U535_BOARD_VARIANT": "91EVB"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u5a5",
             "hidden": true,
             "inherits": [
