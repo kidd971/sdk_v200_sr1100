@@ -14,10 +14,11 @@
 
 /* CONSTANTS ******************************************************************/
 /* **** Sine Wave Test Tone (optional) **** */
-/* Uncomment to replace the I2S line-in source with an internally generated
- * 1 kHz / 96 kHz / 24-bit stereo sine wave. Comment out to restore normal I2S input.
+/* Controlled via CMake: pass -DSINE_WAVE_PRODUCER=1 (or set in CMakePresets.json)
+ * to replace the I2S line-in source with an internally generated
+ * 1 kHz / 96 kHz / 24-bit stereo sine wave.
+ * AUDIO_PRODUCER_SINE_WAVE is injected by CMakeLists.txt when SINE_WAVE_PRODUCER is defined.
  */
- #define AUDIO_PRODUCER_SINE_WAVE
 
 /* **** Main Channel Settings. **** */
 

@@ -50,12 +50,6 @@ __attribute__((weak)) void facade_board_init(void)
     quasar_init(quasar_cfg, &quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 
-    /* Boot indication: single blue blink */
-    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
-    quasar_rgb_set();
-    quasar_timer_delay_ms(200);
-    quasar_rgb_clear();
-
 #if (RTOS_ENABLED == 1)
     tinyusb_freertos_task_setup();
 #else
@@ -117,29 +111,45 @@ __attribute__((weak)) void facade_notify_enter_pairing(void)
         quasar_timer_delay_ms(delay_ms);
         quasar_rgb_clear();
     }
+#ifdef QUASAR_U535_91EVB
+    /* 91EVB: restore always-on power indicator after pairing animation. */
+    quasar_rgb_set();
+#endif
 }
 
 __attribute__((weak)) void facade_notify_not_paired(void)
 {
-    uint16_t delay_ms = 250;
-    uint8_t repeat = 2;
-
-    led_all_off();
-    quasar_rgb_clear();
-    quasar_rgb_configure_color(QUASAR_RGB_COLOR_RED);
-
-    for (uint8_t i = 0; i < repeat; i++) {
-        quasar_timer_delay_ms(delay_ms);
-        quasar_rgb_set();
-        quasar_timer_delay_ms(delay_ms);
+#ifdef QUASAR_U535_91EVB
+    /* 91EVB: LED is always-on power indicator. Flash off 4 times to signal failure. */
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+    for (uint8_t i = 0; i < 4; i++) {
         quasar_rgb_clear();
+        quasar_timer_delay_ms(250);
+        quasar_rgb_set();
+        quasar_timer_delay_ms(250);
     }
+    quasar_rgb_clear();
+#else
+    quasar_rgb_clear();
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+    quasar_rgb_set();
+    quasar_timer_delay_ms(250);
+    quasar_rgb_clear();
+#endif
 }
 
 __attribute__((weak)) void facade_notify_pairing_successful(void)
 {
-    quasar_rgb_configure_color(QUASAR_RGB_COLOR_MAGENTA);
+#ifdef QUASAR_U535_91EVB
+    /* 91EVB: LED is always-on power indicator. Flash off once to signal success. */
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+    quasar_rgb_clear();
+    quasar_timer_delay_ms(250);
     quasar_rgb_set();
+#else
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+    quasar_rgb_set();
+#endif
 }
 
 __attribute__((weak)) void facade_led_all_off(void)
@@ -178,14 +188,12 @@ void quasar_bsp_error_handler(quasar_bsp_status_t quasar_err)
     snprintf(buffer, ERROR_MESSAGE_BUFFER_SIZE, "Quasar Error! Code: %d\n\r", quasar_err);
     facade_print_error_string(buffer);
 
-    /* Configure RGB LED to red for error indication. */
-    quasar_rgb_configure_color(QUASAR_RGB_COLOR_RED);
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
 
-    /* Infinite loop with uniform RGB LED red blinking. */
     while (1) {
         quasar_rgb_set();
-        HAL_Delay(100);
+        HAL_Delay(500);
         quasar_rgb_clear();
-        HAL_Delay(100);
+        HAL_Delay(500);
     }
 }

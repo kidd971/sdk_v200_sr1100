@@ -293,7 +293,11 @@ bool facade_read_button_state(void)
 
 void facade_notify_pairing_successful(void)
 {
+#ifdef QUASAR_U535
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+#else
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_GREEN);
+#endif
     quasar_rgb_set();
 }
 
