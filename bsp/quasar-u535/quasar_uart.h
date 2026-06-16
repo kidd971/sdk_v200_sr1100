@@ -27,8 +27,8 @@ extern "C" {
 typedef enum quasar_uart_selection {
     /*! Select the full feature USART 1. */
     QUASAR_UART_SELECTION_USART1 = 0,
-    /*! Select the full feature USART 2. */
-    QUASAR_UART_SELECTION_USART2 = 1,
+    /*! Select the low-power LPUART 1 (replaces USART2 which is absent on STM32U535). */
+    QUASAR_UART_SELECTION_LPUART1 = 1,
     /*! Select the full feature USART 3. */
     QUASAR_UART_SELECTION_USART3 = 2,
     /*! Select the basic feature UART 4. */

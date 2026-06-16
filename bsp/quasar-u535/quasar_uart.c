@@ -18,9 +18,7 @@
 
 /* PRIVATE GLOBALS ************************************************************/
 void (*uart1_rx_callback)(void) = NULL;
-#if !defined(STM32U535xx)
-void (*uart2_rx_callback)(void) = NULL;
-#endif
+void (*lpuart1_rx_callback)(void) = NULL;
 void (*uart3_rx_callback)(void) = NULL;
 void (*uart4_rx_callback)(void) = NULL;
 void (*uart5_rx_callback)(void) = NULL;
@@ -38,13 +36,11 @@ UART_HandleTypeDef uart_handle_usart1 = {
     .gState = HAL_UART_STATE_READY,
     .RxState = HAL_UART_STATE_READY,
 };
-#if !defined(STM32U535xx)
-UART_HandleTypeDef uart_handle_usart2 = {
-    .Instance = USART2,
+UART_HandleTypeDef uart_handle_lpuart1 = {
+    .Instance = LPUART1,
     .gState = HAL_UART_STATE_READY,
     .RxState = HAL_UART_STATE_READY,
 };
-#endif
 UART_HandleTypeDef uart_handle_usart3 = {
     .Instance = USART3,
     .gState = HAL_UART_STATE_READY,
@@ -160,11 +156,9 @@ void quasar_uart_set_rx_callback(quasar_uart_selection_t uart_selection, void (*
     case QUASAR_UART_SELECTION_USART1:
         uart1_rx_callback = callback;
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        uart2_rx_callback = callback;
+    case QUASAR_UART_SELECTION_LPUART1:
+        lpuart1_rx_callback = callback;
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         uart3_rx_callback = callback;
         break;
@@ -310,11 +304,9 @@ UART_HandleTypeDef *quasar_uart_get_selected_handle(quasar_uart_selection_t uart
     case QUASAR_UART_SELECTION_USART1:
         uart_handle = &uart_handle_usart1;
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        uart_handle = &uart_handle_usart2;
+    case QUASAR_UART_SELECTION_LPUART1:
+        uart_handle = &uart_handle_lpuart1;
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         uart_handle = &uart_handle_usart3;
         break;
@@ -345,11 +337,9 @@ USART_TypeDef *quasar_uart_get_instance(quasar_uart_selection_t uart_selection)
     case QUASAR_UART_SELECTION_USART1:
         uart_instance = USART1;
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        uart_instance = USART2;
+    case QUASAR_UART_SELECTION_LPUART1:
+        uart_instance = LPUART1;
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         uart_instance = USART3;
         break;
@@ -383,11 +373,9 @@ static void uart_enable_clock(quasar_uart_selection_t uart_selection)
     case QUASAR_UART_SELECTION_USART1:
         __HAL_RCC_USART1_CLK_ENABLE();
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        __HAL_RCC_USART2_CLK_ENABLE();
+    case QUASAR_UART_SELECTION_LPUART1:
+        __HAL_RCC_LPUART1_CLK_ENABLE();
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         __HAL_RCC_USART3_CLK_ENABLE();
         break;
@@ -418,11 +406,9 @@ static void uart_disable_clock(quasar_uart_selection_t uart_selection)
     case QUASAR_UART_SELECTION_USART1:
         __HAL_RCC_USART1_CLK_DISABLE();
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        __HAL_RCC_USART2_CLK_DISABLE();
+    case QUASAR_UART_SELECTION_LPUART1:
+        __HAL_RCC_LPUART1_CLK_DISABLE();
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         __HAL_RCC_USART3_CLK_DISABLE();
         break;
@@ -456,11 +442,9 @@ static USART_TypeDef *uart_get_instance(quasar_uart_selection_t uart_selection)
     case QUASAR_UART_SELECTION_USART1:
         uart_instance = USART1;
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        uart_instance = USART2;
+    case QUASAR_UART_SELECTION_LPUART1:
+        uart_instance = LPUART1;
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         uart_instance = USART3;
         break;
@@ -511,8 +495,12 @@ static void uart_configure_protocol(USART_TypeDef *uart_instance, quasar_uart_co
     /* Get the system clock frequency. */
     clock_frequency = quasar_clock_get_system_clock_freq();
 
-    /* Configure the baud rate register based on the baud rate requested and the clock frequency. */
-    uart_instance->BRR = (uint16_t)(clock_frequency / uart_config.baud_rate);
+    /* LPUART1 BRR uses a 256x multiplier to achieve fine resolution at low baud rates. */
+    if (uart_instance == LPUART1) {
+        uart_instance->BRR = (uint32_t)((256ULL * clock_frequency) / uart_config.baud_rate);
+    } else {
+        uart_instance->BRR = (uint32_t)(clock_frequency / uart_config.baud_rate);
+    }
 }
 
 /** @brief Unconfigure the UART protocol.
@@ -585,11 +573,9 @@ static IRQn_Type uart_get_selected_irq(quasar_uart_selection_t uart_selection)
     case QUASAR_UART_SELECTION_USART1:
         uart_irq = USART1_IRQn;
         break;
-#if !defined(STM32U535xx)
-    case QUASAR_UART_SELECTION_USART2:
-        uart_irq = USART2_IRQn;
+    case QUASAR_UART_SELECTION_LPUART1:
+        uart_irq = LPUART1_IRQn;
         break;
-#endif
     case QUASAR_UART_SELECTION_USART3:
         uart_irq = USART3_IRQn;
         break;
@@ -685,14 +671,12 @@ void USART1_IRQHandler(void)
     uart_irq_handler_routine(QUASAR_UART_SELECTION_USART1, &uart_handle_usart1, uart1_rx_callback);
 }
 
-#if !defined(STM32U535xx)
-/** @brief This function handles USART 2 interrupt.
+/** @brief This function handles LPUART 1 interrupt.
  */
-void USART2_IRQHandler(void)
+void LPUART1_IRQHandler(void)
 {
-    uart_irq_handler_routine(QUASAR_UART_SELECTION_USART2, &uart_handle_usart2, uart2_rx_callback);
+    uart_irq_handler_routine(QUASAR_UART_SELECTION_LPUART1, &uart_handle_lpuart1, lpuart1_rx_callback);
 }
-#endif
 
 /** @brief This function handles USART 3 interrupt.
  */

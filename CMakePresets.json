@@ -282,6 +282,7 @@
         },
         {
             "name": "audio-unidir-quasar-avind-slave-rjf",
+            "hidden": true,
             "inherits": ["audio-unidirectional-quasar"],
             "description": "Audio unidirectional U5A5, AV IND board, I2S slave, RJF format, no codec",
             "cacheVariables": {
@@ -292,6 +293,7 @@
         },
         {
             "name": "audio-unidir-quasar-avind-master-rjf",
+            "hidden": true,
             "inherits": ["audio-unidirectional-quasar"],
             "description": "Audio unidirectional U5A5, AV IND board, I2S master, RJF format, no codec",
             "cacheVariables": {

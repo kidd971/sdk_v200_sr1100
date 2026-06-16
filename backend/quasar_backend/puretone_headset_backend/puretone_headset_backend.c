@@ -311,7 +311,11 @@ void facade_expansion_uart_init(uint32_t baud_rate)
         .type      = QUASAR_GPIO_TYPE_PP,
         .pull      = QUASAR_GPIO_PULL_UP,
         .speed     = QUASAR_GPIO_SPEED_LOW,
-        .alternate = QUASAR_GPIO_ALTERNATE_AF7,
+#ifdef QUASAR_U535
+        .alternate = QUASAR_GPIO_ALTERNATE_AF8,  /* LPUART1 on u535 */
+#else
+        .alternate = QUASAR_GPIO_ALTERNATE_AF7,  /* USART2 on u5a5 */
+#endif
     };
     quasar_gpio_config_t gpio_rx = {
         .port      = QUASAR_DEF_EXPANSION_UART_RX_PORT,
@@ -320,14 +324,18 @@ void facade_expansion_uart_init(uint32_t baud_rate)
         .type      = QUASAR_GPIO_TYPE_OD,
         .pull      = QUASAR_GPIO_PULL_UP,
         .speed     = QUASAR_GPIO_SPEED_LOW,
-        .alternate = QUASAR_GPIO_ALTERNATE_AF7,
+#ifdef QUASAR_U535
+        .alternate = QUASAR_GPIO_ALTERNATE_AF8,  /* LPUART1 on u535 */
+#else
+        .alternate = QUASAR_GPIO_ALTERNATE_AF7,  /* USART2 on u5a5 */
+#endif
     };
     quasar_uart_config_t uart_cfg = {
         .uart_selection = QUASAR_DEF_UART_SELECTION_EXPANSION,
         .baud_rate      = baud_rate,
         .parity         = QUASAR_UART_PARITY_NONE,
         .stop           = QUASAR_UART_STOP_BITS_1B,
-        .irq_priority   = QUASAR_IRQ_PRIORITY_0,
+        .irq_priority   = QUASAR_IRQ_PRIORITY_5,
         .gpio_config_tx = gpio_tx,
         .gpio_config_rx = gpio_rx,
     };
