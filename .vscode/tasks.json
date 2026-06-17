@@ -4,22 +4,9 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "CMake: Build Puretone Master RJF (incremental)",
+            "label": "CMake: Clean Rebuild All Puretone U5A5 Variants (12 bins)",
             "type": "shell",
-            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run build-puretone-master-rjf",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        },
-        {
-            "label": "CMake: Clean Rebuild Puretone Master RJF",
-            "type": "shell",
-            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-master-rjf",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-variants",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -27,9 +14,9 @@
             "group": "build"
         },
         {
-            "label": "CMake: Clean Rebuild All Puretone Variants (12 bins)",
+            "label": "CMake: Clean Rebuild All Puretone U535 Variants (12 bins)",
             "type": "shell",
-            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-variants",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-u535-variants",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -43,7 +30,11 @@
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
     ]
 }
