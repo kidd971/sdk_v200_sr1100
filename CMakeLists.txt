@@ -51,10 +51,6 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(AV_IND=${AV_IND})
     endif()
 
-    if (DEFINED SAI_CLKGEN_TEST)
-        add_compile_definitions(SAI_CLKGEN_TEST=${SAI_CLKGEN_TEST})
-    endif()
-
     if (DEFINED SINE_DEBUG_CAPTURE)
         add_compile_definitions(SINE_DEBUG_CAPTURE=1)
     endif()

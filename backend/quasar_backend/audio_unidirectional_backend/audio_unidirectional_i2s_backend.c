@@ -35,24 +35,6 @@ static void configure_max98091(bool input_enabled, bool output_enabled);
 #endif
 
 /* PRIVATE GLOBALS ************************************************************/
-#ifdef SAI_CLKGEN_TEST
-static int32_t s_sine_dma_buf[48 * 2];
-
-static const int16_t s_sine_1khz_48k[48] = {
-    0,      4276,   8480,   12539,  16383,  19947,  23169,  25995,
-    28377,  30272,  31650,  32486,  32767,  32486,  31650,  30272,
-    28377,  25995,  23169,  19947,  16383,  12539,  8480,   4276,
-    0,      -4276,  -8480,  -12539, -16383, -19947, -23169, -25995,
-    -28377, -30272, -31650, -32486, -32767, -32486, -31650, -30272,
-    -28377, -25995, -23169, -19947, -16383, -12539, -8480,  -4276,
-};
-
-static void sine_tx_dma_complete(void)
-{
-    quasar_audio_sai_write_non_blocking((uint8_t *)s_sine_dma_buf, 96);
-}
-#endif
-
 #if !NO_CODEC
 static max98091_i2c_hal_t codec_hal = {
     .i2c_addr = MAX98091A_I2C_ADDR,
@@ -121,16 +103,6 @@ void facade_audio_node_init(void)
     quasar_timer_delay_ms(1);
     configure_sai(sai_cfg);
     configure_max98091(false, true);
-#endif
-
-#ifdef SAI_CLKGEN_TEST
-    for (int i = 0; i < 48; i++) {
-        int32_t s = (int32_t)s_sine_1khz_48k[i] << 8;
-        s_sine_dma_buf[i * 2]     = s;
-        s_sine_dma_buf[i * 2 + 1] = s;
-    }
-    quasar_audio_set_sai_tx_dma_cplt_callback(sine_tx_dma_complete);
-    quasar_audio_sai_write_non_blocking((uint8_t *)s_sine_dma_buf, 96);
 #endif
 }
 

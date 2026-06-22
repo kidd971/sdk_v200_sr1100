@@ -411,18 +411,6 @@
             }
         },
         {
-            "name": "audio-unidir-sai-clkgen-test",
-            "inherits": ["audio-unidirectional-quasar"],
-            "description": "SAI master clock gen test: outputs BCLK/LRCLK on expansion port without pairing. Flash on SPARK EVK #2, wire to AVIND slave board.",
-            "cacheVariables": {
-                "AV_IND": "1",
-                "NO_CODEC": "1",
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "0",
-                "SAI_CLKGEN_TEST": "1"
-            }
-        },
-        {
             "name": "connection-priority-quasar",
             "description": "Connection priority example for SR11xx with Quasar",
             "hidden": false,
