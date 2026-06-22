@@ -31,9 +31,6 @@
 #include "sac_src_cmsis.h"
 #include "sac_stats.h"
 #include "sac_volume.h"
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-#include "sac_sinus_endpoint_96k.h"
-#endif
 #include "swc_api.h"
 #include "swc_cfg.h"
 #include "swc_cfg_coord.h"
@@ -843,18 +840,9 @@ static void app_audio_core_init(void)
     sac_processing_interface_t back_channel_volume_iface = {0};
 
     sac_endpoint_swc_init(&back_channel_swc_producer_iface, &main_channel_swc_consumer_iface);
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-    /* Sine wave mode: back channel consumer (headphone output) still uses I2S; producer is internal. */
-    sac_facade_audio_endpoint_init(NULL, &back_channel_consumer_iface);
-    main_channel_producer_iface.action = ep_sinus_96k_produce;
-    main_channel_producer_iface.start  = ep_sinus_96k_start;
-    main_channel_producer_iface.stop   = ep_sinus_96k_stop;
-    facade_set_audio_complete_callback(back_channel_audio_tx_complete_callback, NULL);
-#else
     sac_facade_audio_endpoint_init(&main_channel_producer_iface, &back_channel_consumer_iface);
     facade_set_audio_complete_callback(back_channel_audio_tx_complete_callback,
                                        main_channel_audio_rx_complete_callback);
-#endif
 
     app_audio_core_fallback_interface_init(&fallback_iface);
     app_audio_core_downsampling_interface_init(&main_channel_downsampling_iface);
@@ -970,11 +958,7 @@ static void app_audio_core_init(void)
     /* Initialize codec producer endpoint. */
     sac_endpoint_cfg_t main_channel_producer_cfg = {
         .use_encapsulation = false,
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-        .delayed_action = false,
-#else
         .delayed_action = !USB_AUDIO_ENABLED,
-#endif
         .channel_count = MAIN_CHANNEL_CHANNEL_COUNT,
         .audio_payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_SWC_PAYLOAD_SIZE : MAIN_CHANNEL_I2S_PAYLOAD_SIZE,
         .queue_size = SAC_MIN_PRODUCER_QUEUE_SIZE + (USB_AUDIO_ENABLED ? MAIN_CHANNEL_USB_FS_PRODUCER_BUFFERING : 0),
@@ -1040,17 +1024,10 @@ static void app_audio_core_init(void)
                                                                             &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-    /* Processing stage packs 24-bit audio before sending.
-     * Real audio (master or slave, RJF): the codec delivers right-justified 24-bit
-     * audio (bits[23:0]), so use the plain 24-bit packing == v230_official / the
-     * AP-validated master config.
-     * The sine producer is the only left-justified source (sine << 8), so SINE builds
-     * need the 32->24 mode (>>8) to extract bits[31:8]. */
-#if defined(AUDIO_PRODUCER_SINE_WAVE)
-    main_channel_packing_instance.packing_mode = SAC_PACK_32BITS_24BITS;
-#else
+    /* Processing stage packs 24-bit audio before sending. Real audio (master or slave,
+     * RJF) and SINE_INJECT_I2S both deliver right-justified 24-bit audio (bits[23:0]),
+     * so use the plain 24-bit packing == v230_official / the AP-validated config. */
     main_channel_packing_instance.packing_mode = SAC_PACK_24BITS;
-#endif
     main_channel_packing_processing = sac_processing_stage_init((void *)&main_channel_packing_instance, "Audio Packing",
                                                                 main_channel_packing_iface, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -1661,6 +1638,12 @@ static void main_channel_audio_rx_complete_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
 
+#if SINE_INJECT_I2S
+    /* External I2S clocks the DMA (precise 96 kHz timing); overwrite the just-read buffer
+     * with a 1 kHz sine before it enters the pipeline. Same path/format as real audio. */
+    sac_facade_i2s_inject_sine();
+#endif
+
     /* The codec produces audio samples when it receives input audio. */
     sac_pipeline_produce(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -1722,12 +1705,6 @@ static void audio_process_main_channel_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
     uint32_t buffer_load = 0;
-
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-    /* No DMA callback drives production; generate one packet on each timer invocation. */
-    sac_pipeline_produce(main_channel_sac_pipeline, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-#endif
 
     buffer_load = sac_pipeline_get_producer_buffer_load(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -2187,26 +2164,9 @@ static void app_init(void)
     sac_pipeline_start(back_channel_accumulator_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-    /* DEBUG (sine wave test only): Force fallback to stay in mode 0 (Normal, no downsampling).
-     * Normal master/slave builds keep adaptive fallback enabled. */
-    sac_fallback_set_manual_mode(&main_channel_fallback_instance, true, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-    sac_fallback_set_current_mode(&main_channel_fallback_instance, 0, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-#endif
-
     /* Start timers used for audio processes. */
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-    /* Reconfigure main channel timer to the audio packet period before starting. */
-    facade_audio_sine_wave_timer_reconfig();
-#endif
     facade_audio_process_main_channel_timer_start();
     facade_audio_process_back_channel_timer_start();
-#ifdef AUDIO_PRODUCER_SINE_WAVE
-    /* Sine wave mode has no DMA RX callback to fire the first produce; trigger manually. */
-    facade_audio_process_main_channel_timer_trigger();
-#endif
 
     /* Start data and statistics timer. */
     facade_data_timer_start();

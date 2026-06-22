@@ -55,16 +55,16 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(SAI_CLKGEN_TEST=${SAI_CLKGEN_TEST})
     endif()
 
-    if (DEFINED SINE_WAVE_PRODUCER)
-        add_compile_definitions(AUDIO_PRODUCER_SINE_WAVE=1)
-    endif()
-
     if (DEFINED SINE_DEBUG_CAPTURE)
         add_compile_definitions(SINE_DEBUG_CAPTURE=1)
     endif()
 
     if (DEFINED NO_CODEC)
         add_compile_definitions(NO_CODEC=1)
+    endif()
+
+    if (DEFINED SINE_INJECT_I2S)
+        add_compile_definitions(SINE_INJECT_I2S=1)
     endif()
 
     project(IDP CXX C ASM)

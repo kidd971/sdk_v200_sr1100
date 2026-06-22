@@ -13,13 +13,6 @@
 #include "sac_utils.h"
 
 /* CONSTANTS ******************************************************************/
-/* **** Sine Wave Test Tone (optional) **** */
-/* Controlled via CMake: pass -DSINE_WAVE_PRODUCER=1 (or set in CMakePresets.json)
- * to replace the I2S line-in source with an internally generated
- * 1 kHz / 96 kHz / 24-bit stereo sine wave.
- * AUDIO_PRODUCER_SINE_WAVE is injected by CMakeLists.txt when SINE_WAVE_PRODUCER is defined.
- */
-
 /* **** Sine Wave Debug Capture (optional) **** */
 /* Enabled via CMake preset "puretone-headset-quasar-u5a5-slave-rjf-sine-dbg",
  * or manually by uncommenting the line below.

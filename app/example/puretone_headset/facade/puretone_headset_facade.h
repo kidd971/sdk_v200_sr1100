@@ -122,7 +122,6 @@ void facade_rx_data_conn_status(void);
  *  @param[in] callback  Callback function to execute on timer event.
  */
 void facade_audio_process_main_channel_timer_init(void (*callback)(void));
-void facade_audio_sine_wave_timer_reconfig(void);
 
 /** @brief Initialize the timer of the back channel audio process.
  *

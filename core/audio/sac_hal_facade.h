@@ -34,6 +34,13 @@ extern "C" {
  */
 void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *producer_iface, sac_endpoint_interface_t *consumer_iface);
 
+/** @brief Overwrite the last I2S producer buffer with a 1 kHz sine (SINE_INJECT_I2S).
+ *
+ *  Call from the I2S RX-complete callback before sac_pipeline_produce: the external I2S
+ *  DMA provides the 96 kHz timing, the buffer content is replaced with sine.
+ */
+void sac_facade_i2s_inject_sine(void);
+
 /** @brief Initialize the Clock Drift Compensation processing stage.
  *
  *  @param[in]  format  Audio sample format used in the CDC processing.

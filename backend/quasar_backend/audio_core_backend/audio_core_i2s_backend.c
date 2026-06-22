@@ -10,8 +10,18 @@
 /* INCLUDES *******************************************************************/
 #include "quasar.h"
 #include "sac_hal_facade.h"
+#if SINE_INJECT_I2S
+#include "sac_sinus_endpoint_96k.h"
+#endif
 
 /* PRIVATE GLOBALS ************************************************************/
+#if SINE_INJECT_I2S
+/* SINE_INJECT_I2S: pointer/size of the most recent producer buffer the I2S DMA fills.
+ * The RX-complete callback overwrites it with sine via sac_facade_i2s_inject_sine(). */
+static uint8_t *s_inject_buf  = NULL;
+static uint16_t s_inject_size = 0;
+#endif
+
 #ifdef SINE_DEBUG_CAPTURE
 /* Captures what is actually written to the SAI DMA (codec input).
  * 192 entries = 96 stereo frames = one full 1 kHz cycle at 96 kHz. */
@@ -44,6 +54,15 @@ void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *codec_producer_ifa
     }
 }
 
+#if SINE_INJECT_I2S
+void sac_facade_i2s_inject_sine(void)
+{
+    if (s_inject_buf != NULL) {
+        ep_sinus_96k_fill_rj(s_inject_buf, s_inject_size);
+    }
+}
+#endif
+
 /* PRIVATE FUNCTIONS **********************************************************/
 /** @brief Produce Endpoint of the audio codec
  *
@@ -55,6 +74,13 @@ void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *codec_producer_ifa
 static uint16_t ep_i2s_action_produce(void *instance, uint8_t *samples, uint16_t size)
 {
     (void)instance;
+
+#if SINE_INJECT_I2S
+    /* Remember this buffer so the RX-complete callback can overwrite it with sine once
+     * the DMA (which only serves as the precise 96 kHz timing source) has filled it. */
+    s_inject_buf  = samples;
+    s_inject_size = size;
+#endif
 
     quasar_audio_sai_read_non_blocking(samples, size);
 

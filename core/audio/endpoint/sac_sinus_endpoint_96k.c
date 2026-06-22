@@ -10,6 +10,8 @@
 /* INCLUDES *******************************************************************/
 #include "sac_sinus_endpoint_96k.h"
 
+#if SINE_INJECT_I2S
+
 /* CONSTANTS ******************************************************************/
 /* One period of 1 kHz sampled at 96 kHz: 96 samples, 24-bit amplitude (±8388607). */
 #define SINE_TABLE_LEN 96
@@ -30,56 +32,20 @@ static const int32_t sine_1khz_96ks_24bit[SINE_TABLE_LEN] = {
    -4194303, -3706818, -3210028, -2695926, -2170852, -1636007, -1094832,  -548962,
 };
 
-/* PRIVATE GLOBALS ************************************************************/
-static uint32_t s_phase = 0;
-#ifdef SINE_DEBUG_CAPTURE
-/* Captures one full 1 kHz cycle (96 stereo frames) of produced output.
- * Inspect in debugger: s_debug_buf[0,2,4...] = L, s_debug_buf[1,3,5...] = R. */
-volatile int32_t s_debug_buf[SINE_TABLE_LEN * 2];
-static uint32_t s_debug_idx = 0;
-#endif
-
 /* PUBLIC FUNCTIONS ***********************************************************/
-uint16_t ep_sinus_96k_produce(void *instance, uint8_t *samples, uint16_t size)
+void ep_sinus_96k_fill_rj(uint8_t *samples, uint16_t size)
 {
-    (void)instance;
+    static uint32_t s_phase_rj = 0;
     int32_t *out = (int32_t *)samples;
     uint32_t frame_count = size / (sizeof(int32_t) * 2); /* stereo: 2 × int32_t per frame */
 
     for (uint32_t i = 0; i < frame_count; i++) {
-        /* Left-justify the 24-bit value in the 32-bit word to match STM32 SAI DMA format
-         * (audio in bits[31:8], lower 8 bits = 0), as expected by the packing stage. */
-        int32_t val = sine_1khz_96ks_24bit[s_phase] << 8;
+        /* Right-justified 24-bit value in bits[23:0] (NO <<8): matches the real-I2S
+         * SAC_PACK_24BITS path so injected sine runs the exact same pipeline as real audio. */
+        int32_t val = sine_1khz_96ks_24bit[s_phase_rj];
         out[i * 2]     = val; /* Left  */
         out[i * 2 + 1] = val; /* Right */
-#ifdef SINE_DEBUG_CAPTURE
-        s_debug_buf[s_debug_idx]     = val;
-        s_debug_buf[s_debug_idx + 1] = val;
-        s_debug_idx = (s_debug_idx + 2 >= sizeof(s_debug_buf) / sizeof(s_debug_buf[0])) ? 0 : s_debug_idx + 2;
-#endif
-        s_phase = (s_phase + 1 >= SINE_TABLE_LEN) ? 0 : s_phase + 1;
+        s_phase_rj = (s_phase_rj + 1 >= SINE_TABLE_LEN) ? 0 : s_phase_rj + 1;
     }
-
-    return size;
 }
-
-uint16_t ep_sinus_96k_consume(void *instance, uint8_t *samples, uint16_t size)
-{
-    (void)instance;
-    (void)samples;
-    (void)size;
-
-    return 0;
-}
-
-void ep_sinus_96k_start(void *instance)
-{
-    (void)instance;
-
-    s_phase = 0;
-}
-
-void ep_sinus_96k_stop(void *instance)
-{
-    (void)instance;
-}
+#endif
