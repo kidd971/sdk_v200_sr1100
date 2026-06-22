@@ -382,10 +382,14 @@ void facade_uwb_shutdown(void)
 
 void facade_set_i2s_mux(bool use_ext)
 {
+#if !NO_CODEC
     quasar_i2s_mux_select_t select = use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC;
 
     quasar_audio_set_i2s_mux_selection(select);
     facade_i2s_backend_track_mux(select);
+#else
+    (void)use_ext;
+#endif
 }
 
 void facade_battery_init(void)

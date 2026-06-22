@@ -11,6 +11,14 @@
 #include "quasar.h"
 #include "sac_hal_facade.h"
 
+/* PRIVATE GLOBALS ************************************************************/
+#ifdef SINE_DEBUG_CAPTURE
+/* Captures what is actually written to the SAI DMA (codec input).
+ * 192 entries = 96 stereo frames = one full 1 kHz cycle at 96 kHz. */
+volatile int32_t s_node_debug_buf[192];
+static uint32_t s_node_debug_idx = 0;
+#endif
+
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static uint16_t ep_i2s_action_produce(void *instance, uint8_t *samples, uint16_t size);
 static void ep_i2s_start_produce(void *instance);
@@ -85,6 +93,30 @@ static void ep_i2s_stop_produce(void *instance)
 static uint16_t ep_i2s_action_consume(void *instance, uint8_t *samples, uint16_t size)
 {
     (void)instance;
+
+#ifdef SINE_DEBUG_CAPTURE
+    {
+        int32_t *in = (int32_t *)samples;
+        uint32_t count = size / sizeof(int32_t);
+
+        for (uint32_t i = 0; i < count; i++) {
+            s_node_debug_buf[s_node_debug_idx] = in[i];
+            s_node_debug_idx = (s_node_debug_idx + 1 >= sizeof(s_node_debug_buf) / sizeof(s_node_debug_buf[0])) ? 0 : s_node_debug_idx + 1;
+        }
+    }
+#endif
+
+    /* The STM32 SAI DATA register expects 24-bit audio left-aligned in bits[31:8].
+     * sac_unpack_24bits outputs right-justified values (bits[23:0]). Shift left by 8
+     * to place audio in the correct position before DMA feeds the SAI DR. */
+    {
+        uint32_t *buf = (uint32_t *)samples;
+        uint32_t count = size / sizeof(uint32_t);
+
+        for (uint32_t i = 0; i < count; i++) {
+            buf[i] <<= 8;
+        }
+    }
 
     quasar_audio_sai_write_non_blocking(samples, size);
 

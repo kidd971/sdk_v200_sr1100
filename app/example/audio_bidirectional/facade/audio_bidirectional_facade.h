@@ -207,19 +207,6 @@ uint32_t facade_get_node_usb_audio_tx_fifo_sample_count(void);
  */
 void facade_set_i2s_mux(bool use_ext);
 
-/** @brief Reconfigure the SAI audio format.
- *
- *  Deinitializes the SAI peripheral and reinitializes it with the new protocol.
- *  Must only be called after facade_audio_coord_init() or facade_audio_node_init().
- *
- *  @param[in] fmt  Format mode: 1=RJF (LSB justified), 2=LJF (MSB justified), 3=I2S standard.
- */
-void facade_set_i2s_fmt(uint8_t fmt);
-
-/** @brief Get the current SAI format index (1=RJF, 2=LJF, 3=I2S standard).
- */
-uint8_t facade_get_i2s_fmt(void);
-
 /** @brief Initialize the ADC peripheral for battery level monitoring.
  */
 void facade_battery_init(void);

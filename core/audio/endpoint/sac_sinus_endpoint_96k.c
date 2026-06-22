@@ -32,6 +32,12 @@ static const int32_t sine_1khz_96ks_24bit[SINE_TABLE_LEN] = {
 
 /* PRIVATE GLOBALS ************************************************************/
 static uint32_t s_phase = 0;
+#ifdef SINE_DEBUG_CAPTURE
+/* Captures one full 1 kHz cycle (96 stereo frames) of produced output.
+ * Inspect in debugger: s_debug_buf[0,2,4...] = L, s_debug_buf[1,3,5...] = R. */
+volatile int32_t s_debug_buf[SINE_TABLE_LEN * 2];
+static uint32_t s_debug_idx = 0;
+#endif
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 uint16_t ep_sinus_96k_produce(void *instance, uint8_t *samples, uint16_t size)
@@ -46,6 +52,11 @@ uint16_t ep_sinus_96k_produce(void *instance, uint8_t *samples, uint16_t size)
         int32_t val = sine_1khz_96ks_24bit[s_phase] << 8;
         out[i * 2]     = val; /* Left  */
         out[i * 2 + 1] = val; /* Right */
+#ifdef SINE_DEBUG_CAPTURE
+        s_debug_buf[s_debug_idx]     = val;
+        s_debug_buf[s_debug_idx + 1] = val;
+        s_debug_idx = (s_debug_idx + 2 >= sizeof(s_debug_buf) / sizeof(s_debug_buf[0])) ? 0 : s_debug_idx + 2;
+#endif
         s_phase = (s_phase + 1 >= SINE_TABLE_LEN) ? 0 : s_phase + 1;
     }
 

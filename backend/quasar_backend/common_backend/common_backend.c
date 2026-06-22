@@ -20,9 +20,6 @@
 /* CONSTANTS ******************************************************************/
 #define ERROR_MESSAGE_BUFFER_SIZE 50
 
-/* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static void led_all_off(void);
-
 /* PUBLIC FUNCTIONS ***********************************************************/
 __attribute__((weak)) void facade_context_switch_trigger(void)
 {
@@ -168,17 +165,6 @@ __attribute__((weak)) uint32_t facade_get_tick_ms(void)
 __attribute__((weak)) void facade_wait_for_interrupt(void)
 {
     __WFI();
-}
-
-/* PRIVATE FUNCTIONS **********************************************************/
-/** @brief Turn off all LEDs.
- */
-static void led_all_off(void)
-{
-    quasar_led_clear(QUASAR_LED_USER_1);
-    quasar_led_clear(QUASAR_LED_USER_2);
-    quasar_led_clear(QUASAR_LED_USER_3);
-    quasar_led_clear(QUASAR_LED_USER_4);
 }
 
 void quasar_bsp_error_handler(quasar_bsp_status_t quasar_err)

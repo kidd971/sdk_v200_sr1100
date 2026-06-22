@@ -325,6 +325,16 @@ static uint16_t pack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
     return ret;
 }
 
+/* Debug captures for pack_32bits_24bits (coord send path):
+ * s_pack_in_buf  = input  (left-justified 32-bit, should be sine[n] << 8)
+ * s_pack_out_buf = output (packed 24-bit as uint32, should be sine[n]) */
+#ifdef SINE_DEBUG_CAPTURE
+volatile int32_t  s_pack_in_buf[192];
+static uint32_t   s_pack_in_idx = 0;
+volatile uint32_t s_pack_out_buf[192];
+static uint32_t   s_pack_out_idx = 0;
+#endif
+
 /** @brief Pack 32-bit words containing 32-bit audio samples into 24-bit audio samples.
  *
  *  @param[in]  buffer_in       Array of the input 32-bit samples containing 32-bit audio.
@@ -341,8 +351,16 @@ static uint16_t pack_32bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
     uint16_t ret = 0;
 
     for (i = 0; i < sample_count; i++) {
+#ifdef SINE_DEBUG_CAPTURE
+        s_pack_in_buf[s_pack_in_idx] = (int32_t)(*data32_in);
+        s_pack_in_idx = (s_pack_in_idx + 1 >= sizeof(s_pack_in_buf) / sizeof(s_pack_in_buf[0])) ? 0 : s_pack_in_idx + 1;
+#endif
         /* Copy Sample. */
         *(uint32_t *)(&(data_out[0])) = (((*data32_in) >> 8) & 0xFFFFFF);
+#ifdef SINE_DEBUG_CAPTURE
+        s_pack_out_buf[s_pack_out_idx] = *(uint32_t *)(&(data_out[0]));
+        s_pack_out_idx = (s_pack_out_idx + 1 >= sizeof(s_pack_out_buf) / sizeof(s_pack_out_buf[0])) ? 0 : s_pack_out_idx + 1;
+#endif
         /* Increment return size. */
         ret += SAMPLE_SIZE_24BITS;
 
@@ -688,6 +706,16 @@ static uint16_t unpack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
     return ret;
 }
 
+/* Debug captures for unpack_24bits:
+ * s_unpack_in_buf  = raw packed input  (3-byte value read as uint32, before sign-extend)
+ * s_unpack_debug_buf = unpacked output (right-justified 32-bit, after sign-extend) */
+#ifdef SINE_DEBUG_CAPTURE
+volatile uint32_t s_unpack_in_buf[192];
+static uint32_t s_unpack_in_idx = 0;
+volatile int32_t s_unpack_debug_buf[192];
+static uint32_t s_unpack_debug_idx = 0;
+#endif
+
 /** @brief Unpack 24-bit audio samples into 32-bit audio samples.
  *
  *  @param[in]  buffer_in       Array of the input 24-bit samples.
@@ -706,9 +734,20 @@ static uint16_t unpack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
     for (i = 0; i < sample_count; i++) {
         /* Copy Sample. */
         (*data32_out) = (*(uint32_t *)(&(data_in[0])) & 0xFFFFFF);
+
+#ifdef SINE_DEBUG_CAPTURE
+        s_unpack_in_buf[s_unpack_in_idx] = (*data32_out);
+        s_unpack_in_idx = (s_unpack_in_idx + 1 >= sizeof(s_unpack_in_buf) / sizeof(s_unpack_in_buf[0])) ? 0 : s_unpack_in_idx + 1;
+#endif
+
         extend_msb_24bits_value(data32_out);
         /* Increment return size. */
         ret += SAMPLE_SIZE_32BITS;
+
+#ifdef SINE_DEBUG_CAPTURE
+        s_unpack_debug_buf[s_unpack_debug_idx] = (int32_t)(*data32_out);
+        s_unpack_debug_idx = (s_unpack_debug_idx + 1 >= sizeof(s_unpack_debug_buf) / sizeof(s_unpack_debug_buf[0])) ? 0 : s_unpack_debug_idx + 1;
+#endif
 
         /* Increment pointers. */
         data_in += SAMPLE_SIZE_24BITS;

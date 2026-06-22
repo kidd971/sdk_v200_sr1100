@@ -59,6 +59,14 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(AUDIO_PRODUCER_SINE_WAVE=1)
     endif()
 
+    if (DEFINED SINE_DEBUG_CAPTURE)
+        add_compile_definitions(SINE_DEBUG_CAPTURE=1)
+    endif()
+
+    if (DEFINED NO_CODEC)
+        add_compile_definitions(NO_CODEC=1)
+    endif()
+
     project(IDP CXX C ASM)
     add_subdirectory(library)
     add_subdirectory(third-party)

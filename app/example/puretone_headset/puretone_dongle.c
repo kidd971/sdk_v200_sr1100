@@ -295,7 +295,6 @@ static void at_start_shutdown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
 static void at_set_vol(uint8_t vol);
-static void at_i2s_fmt_change(uint8_t fmt);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
@@ -328,8 +327,6 @@ int main(void)
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
     at_cmd_core_register_vol_cb(at_set_vol);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
-    at_cmd_core_register_i2s_fmt_cb(at_i2s_fmt_change);
-    at_cmd_core_set_i2s_fmt(facade_get_i2s_fmt());
     at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */
@@ -1043,8 +1040,14 @@ static void app_audio_core_init(void)
                                                                             &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-    /* Processing stage packs into 24 bits before sending if fallback is deactivated. */
-    main_channel_packing_instance.packing_mode = SAC_PACK_24BITS;
+    /* Processing stage packs into 24 bits before sending if fallback is deactivated.
+     * The SAI is configured for 24-bit audio left-aligned in bits[31:8] (see the
+     * matching <<8 on the consume/output path in audio_core_i2s_backend.c), and the
+     * I2S producer reads SAI samples raw. The sine producer likewise emits left-
+     * justified samples (sine << 8). So both real-audio and sine inputs are left-
+     * justified and must be packed with the 32->24 mode (>>8) to extract bits[31:8].
+     * Using SAC_PACK_24BITS here grabs bits[23:0] instead -> white noise. */
+    main_channel_packing_instance.packing_mode = SAC_PACK_32BITS_24BITS;
     main_channel_packing_processing = sac_processing_stage_init((void *)&main_channel_packing_instance, "Audio Packing",
                                                                 main_channel_packing_iface, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -2181,6 +2184,15 @@ static void app_init(void)
     sac_pipeline_start(back_channel_accumulator_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
+#ifdef AUDIO_PRODUCER_SINE_WAVE
+    /* DEBUG (sine wave test only): Force fallback to stay in mode 0 (Normal, no downsampling).
+     * Normal master/slave builds keep adaptive fallback enabled. */
+    sac_fallback_set_manual_mode(&main_channel_fallback_instance, true, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_set_current_mode(&main_channel_fallback_instance, 0, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
+
     /* Start timers used for audio processes. */
 #ifdef AUDIO_PRODUCER_SINE_WAVE
     /* Reconfigure main channel timer to the audio packet period before starting. */
@@ -2298,11 +2310,6 @@ static void at_set_vol(uint8_t vol)
         sac_processing_ctrl(back_channel_volume_processing, back_channel_sac_pipeline,
                             SAC_VOLUME_INCREASE, SAC_NO_ARG, &sac_status);
     }
-}
-
-static void at_i2s_fmt_change(uint8_t fmt)
-{
-    facade_set_i2s_fmt(fmt);
 }
 
 void sac_error_handler(sac_status_t sac_status)

@@ -248,7 +248,6 @@ static void at_stop(void);
 static void at_set_vol(uint8_t vol);
 static void at_next_track(void);
 static void at_pre_track(void);
-static void at_i2s_fmt_change(uint8_t fmt);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
@@ -287,8 +286,6 @@ int main(void)
     at_cmd_core_register_pre_track_cb(at_pre_track);
     at_cmd_core_register_battery_cb(facade_read_battery_level_pct);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
-    at_cmd_core_register_i2s_fmt_cb(at_i2s_fmt_change);
-    at_cmd_core_set_i2s_fmt(facade_get_i2s_fmt());
     at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */
@@ -1828,11 +1825,6 @@ static void at_next_track(void)
 static void at_pre_track(void)
 {
     s_pending_cmd = 2;
-}
-
-static void at_i2s_fmt_change(uint8_t fmt)
-{
-    facade_set_i2s_fmt(fmt);
 }
 
 void sac_error_handler(sac_status_t sac_status)

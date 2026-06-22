@@ -25,6 +25,12 @@
 /* PRIVATE GLOBALS ************************************************************/
 static void (*sai_dma_rx_irq_callback)(void);
 static void (*sai_dma_tx_irq_callback)(void);
+#ifdef SINE_DEBUG_CAPTURE
+volatile uint32_t dbg_sai_tx_err_count = 0;
+volatile uint32_t dbg_sai_tx_lfsdet    = 0;
+volatile uint32_t dbg_sai_tx_afsdet    = 0;
+volatile uint32_t dbg_sai_tx_ovrudr    = 0;
+#endif
 
 SAI_HandleTypeDef hsai_tx = {
     .Instance = SAI1_Block_A,
@@ -304,6 +310,13 @@ void quasar_audio_sai_write_non_blocking(uint8_t *data, uint16_t size)
 {
     /* Check SAI error flags. */
     if (hsai_tx.Instance->SR & (SAI_xSR_LFSDET | SAI_xSR_AFSDET | SAI_xSR_OVRUDR)) {
+#ifdef SINE_DEBUG_CAPTURE
+        uint32_t sr = hsai_tx.Instance->SR;
+        dbg_sai_tx_err_count++;
+        if (sr & SAI_xSR_LFSDET)  dbg_sai_tx_lfsdet++;
+        if (sr & SAI_xSR_AFSDET)  dbg_sai_tx_afsdet++;
+        if (sr & SAI_xSR_OVRUDR)  dbg_sai_tx_ovrudr++;
+#endif
         /* Error detected. */
         do {
             /* Disable SAI block and make sure it is fully disabled. */

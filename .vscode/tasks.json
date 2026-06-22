@@ -24,6 +24,16 @@
             "group": "build"
         },
         {
+            "label": "CMake: Clean Rebuild Puretone U5A5 Dual-Radio Pair (HS+dongle, 2 bins)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.pixi/bin/pixi.exe run clean-build-puretone-dualradio",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
             "label": "[DFU/STM32] Flash binary",
             "type": "shell",
             "command": "${workspaceFolder}/.pixi/bin/pixi.exe run flash ${command:cmake.selectLaunchTarget}",

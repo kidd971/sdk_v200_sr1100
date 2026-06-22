@@ -252,7 +252,6 @@ static void at_start_shutdown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
 static void at_set_vol(uint8_t vol);
-static void at_i2s_fmt_change(uint8_t fmt);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
@@ -285,8 +284,6 @@ int main(void)
 
     at_cmd_core_register_vol_cb(at_set_vol);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
-    at_cmd_core_register_i2s_fmt_cb(at_i2s_fmt_change);
-    at_cmd_core_set_i2s_fmt(facade_get_i2s_fmt());
     at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */
@@ -1798,11 +1795,6 @@ static void at_set_vol(uint8_t vol)
         sac_processing_ctrl(back_channel_volume_processing, back_channel_sac_pipeline,
                             SAC_VOLUME_INCREASE, SAC_NO_ARG, &sac_status);
     }
-}
-
-static void at_i2s_fmt_change(uint8_t fmt)
-{
-    facade_set_i2s_fmt(fmt);
 }
 
 void sac_error_handler(sac_status_t sac_status)

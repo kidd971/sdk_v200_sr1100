@@ -20,6 +20,18 @@
  * AUDIO_PRODUCER_SINE_WAVE is injected by CMakeLists.txt when SINE_WAVE_PRODUCER is defined.
  */
 
+/* **** Sine Wave Debug Capture (optional) **** */
+/* Enabled via CMake preset "puretone-headset-quasar-u5a5-slave-rjf-sine-dbg",
+ * or manually by uncommenting the line below.
+ * Fills s_debug_buf[] (one full 1 kHz cycle, stereo) for debugger inspection. */
+/* #define SINE_DEBUG_CAPTURE */
+
+/* **** No Codec / No I2S MUX GPIO (optional) **** */
+/* Enable via CMake by passing -DNO_CODEC=1 (or adding "NO_CODEC": "1" to CMakePresets.json).
+ * Use for boards where I2S connects directly to the SOC with no external codec and no MUX GPIO
+ * (e.g. OneOdio customer board). Skips MAX98091 I2C init/config and I2S mux GPIO control. */
+/* #define NO_CODEC */
+
 /* **** Main Channel Settings. **** */
 
 #define MAIN_CHANNEL_SAMPLE_RATE_HZ 96000

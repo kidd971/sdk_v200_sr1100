@@ -8,18 +8,12 @@
  */
 
 /* INCLUDES *******************************************************************/
-#include "max98091.h"
 #include "puretone_headset_facade.h"
 #include "quasar.h"
 #include "sac_cfg.h"
-
-/* CONSTANTS ******************************************************************/
-#if defined(STM32U535xx)
-#define I2S_FMT_FLASH_ADDR  0x0807E000U  /* U535: 512KB flash, last 8KB page */
-#else
-#define I2S_FMT_FLASH_ADDR  0x083FE000U  /* U5A5: 4MB flash, last 8KB page */
+#if !NO_CODEC
+#include "max98091.h"
 #endif
-#define I2S_FMT_FLASH_MAGIC 0xA5U
 
 /* TYPES **********************************************************************/
 /** @brief SAI configuration structure.
@@ -33,20 +27,22 @@ typedef struct sai_cfg {
 } sai_cfg_t;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
+#if !NO_CODEC
 static void codec_i2c_write(uint8_t dev_addr, uint8_t mem_addr, uint8_t data);
 static void codec_i2c_read(uint8_t dev_addr, uint8_t mem_addr, uint8_t *data);
 static void configure_max98091(bool input_enabled, bool output_enabled);
+#endif
 static void configure_sai(sai_cfg_t sai_cfg);
-static void i2s_fmt_flash_save(uint8_t fmt);
 
 /* PRIVATE GLOBALS ************************************************************/
+#if !NO_CODEC
 static max98091_i2c_hal_t codec_hal = {
     .i2c_addr = MAX98091A_I2C_ADDR,
     .read = codec_i2c_read,
     .write = codec_i2c_write,
 };
+#endif
 static sai_cfg_t s_sai_cfg;
-/* I2S_FMT_DEFAULT: 0=RJF (default), 1=LJF, 2=STD — controlled via cmake -DI2S_FMT_DEFAULT=N */
 #if defined(I2S_FMT_DEFAULT) && (I2S_FMT_DEFAULT) == 1
 static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED;
 #elif defined(I2S_FMT_DEFAULT) && (I2S_FMT_DEFAULT) == 2
@@ -54,12 +50,6 @@ static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;
 #else
 static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
 #endif
-
-//static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED;
-// static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;
-// static quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
-
-
 static quasar_i2s_mux_select_t s_mux_select   = QUASAR_SELECT_ON_BOARD_CODEC;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -74,18 +64,24 @@ void facade_audio_coord_init(bool i2s_master_mode)
     };
     s_sai_cfg = sai_cfg;
 
+#if !NO_CODEC
     /* Initialize the Codec's I2C interface. */
     quasar_audio_init_i2c();
 
     /* Reset codec before initializing the SAI. */
     max98091_reset_codec(&codec_hal);
     quasar_timer_delay_ms(1);
+#endif
 
     /* Initialize the SAI peripheral. */
     configure_sai(sai_cfg);
 
+#if NO_CODEC
+    quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
+#else
     /* Configure the codec. */
     configure_max98091(true, true);
+#endif
 }
 
 void facade_audio_node_init(bool i2s_master_mode)
@@ -99,18 +95,24 @@ void facade_audio_node_init(bool i2s_master_mode)
     };
     s_sai_cfg = sai_cfg;
 
+#if !NO_CODEC
     /* Initialize the Codec's I2C interface. */
     quasar_audio_init_i2c();
 
     /* Reset codec before initializing the SAI. */
     max98091_reset_codec(&codec_hal);
     quasar_timer_delay_ms(1);
+#endif
 
     /* Initialize the SAI peripheral. */
     configure_sai(sai_cfg);
 
+#if NO_CODEC
+    quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
+#else
     /* Configure the codec. */
     configure_max98091(true, true);
+#endif
 }
 
 void facade_audio_deinit(void)
@@ -120,7 +122,9 @@ void facade_audio_deinit(void)
     quasar_audio_deinit_sai(&quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 
+#if !NO_CODEC
     max98091_reset_codec(&codec_hal);
+#endif
 }
 
 void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_callback)(void))
@@ -134,24 +138,8 @@ void facade_i2s_backend_track_mux(quasar_i2s_mux_select_t select)
     s_mux_select = select;
 }
 
-void facade_set_i2s_fmt(uint8_t fmt)
-{
-    if (fmt < 1 || fmt > 3) {
-        return;
-    }
-    i2s_fmt_flash_save(fmt);
-}
-
-uint8_t facade_get_i2s_fmt(void)
-{
-    switch (s_sai_protocol) {
-    case QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED: return 2;
-    case QUASAR_SAI_PROTOCOL_I2S_STANDARD:     return 3;
-    default:                                    return 1;
-    }
-}
-
 /* PRIVATE FUNCTIONS **********************************************************/
+#if !NO_CODEC
 /** @brief Wrapper for I2C write to match MAX98091 driver expected signature.
  *
  *  @param[in] dev_addr  I2C device address.
@@ -248,6 +236,7 @@ static void configure_max98091(bool input_enabled, bool output_enabled)
 
     max98091_init(&codec_hal, &cfg);
 }
+#endif /* !NO_CODEC */
 
 /** @brief Configure the SAI peripheral.
  *
@@ -322,17 +311,4 @@ static void configure_sai(sai_cfg_t sai_cfg)
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 }
 
-/** @brief Save I2S format index to flash then reset the device.
- *
- *  @param[in] fmt  Format index (1–3).
- */
-static void i2s_fmt_flash_save(uint8_t fmt)
-{
-    uint32_t buf[4] = {0};
 
-    buf[0] = ((uint32_t)I2S_FMT_FLASH_MAGIC << 8) | fmt;
-
-    quasar_memory_erase(I2S_FMT_FLASH_ADDR);
-    quasar_memory_write(I2S_FMT_FLASH_ADDR, buf, sizeof(buf));
-    quasar_memory_invalidate_cache();
-}
