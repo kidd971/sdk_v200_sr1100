@@ -106,9 +106,11 @@ static uint16_t ep_i2s_action_consume(void *instance, uint8_t *samples, uint16_t
     }
 #endif
 
-    /* The STM32 SAI DATA register expects 24-bit audio left-aligned in bits[31:8].
-     * sac_unpack_24bits outputs right-justified values (bits[23:0]). Shift left by 8
-     * to place audio in the correct position before DMA feeds the SAI DR. */
+#if I2S_MASTER_MODE
+    /* I2S MASTER mode only: the STM32 SAI DATA register expects 24-bit audio
+     * left-aligned in bits[31:8]. sac_unpack_24bits outputs right-justified values
+     * (bits[23:0]); shift left by 8 to place audio correctly before DMA feeds the
+     * SAI DR. Slave mode keeps the stock right-justified path (no shift == v230_official). */
     {
         uint32_t *buf = (uint32_t *)samples;
         uint32_t count = size / sizeof(uint32_t);
@@ -117,6 +119,7 @@ static uint16_t ep_i2s_action_consume(void *instance, uint8_t *samples, uint16_t
             buf[i] <<= 8;
         }
     }
+#endif
 
     quasar_audio_sai_write_non_blocking(samples, size);
 
