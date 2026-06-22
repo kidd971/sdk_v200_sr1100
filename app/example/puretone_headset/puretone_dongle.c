@@ -1041,14 +1041,12 @@ static void app_audio_core_init(void)
     ASSERT_SAC_STATUS(sac_status);
 
     /* Processing stage packs 24-bit audio before sending.
-     * I2S MASTER mode: the SAI/codec path delivers 24-bit audio left-aligned in
-     * bits[31:8] (matched by the <<8 on the consume/output path in
-     * audio_core_i2s_backend.c), so pack with the 32->24 mode (>>8) to extract
-     * bits[31:8]. I2S SLAVE mode: stock LSB-justified path, audio is already right-
-     * justified in bits[23:0], so use the plain 24-bit packing (== v230_official).
-     * The sine producer always emits left-justified samples (sine << 8), so it also
-     * needs the 32->24 mode regardless of master/slave. */
-#if I2S_MASTER_MODE || defined(AUDIO_PRODUCER_SINE_WAVE)
+     * Real audio (master or slave, RJF): the codec delivers right-justified 24-bit
+     * audio (bits[23:0]), so use the plain 24-bit packing == v230_official / the
+     * AP-validated master config.
+     * The sine producer is the only left-justified source (sine << 8), so SINE builds
+     * need the 32->24 mode (>>8) to extract bits[31:8]. */
+#if defined(AUDIO_PRODUCER_SINE_WAVE)
     main_channel_packing_instance.packing_mode = SAC_PACK_32BITS_24BITS;
 #else
     main_channel_packing_instance.packing_mode = SAC_PACK_24BITS;
