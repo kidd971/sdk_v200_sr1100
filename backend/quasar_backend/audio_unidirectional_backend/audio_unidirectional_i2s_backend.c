@@ -11,7 +11,7 @@
 #include "audio_unidirectional_facade.h"
 #include "quasar.h"
 #include "sac_cfg.h"
-#if !defined(AV_IND)
+#if !NO_CODEC
 #include "max98091.h"
 #endif
 
@@ -28,7 +28,7 @@ typedef struct sai_cfg {
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void configure_sai(sai_cfg_t sai_cfg);
-#if !defined(AV_IND)
+#if !NO_CODEC
 static void codec_i2c_write(uint8_t dev_addr, uint8_t mem_addr, uint8_t data);
 static void codec_i2c_read(uint8_t dev_addr, uint8_t mem_addr, uint8_t *data);
 static void configure_max98091(bool input_enabled, bool output_enabled);
@@ -53,7 +53,7 @@ static void sine_tx_dma_complete(void)
 }
 #endif
 
-#if !defined(AV_IND)
+#if !NO_CODEC
 static max98091_i2c_hal_t codec_hal = {
     .i2c_addr = MAX98091A_I2C_ADDR,
     .read = codec_i2c_read,
@@ -83,8 +83,8 @@ void facade_audio_coord_init(void)
 #endif
     };
 
-#if defined(AV_IND)
-    /* AV IND board: no codec, route I2S to external expansion port. */
+#if NO_CODEC
+    /* No codec: route I2S directly to the external expansion port (e.g. AV IND board). */
     configure_sai(sai_cfg);
     quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
 #else
@@ -110,8 +110,8 @@ void facade_audio_node_init(void)
 #endif
     };
 
-#if defined(AV_IND)
-    /* AV IND board: no codec, route I2S to external expansion port. */
+#if NO_CODEC
+    /* No codec: route I2S directly to the external expansion port (e.g. AV IND board). */
     configure_sai(sai_cfg);
     quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
 #else
@@ -141,7 +141,7 @@ void facade_audio_deinit(void)
     quasar_audio_deinit_sai(&quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 
-#if !defined(AV_IND)
+#if !NO_CODEC
     max98091_reset_codec(&codec_hal);
 #endif
 }
@@ -226,7 +226,7 @@ static void configure_sai(sai_cfg_t sai_cfg)
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 }
 
-#if !defined(AV_IND)
+#if !NO_CODEC
 /** @brief Wrapper for I2C write to match MAX98091 driver expected signature.
  *
  *  @param[in] dev_addr  I2C device address.
@@ -322,4 +322,4 @@ static void configure_max98091(bool input_enabled, bool output_enabled)
 
     max98091_init(&codec_hal, &cfg);
 }
-#endif /* !AV_IND */
+#endif /* !NO_CODEC */

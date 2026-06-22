@@ -169,7 +169,7 @@ int main(void)
 
 #ifdef SAI_CLKGEN_TEST
     /* Test mode: output SAI master clocks + 1kHz sine wave on expansion port without pairing.
-     * Flash SPARK EVK with AV_IND=1, I2S_MASTER_MODE=1, SAI_CLKGEN_TEST=1.
+     * Flash SPARK EVK with AV_IND=1, NO_CODEC=1, I2S_MASTER_MODE=1, SAI_CLKGEN_TEST=1.
      * Wire expansion port BCLK/LRCLK/SDOUT/GND to AVIND coordinator slave board.
      */
     facade_audio_node_init();
