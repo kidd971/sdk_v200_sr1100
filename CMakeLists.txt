@@ -63,6 +63,10 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(SINE_INJECT_I2S=1)
     endif()
 
+    if (DEFINED U535_PWR_LDO)
+        add_compile_definitions(U535_PWR_LDO=1)
+    endif()
+
     project(IDP CXX C ASM)
     add_subdirectory(library)
     add_subdirectory(third-party)

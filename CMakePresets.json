@@ -39,7 +39,8 @@
                 "HARDWARE": "QUASAR",
                 "MCU_DRIVER": "STMU5XX",
                 "MCU_VARIANT": "U535",
-                "STM32U5_MCU_MODEL": "STM32U535xx"
+                "STM32U5_MCU_MODEL": "STM32U535xx",
+                "U535_PWR_LDO": "1"
             }
         },
         {

@@ -24,9 +24,15 @@ void quasar_power_up(quasar_bsp_status_t *err)
     /* Enable the port G power. */
     HAL_PWREx_EnableVddIO2();
 
+#ifdef U535_PWR_LDO
     /* Use LDO regulator instead of SMPS. */
     QUASAR_BSP_CHECK_ERROR(HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY) != HAL_OK, err, QUASAR_ERR_POWER_CONFIG_SUPPLY,
                            return);
+#else
+    /* Switch to SMPS regulator instead of LDO. */
+    QUASAR_BSP_CHECK_ERROR(HAL_PWREx_ConfigSupply(PWR_SMPS_SUPPLY) != HAL_OK, err, QUASAR_ERR_POWER_CONFIG_SUPPLY,
+                           return);
+#endif
 }
 
 void quasar_power_init_gpios(void)
