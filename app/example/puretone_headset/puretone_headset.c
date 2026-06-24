@@ -140,6 +140,14 @@ static sac_pipeline_t *main_channel_accumulator_pipeline;
 static sac_pipeline_t *back_channel_sac_pipeline;
 static sac_pipeline_t *back_channel_src_pipeline;
 
+#if SINE_INJECT_I2S
+/* SINE_INJECT_I2S (HS local test): free-running 1 kHz sine straight to SAI TX (SD_A).
+ * The external I2S clock keeps completing the TX DMA; each completion refills this buffer
+ * and re-arms the write, so a tone comes out SD_A with no radio link and without the pipeline.
+ * Sized to one normal I2S consumer payload so cadence/format match real audio. */
+static int32_t main_channel_tx_sine_buf[MAIN_CHANNEL_I2S_PAYLOAD_SIZE / sizeof(int32_t)];
+#endif
+
 /* **** Processing Stages **** */
 /* **** Main Channel Processing Stages **** */
 static sac_fallback_instance_t main_channel_fallback_instance;
@@ -1626,6 +1634,12 @@ static void volume_down(void)
  */
 static void main_channel_audio_tx_complete_callback(void)
 {
+#if SINE_INJECT_I2S
+    /* Free-running local sine: bypass the pipeline and feed the next sine chunk to SAI TX. */
+    sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
+    return;
+#endif
+
     sac_status_t sac_status = SAC_OK;
     uint32_t target_fifo_size;
     uint32_t usb_buf_rem = facade_app_audio_usb_get_epin_fifo_remaining();
@@ -1647,6 +1661,12 @@ static void main_channel_audio_tx_complete_callback(void)
  */
 static void main_channel_audio_tx_complete_callback(void)
 {
+#if SINE_INJECT_I2S
+    /* Free-running local sine: bypass the pipeline and feed the next sine chunk to SAI TX. */
+    sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
+    return;
+#endif
+
     sac_status_t sac_status = SAC_OK;
 
     uint32_t target_queue_size;
@@ -2146,6 +2166,13 @@ static void app_init(void)
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_start(back_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+
+#if SINE_INJECT_I2S
+    /* Kick the first SAI TX so the self-clocked sine loop starts. Without this the consumer
+     * never starts (the pipeline queue stays empty with no OTA data), so no TX-complete would
+     * ever fire. After this first write, each TX-complete re-arms the next sine chunk. */
+    sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
+#endif
 
     /* Start timers used for audio processes. */
     facade_audio_process_main_channel_timer_start();

@@ -61,6 +61,15 @@ void sac_facade_i2s_inject_sine(void)
         ep_sinus_96k_fill_rj(s_inject_buf, s_inject_size);
     }
 }
+
+void sac_facade_i2s_tx_sine(uint8_t *buf, uint16_t size)
+{
+    /* Refill with the next chunk of sine (phase is kept across calls inside ep_sinus_96k_fill_rj)
+     * and re-arm the SAI TX DMA. The external I2S clock shifts it out SD_A and triggers the next
+     * TX-complete, which calls this again — a free-running tone, independent of the pipeline. */
+    ep_sinus_96k_fill_rj(buf, size);
+    quasar_audio_sai_write_non_blocking(buf, size);
+}
 #endif
 
 /* PRIVATE FUNCTIONS **********************************************************/

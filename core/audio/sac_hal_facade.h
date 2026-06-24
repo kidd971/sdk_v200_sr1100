@@ -41,6 +41,17 @@ void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *producer_iface, sa
  */
 void sac_facade_i2s_inject_sine(void);
 
+/** @brief Fill a buffer with the next chunk of 1 kHz sine and re-arm the I2S TX DMA (SINE_INJECT_I2S).
+ *
+ *  Self-clocked local tone for the headset side: call once to kick the first transfer, then again
+ *  from the I2S TX-complete callback. The external I2S clock keeps completing the TX DMA, so a
+ *  continuous 1 kHz sine comes out SD_A with no radio link and without going through the pipeline.
+ *
+ *  @param[in,out] buf   Buffer to fill with sine and transmit (must be 32-bit aligned).
+ *  @param[in]     size  Buffer size in bytes (same payload size the consumer normally writes).
+ */
+void sac_facade_i2s_tx_sine(uint8_t *buf, uint16_t size);
+
 /** @brief Initialize the Clock Drift Compensation processing stage.
  *
  *  @param[in]  format  Audio sample format used in the CDC processing.
