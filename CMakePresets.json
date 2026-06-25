@@ -212,6 +212,16 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u535-dualradio-slave-rjf",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, RJF format",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u535-slave-ljf",
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535, I2S slave, LJF format",

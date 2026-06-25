@@ -84,15 +84,15 @@ void quasar_init(quasar_config_t quasar_config, quasar_bsp_status_t *err)
         QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
     }
 
-//     /* Initialize radio 2 peripherals. */
-//     if (quasar_config.radio2_enabled) {
-// #if RADIO_QSPI_ENABLED
-//         quasar_radio_2_init_unused_spi_gpios(board_revision);
-// #endif
-//         /* The radio 2 MOSI pin differs depending on the board revision. */
-//         quasar_radio_2_init(board_revision, err);
-//         QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
-//     }
+    /* Initialize radio 2 peripherals. */
+    if (quasar_config.radio2_enabled) {
+#if RADIO_QSPI_ENABLED
+        quasar_radio_2_init_unused_spi_gpios(board_revision);
+#endif
+        /* The radio 2 MOSI pin differs depending on the board revision. */
+        quasar_radio_2_init(board_revision, err);
+        QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
+    }
 
 // #if !RADIO_QSPI_ENABLED
 //     quasar_radio_init_unused_qspi_gpios();

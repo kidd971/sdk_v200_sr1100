@@ -17,7 +17,7 @@
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static quasar_radio_config_t radio_1_get_config(void);
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision, quasar_bsp_status_t *err);
 #endif
 static void radio_init(quasar_radio_config_t radio_config, quasar_bsp_status_t *err);
@@ -42,7 +42,7 @@ void quasar_radio_1_init(quasar_bsp_status_t *err)
     enable_pendsv_irq(QUASAR_DEF_PRIO_PENDSV_IRQ);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_init(quasar_revision_t board_revision, quasar_bsp_status_t *err)
 {
     *err = QUASAR_OK;
@@ -65,7 +65,7 @@ void quasar_radio_1_deinit(quasar_bsp_status_t *err)
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_deinit(quasar_revision_t board_revision, quasar_bsp_status_t *err)
 {
     *err = QUASAR_OK;
@@ -83,7 +83,7 @@ void quasar_radio_set_radio_1_irq_callback(void (*irq_callback)(void))
     quasar_it_set_exti8_irq_callback(irq_callback);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_set_radio_2_irq_callback(void (*irq_callback)(void))
 {
     quasar_it_set_exti7_irq_callback(irq_callback);
@@ -103,7 +103,7 @@ void quasar_radio_set_radio_1_non_blocking_transfer_callback(void (*irq_callback
 #endif
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_set_radio_2_non_blocking_transfer_callback(void (*irq_callback)(void))
 {
     /* DMA RX transfer complete triggers when the data is actually in memory, so we can use the DMA. */
@@ -128,7 +128,7 @@ bool quasar_radio_1_read_irq_pin(void)
     return false;
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 bool quasar_radio_2_read_irq_pin(void)
 {
     if (QUASAR_READ_BIT(QUASAR_DEF_RADIO_2_IRQ_PORT->IDR, QUASAR_DEF_RADIO_2_IRQ_PIN)) {
@@ -147,7 +147,7 @@ void quasar_radio_1_enable_irq_it(void)
     __ISB();
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_enable_irq_it(void)
 {
     /* Mask the interrupt event line. */
@@ -166,7 +166,7 @@ void quasar_radio_1_disable_irq_it(void)
     QUASAR_SET_BIT(EXTI->RPR1, (1 << QUASAR_DEF_RADIO_1_IRQ_PIN));
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_disable_irq_it(void)
 {
     /* Unmask the interrupt event line. */
@@ -207,7 +207,7 @@ void quasar_radio_1_enable_non_blocking_transfer_irq_it(void)
     __ISB();
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_enable_non_blocking_transfer_irq_it(void)
 {
     /* DMA RX transfer complete triggers when the data is actually in memory, so we can use the DMA.
@@ -253,7 +253,7 @@ void quasar_radio_1_disable_non_blocking_transfer_irq_it(void)
 #endif
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_disable_non_blocking_transfer_irq_it(void)
 {
     /* DMA RX transfer complete triggers when the data is actually in memory, so we can use the DMA. */
@@ -275,7 +275,7 @@ void quasar_radio_2_disable_non_blocking_transfer_irq_it(void)
 //     quasar_gpio_set(QUASAR_DEF_RADIO_1_SHUTDOWN_PORT, QUASAR_DEF_RADIO_1_SHUTDOWN_PIN);
 // }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_set_shutdown_pin(void)
 {
     quasar_gpio_set(QUASAR_DEF_RADIO_2_SHUTDOWN_PORT, QUASAR_DEF_RADIO_2_SHUTDOWN_PIN);
@@ -287,7 +287,7 @@ void quasar_radio_2_set_shutdown_pin(void)
 //     quasar_gpio_clear(QUASAR_DEF_RADIO_1_SHUTDOWN_PORT, QUASAR_DEF_RADIO_1_SHUTDOWN_PIN);
 // }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_reset_shutdown_pin(void)
 {
     quasar_gpio_clear(QUASAR_DEF_RADIO_2_SHUTDOWN_PORT, QUASAR_DEF_RADIO_2_SHUTDOWN_PIN);
@@ -299,7 +299,7 @@ void quasar_radio_1_set_reset_pin(void)
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_1_RESET_PORT->BSRR, (1 << QUASAR_DEF_RADIO_1_RESET_PIN));
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_set_reset_pin(void)
 {
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_2_RESET_PORT->BSRR, (1 << QUASAR_DEF_RADIO_2_RESET_PIN));
@@ -311,7 +311,7 @@ void quasar_radio_1_reset_reset_pin(void)
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_1_RESET_PORT->BRR, (1 << QUASAR_DEF_RADIO_1_RESET_PIN));
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_reset_reset_pin(void)
 {
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_2_RESET_PORT->BRR, (1 << QUASAR_DEF_RADIO_2_RESET_PIN));
@@ -336,7 +336,7 @@ void quasar_radio_1_context_switch(void)
     __ISB();
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_context_switch(void)
 {
     __NVIC_SetPendingIRQ(QUASAR_GPIO_GET_SELECTED_IRQ(QUASAR_DEF_RADIO_2_IRQ_PIN));
@@ -361,7 +361,7 @@ void quasar_radio_1_set_spi_baudrate(quasar_spi_prescaler_t prescaler, quasar_bs
     quasar_spi_set_baudrate(QUASAR_DEF_SPI_SELECTION_RADIO_1, prescaler, err);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_set_spi_baudrate(quasar_spi_prescaler_t prescaler, quasar_bsp_status_t *err)
 {
     *err = QUASAR_OK;
@@ -375,7 +375,7 @@ void quasar_radio_1_spi_set_cs(void)
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_1_CS_PORT->BSRR, (1 << QUASAR_DEF_RADIO_1_CS_PIN));
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_spi_set_cs(void)
 {
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_2_CS_PORT->BSRR, (1 << QUASAR_DEF_RADIO_2_CS_PIN));
@@ -387,7 +387,7 @@ void quasar_radio_1_spi_reset_cs(void)
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_1_CS_PORT->BRR, (1 << QUASAR_DEF_RADIO_1_CS_PIN));
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_spi_reset_cs(void)
 {
     QUASAR_SET_BIT(QUASAR_DEF_RADIO_2_CS_PORT->BRR, (1 << QUASAR_DEF_RADIO_2_CS_PIN));
@@ -399,7 +399,7 @@ void quasar_radio_1_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t 
     quasar_spi_transfer_full_duplex_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_1, tx_data, rx_data, size);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_spi_transfer_full_duplex_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
 {
     quasar_spi_transfer_full_duplex_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_2, tx_data, rx_data, size);
@@ -411,7 +411,7 @@ void quasar_radio_1_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint
     quasar_spi_transfer_full_duplex_non_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_1, tx_data, rx_data, size);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_spi_transfer_full_duplex_non_blocking(uint8_t *tx_data, uint8_t *rx_data, uint16_t size)
 {
     quasar_spi_transfer_full_duplex_non_blocking(QUASAR_DEF_SPI_SELECTION_RADIO_2, tx_data, rx_data, size);
@@ -423,7 +423,7 @@ bool quasar_radio_1_is_spi_busy(void)
     return QUASAR_SPI_IS_BUSY(QUASAR_DEF_SPI_SELECTION_RADIO_1);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 bool quasar_radio_2_is_spi_busy(void)
 {
     return QUASAR_SPI_IS_BUSY(QUASAR_DEF_SPI_SELECTION_RADIO_2);
@@ -581,7 +581,7 @@ void quasar_radio_1_init_unused_spi_gpios(void)
     quasar_gpio_init(gpio_config_radio_mosi);
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_init_unused_spi_gpios(quasar_revision_t board_revision)
 {
     // quasar_gpio_config_t gpio_config_radio_sck = {
@@ -800,7 +800,7 @@ static quasar_radio_config_t radio_1_get_config(void)
     return radio_config;
 }
 
-#if 0 /* RADIO 2 DISABLED */
+#if 1 /* RADIO 2 ENABLED (535 dual radio) */
 /** @brief Get the radio 2 configuration.
  *
  *  @note Depending on the board revision the MOSI pin GPIO differs.
@@ -812,15 +812,15 @@ static quasar_radio_config_t radio_1_get_config(void)
 static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision, quasar_bsp_status_t *err)
 {
     /* Radio 2 SPI config and its four associated GPIOs. */
-    // quasar_gpio_config_t gpio_config_radio2_sck = {
-    //     .port = QUASAR_DEF_RADIO_2_SCK_PORT,
-    //     .pin = QUASAR_DEF_RADIO_2_SCK_PIN,
-    //     .mode = QUASAR_GPIO_MODE_ALTERNATE,
-    //     .type = QUASAR_GPIO_TYPE_PP,
-    //     .pull = QUASAR_GPIO_PULL_NONE,
-    //     .speed = QUASAR_GPIO_SPEED_VERY_HIGH,
-    //     .alternate = QUASAR_GPIO_ALTERNATE_AF5,
-    // };
+    quasar_gpio_config_t gpio_config_radio2_sck = {
+        .port = QUASAR_DEF_RADIO_2_SCK_PORT,
+        .pin = QUASAR_DEF_RADIO_2_SCK_PIN,
+        .mode = QUASAR_GPIO_MODE_ALTERNATE,
+        .type = QUASAR_GPIO_TYPE_PP,
+        .pull = QUASAR_GPIO_PULL_NONE,
+        .speed = QUASAR_GPIO_SPEED_VERY_HIGH,
+        .alternate = QUASAR_GPIO_ALTERNATE_AF5,
+    };
     quasar_gpio_config_t gpio_config_radio2_miso = {
         .port = QUASAR_DEF_RADIO_2_MISO_PORT,
         .pin = QUASAR_DEF_RADIO_2_MISO_PIN,
@@ -864,15 +864,15 @@ static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision
         .speed = QUASAR_GPIO_SPEED_VERY_HIGH,
         .alternate = QUASAR_GPIO_ALTERNATE_NONE,
     };
-    // quasar_spi_config_t radio2_spi_config = {
-    //     .spi_selection = QUASAR_DEF_SPI_SELECTION_RADIO_2,
-    //     .gpio_config_sck = gpio_config_radio2_sck,
-    //     .gpio_config_miso = gpio_config_radio2_miso,
-    //     .gpio_config_mosi = gpio_config_radio2_mosi,
-    //     .gpio_config_ncs = gpio_config_radio2_cs,
-    //     .clk_source = QUASAR_SPI_CLK_SOURCE_SYSCLK,
-    //     .spi_prescaler = SPI_BAUDRATEPRESCALER_4,
-    // };
+    quasar_spi_config_t radio2_spi_config = {
+        .spi_selection = QUASAR_DEF_SPI_SELECTION_RADIO_2,
+        .gpio_config_sck = gpio_config_radio2_sck,
+        .gpio_config_miso = gpio_config_radio2_miso,
+        .gpio_config_mosi = gpio_config_radio2_mosi,
+        .gpio_config_ncs = gpio_config_radio2_cs,
+        .clk_source = QUASAR_SPI_CLK_SOURCE_SYSCLK,
+        .spi_prescaler = SPI_BAUDRATEPRESCALER_4,
+    };
 
     /* Radio 2 GPIOs config (reset, shutdown and irq pin). */
     quasar_gpio_config_t radio2_gpio_config_reset = {
@@ -981,7 +981,7 @@ static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision
 
     quasar_radio_config_t radio_config = {
         .dma_config = radio2_dma_config,
-        // .spi_config = radio2_spi_config,
+        .spi_config = radio2_spi_config,
         .reset_io = radio2_gpio_config_reset,
         .shutdown_io = radio2_gpio_config_shutdown,
         .irq_io = radio2_gpio_config_irq,
