@@ -172,15 +172,78 @@ static void run_radio_2_bsp_validator_tests(void);
  */
 int main(void)
 {
+    /* Staged LED markers to localize a no-UART hang without a debugger. Count
+     * the blinks on PD7 to see how far boot got:
+     *   5 only        -> facade_bsp_init() hung/asserted (e.g. radio2 init).
+     *   5, 2          -> bsp_init OK but facade_uart_init() hung.
+     *   5, 2, 3       -> both inits OK; problem is UART TX itself (clock/IRQ/
+     *                    baud/wiring), not reaching main or init.
+     * Marker A runs pre-init at MSI ~4 MHz (small delay); markers B/C run after
+     * the clock is at 160 MHz (large delay) so they stay visible.
+     */
+    /* Power-on LED self-test: prove each RGB channel can physically light,
+     * before any init runs. Watch for blue, then green, then red in turn; any
+     * colour that never lights is a dead/miswired LED (or unbonded pin), not a
+     * firmware-logic problem. Runs pre-init at MSI ~4 MHz. */
+    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 3000000);
+    facade_debug_led_blink(FACADE_DEBUG_LED_GREEN, 3, 3000000);
+    facade_debug_led_blink(FACADE_DEBUG_LED_RED, 3, 3000000);
+
+    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 5, 3000000);   /* A: MCU alive (pre-init) */
+
     /* Initiate basic components. */
     facade_bsp_init();
+    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 2, 12000000);  /* B: bsp_init returned */
+
     facade_uart_init();
+    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 12000000);  /* C: uart_init returned */
+
+    /* Simple TX sanity string before the structured tests. */
+    facade_log_io("\r\n=== BSP VALIDATOR UART ALIVE ===\r\n");
+
     swc_config_hardware_interface();
 
     run_radio_1_bsp_validator_tests();
 
     if (SWC_RADIO_COUNT == 2) {
         run_radio_2_bsp_validator_tests();
+    }
+
+    /*
+     * These boards have no working UART, so report the key SPI result on the
+     * RGB LED instead, using a different colour per radio so they are
+     * distinguishable at a glance. Read each radio's SFD register and compare
+     * it to the known reset default:
+     *   BLUE blinks  -> radio 1 SPI OK  (dark = radio 1 SPI FAIL)
+     *   GREEN blinks -> radio 2 SPI OK  (dark = radio 2 SPI FAIL / the SPI2 issue)
+     * So blue+green = Layer-1 PASS; blue only = radio 2 dead; nothing = radio 1
+     * dead. Blinked once after a short gap (clearly separate from the boot
+     * 5/2/3 blue markers above), then the MCU idles - no repeating pattern.
+     */
+    {
+        uint8_t sfd[5];
+        bool radio1_ok;
+        bool radio2_ok = true;
+
+        memset(sfd, 0, sizeof(sfd));
+        reset_transceiver(RADIO_ID_1);
+        read_sfd(RADIO_ID_1, sfd);
+        radio1_ok = compare_reg_value(&sfd[1], DEFAULT_SFD, SFD_LENGTH);
+
+        if (SWC_RADIO_COUNT == 2) {
+            memset(sfd, 0, sizeof(sfd));
+            reset_transceiver(RADIO_ID_2);
+            read_sfd(RADIO_ID_2, sfd);
+            radio2_ok = compare_reg_value(&sfd[1], DEFAULT_SFD, SFD_LENGTH);
+        }
+
+        facade_time_delay(1500);
+        if (radio1_ok) {
+            facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 4000000);
+        }
+        if ((SWC_RADIO_COUNT == 2) && radio2_ok) {
+            facade_debug_led_blink(FACADE_DEBUG_LED_GREEN, 3, 4000000);
+        }
     }
 
     while (1);

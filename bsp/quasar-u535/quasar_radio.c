@@ -811,6 +811,9 @@ static quasar_radio_config_t radio_1_get_config(void)
  */
 static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision, quasar_bsp_status_t *err)
 {
+    /* No failure path remains here (any revision maps to PD4 MOSI). */
+    *err = QUASAR_OK;
+
     /* Radio 2 SPI config and its four associated GPIOs. */
     quasar_gpio_config_t gpio_config_radio2_sck = {
         .port = QUASAR_DEF_RADIO_2_SCK_PORT,
@@ -842,7 +845,17 @@ static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision
         gpio_config_radio2_mosi.pull = QUASAR_GPIO_PULL_NONE;
         gpio_config_radio2_mosi.speed = QUASAR_GPIO_SPEED_VERY_HIGH;
         gpio_config_radio2_mosi.alternate = QUASAR_GPIO_ALTERNATE_AF5;
-    } else if (board_revision == QUASAR_REVB) {
+    } else {
+        /*
+         * REVB or unknown -> use the REVB MOSI map. On this U535 board the board
+         * revision is read from the PC0 divider via ADC, but that ADC GPIO is
+         * not configured (commented out in quasar_adc_init), so the reading is
+         * unreliable and frequently lands outside {REVA, REVB}. The old code
+         * asserted QUASAR_ERR_RADIO_UNSUPPORTED_REVISION here, trapping radio 2
+         * init in the error handler. Defaulting to REVB is safe because RADIO_2
+         * MOSI is PD4 for BOTH revisions, so the revision gate has no effect on
+         * the pin map - it only blocked bring-up.
+         */
         gpio_config_radio2_mosi.port = QUASAR_DEF_RADIO_2_MOSI_PORT_REVB;
         gpio_config_radio2_mosi.pin = QUASAR_DEF_RADIO_2_MOSI_PIN_REVB;
         gpio_config_radio2_mosi.mode = QUASAR_GPIO_MODE_ALTERNATE;
@@ -850,9 +863,6 @@ static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision
         gpio_config_radio2_mosi.pull = QUASAR_GPIO_PULL_NONE;
         gpio_config_radio2_mosi.speed = QUASAR_GPIO_SPEED_VERY_HIGH;
         gpio_config_radio2_mosi.alternate = QUASAR_GPIO_ALTERNATE_AF5;
-    } else {
-        /* Unsupported board revision. */
-        QUASAR_BSP_CHECK_ERROR(true, err, QUASAR_ERR_RADIO_UNSUPPORTED_REVISION, return (quasar_radio_config_t){0});
     }
 
     quasar_gpio_config_t gpio_config_radio2_cs = {

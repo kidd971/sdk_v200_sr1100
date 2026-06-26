@@ -106,6 +106,27 @@ typedef struct {
  */
 void facade_bsp_init(void);
 
+/** @brief Selects which board LED facade_debug_led_blink() drives. */
+typedef enum {
+    FACADE_DEBUG_LED_BLUE = 0, /*!< RGB blue, PD7 (boot markers + radio 1 result). */
+    FACADE_DEBUG_LED_GREEN,    /*!< RGB green, PB4 (radio 2 result). */
+    FACADE_DEBUG_LED_RED,      /*!< RGB red, PH11. */
+} facade_debug_led_t;
+
+/** @brief Blink a board LED to prove the MCU is alive, independent of UART/init.
+ *
+ *  Self-contained: enables the GPIO clock and drives the LED with a crude
+ *  busy-wait, so it works even when called at the very top of main() before
+ *  the system clock, timers and UART are configured.
+ *
+ *  @param[in] led          Which LED to drive (see facade_debug_led_t).
+ *  @param[in] count        Number of on/off blinks.
+ *  @param[in] delay_loops  Busy-wait iterations per half-period. Tune to the
+ *                          current core clock so the blink stays visible
+ *                          (e.g. ~3e6 at MSI 4 MHz, ~12e6 at 160 MHz).
+ */
+void facade_debug_led_blink(facade_debug_led_t led, uint32_t count, uint32_t delay_loops);
+
 /** @brief Initialize the board UART peripherals.
  */
 void facade_uart_init(void);
