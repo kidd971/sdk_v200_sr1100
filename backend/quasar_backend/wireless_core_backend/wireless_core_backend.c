@@ -23,7 +23,7 @@ void swc_hal_radio_1_context_switch(void)
     quasar_radio_1_context_switch();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_context_switch(void)
 {
     quasar_radio_2_context_switch();
@@ -55,7 +55,7 @@ void swc_hal_radio_1_disable_irq_it(void)
     quasar_radio_1_disable_irq_it();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_disable_irq_it(void)
 {
     quasar_radio_2_disable_irq_it();
@@ -67,7 +67,7 @@ void swc_hal_radio_1_enable_irq_it(void)
     quasar_radio_1_enable_irq_it();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_enable_irq_it(void)
 {
     quasar_radio_2_enable_irq_it();
@@ -79,7 +79,7 @@ void swc_hal_radio_1_disable_non_blocking_transfer_irq_it(void)
     quasar_radio_1_disable_non_blocking_transfer_irq_it();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_disable_non_blocking_transfer_irq_it(void)
 {
     quasar_radio_2_disable_non_blocking_transfer_irq_it();
@@ -91,7 +91,7 @@ void swc_hal_radio_1_enable_non_blocking_transfer_irq_it(void)
     quasar_radio_1_enable_non_blocking_transfer_irq_it();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_enable_non_blocking_transfer_irq_it(void)
 {
     quasar_radio_2_enable_non_blocking_transfer_irq_it();
@@ -104,7 +104,7 @@ bool swc_hal_radio_1_read_irq_pin(void)
     return quasar_radio_1_read_irq_pin();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 bool swc_hal_radio_2_read_irq_pin(void)
 {
     return quasar_radio_2_read_irq_pin();
@@ -116,7 +116,7 @@ void swc_hal_radio_1_set_reset_pin(void)
     quasar_radio_1_set_reset_pin();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_set_reset_pin(void)
 {
     quasar_radio_2_set_reset_pin();
@@ -128,7 +128,7 @@ void swc_hal_radio_1_reset_reset_pin(void)
     quasar_radio_1_reset_reset_pin();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_reset_reset_pin(void)
 {
     quasar_radio_2_reset_reset_pin();
@@ -142,7 +142,7 @@ void swc_hal_radio_1_end_transfer(void)
     quasar_radio_1_spi_set_cs();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_end_transfer(void)
 {
     /* The CS pin is the same for SPI and QSPI. */
@@ -156,7 +156,7 @@ void swc_hal_radio_1_begin_transfer(void)
     quasar_radio_1_spi_reset_cs();
 }
 
-#if !defined(STM32U535xx)
+#if (SWC_RADIO_COUNT > 1)
 void swc_hal_radio_2_begin_transfer(void)
 {
     /* The CS pin is the same for SPI and QSPI. */

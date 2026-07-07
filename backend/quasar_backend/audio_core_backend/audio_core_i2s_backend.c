@@ -10,13 +10,13 @@
 /* INCLUDES *******************************************************************/
 #include "quasar.h"
 #include "sac_hal_facade.h"
-#if SINE_INJECT_I2S
+#if SINE_INJECT_DG || SINE_INJECT_HS
 #include "sac_sinus_endpoint_96k.h"
 #endif
 
 /* PRIVATE GLOBALS ************************************************************/
-#if SINE_INJECT_I2S
-/* SINE_INJECT_I2S: pointer/size of the most recent producer buffer the I2S DMA fills.
+#if SINE_INJECT_DG
+/* SINE_INJECT_DG: pointer/size of the most recent producer buffer the I2S DMA fills.
  * The RX-complete callback overwrites it with sine via sac_facade_i2s_inject_sine(). */
 static uint8_t *s_inject_buf  = NULL;
 static uint16_t s_inject_size = 0;
@@ -27,6 +27,10 @@ static uint16_t s_inject_size = 0;
  * 192 entries = 96 stereo frames = one full 1 kHz cycle at 96 kHz. */
 volatile int32_t s_node_debug_buf[192];
 static uint32_t s_node_debug_idx = 0;
+/* One increment per consumed (played) audio buffer. delta/sec = node SAI playback rate.
+ * Expect 2400/s (96000/40). Significantly < 2400 => node plays slower than audio arrives =>
+ * output queue overflows and drops buffers => the 40-sample phase jumps. */
+volatile uint32_t dbg_node_consume_cnt = 0;
 #endif
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
@@ -54,14 +58,16 @@ void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *codec_producer_ifa
     }
 }
 
-#if SINE_INJECT_I2S
+#if SINE_INJECT_DG
 void sac_facade_i2s_inject_sine(void)
 {
     if (s_inject_buf != NULL) {
         ep_sinus_96k_fill_rj(s_inject_buf, s_inject_size);
     }
 }
+#endif
 
+#if SINE_INJECT_HS
 void sac_facade_i2s_tx_sine(uint8_t *buf, uint16_t size)
 {
     /* Refill with the next chunk of sine (phase is kept across calls inside ep_sinus_96k_fill_rj)
@@ -84,7 +90,7 @@ static uint16_t ep_i2s_action_produce(void *instance, uint8_t *samples, uint16_t
 {
     (void)instance;
 
-#if SINE_INJECT_I2S
+#if SINE_INJECT_DG
     /* Remember this buffer so the RX-complete callback can overwrite it with sine once
      * the DMA (which only serves as the precise 96 kHz timing source) has filled it. */
     s_inject_buf  = samples;
@@ -138,6 +144,7 @@ static uint16_t ep_i2s_action_consume(void *instance, uint8_t *samples, uint16_t
             s_node_debug_buf[s_node_debug_idx] = in[i];
             s_node_debug_idx = (s_node_debug_idx + 1 >= sizeof(s_node_debug_buf) / sizeof(s_node_debug_buf[0])) ? 0 : s_node_debug_idx + 1;
         }
+        dbg_node_consume_cnt++;
     }
 #endif
 

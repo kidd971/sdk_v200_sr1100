@@ -906,6 +906,13 @@ void GPDMA1_Channel0_IRQHandler(void)
     gpdma1_channel0_callback();
 }
 
+/* DEBUG: per-radio RX DMA-complete counters (non-static for the Watch window).
+ * radio1 RX = channel2, radio2 RX = channel6. If radio2_dma_count stays 0 while
+ * radio2_irq_count (EXTI7) ticks, radio 2's non-blocking SPI transfer never
+ * completes -> the Wireless Core stalls waiting on it. Remove when done. */
+volatile uint32_t radio1_dma_count;
+volatile uint32_t radio2_dma_count;
+
 /** @brief This function handles interrupt for channel 1 of GPDMA1.
  */
 void GPDMA1_Channel1_IRQHandler(void)
@@ -921,6 +928,7 @@ void GPDMA1_Channel1_IRQHandler(void)
  */
 void GPDMA1_Channel2_IRQHandler(void)
 {
+    radio1_dma_count++; /* DEBUG: radio 1 RX DMA-complete counter. */
     if (gpdma_handle_channel2.Instance->CSR & (DMA_FLAG_DTE | DMA_FLAG_ULE | DMA_FLAG_USE | DMA_FLAG_TO)) {
         while (1);
     }
@@ -1001,6 +1009,7 @@ void GPDMA1_Channel5_IRQHandler(void)
  */
 void GPDMA1_Channel6_IRQHandler(void)
 {
+    radio2_dma_count++; /* DEBUG: radio 2 RX DMA-complete counter. */
     if (gpdma_handle_channel6.Instance->CSR & (DMA_FLAG_DTE | DMA_FLAG_ULE | DMA_FLAG_USE | DMA_FLAG_TO)) {
         while (1);
     }

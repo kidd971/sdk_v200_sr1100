@@ -231,6 +231,8 @@ void quasar_radio_2_enable_non_blocking_transfer_irq_it(void)
 #else
     NVIC_EnableIRQ(QUASAR_DMA_GET_SELECTED_IRQ(QUASAR_DEF_DMA_SELECTION_RADIO_2_TX));
 #endif
+#else
+    NVIC_EnableIRQ(QUASAR_DMA_GET_SELECTED_IRQ(QUASAR_DEF_DMA_SELECTION_RADIO_2_TX));
 #endif
     /* Synchronize after context switch. */
     __DSB();

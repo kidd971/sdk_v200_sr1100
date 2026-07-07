@@ -106,7 +106,7 @@ void quasar_gpio_clock_enable(void)
     __HAL_RCC_GPIOE_CLK_ENABLE();
     // __HAL_RCC_GPIOF_CLK_ENABLE();
     // __HAL_RCC_GPIOG_CLK_ENABLE();
-    // __HAL_RCC_GPIOH_CLK_ENABLE();
+    __HAL_RCC_GPIOH_CLK_ENABLE(); /* PH11 = RGB red, used as RX/downlink activity LED */
     // __HAL_RCC_GPIOI_CLK_ENABLE();
 }
 

@@ -55,6 +55,27 @@
 /* Interval to print statistics in ms. */
 #define PRINT_INTERVAL_MS 1000
 
+/* **** Link watch ****
+ * DG-side diagnostic counterpart of the HS link_watch. Prints one line every
+ * LINK_WATCH_INTERVAL_MS to the USB CDC port (facade_print_string), focused on the TX
+ * side and on what the DG actually learns from the node:
+ *   - node_lm : link margin the HS reported back over the data link (drives auto fallback).
+ *               If this stays low/0 while the HS prints lm=255, the HS->DG back channel
+ *               is not delivering, so the DG keeps audio pinned at the worst fallback.
+ *   - bk_ok/bk_miss : back-channel (HS->DG) data RX counts -- health of that report path.
+ *   - tx_slot/tx_noframe : audio TX timeslots vs slots where the DG had nothing to send.
+ *               tx_noframe climbing in lockstep with the HS rx_miss == DG producer starved.
+ * All SWC reads are non-asserting so the watch survives a link drop.
+ * Set LINK_WATCH to 0 to compile it out. */
+#ifndef LINK_WATCH
+#define LINK_WATCH 1
+#endif
+/* Poll/print cadence for the link watch in ms. */
+#define LINK_WATCH_INTERVAL_MS 500
+/* Temporarily silence the per-second statistics dump so the CDC port only shows the
+ * link watch. Set back to 1 to restore the normal stats print. */
+#define STATS_PRINT_ENABLED 0
+
 /* **** CDC **** */
 /* Maximum amount of drift to compensate. */
 #define MAX_DRIFT_PPM 50
@@ -211,6 +232,13 @@ static uint32_t channel_frequency[] = CHANNEL_FREQ;
 static int32_t tx_timeslots[] = COORD_TIMESLOTS;
 static int32_t rx_timeslots[] = NODE_TIMESLOTS;
 
+/* Non-fatal error tracking for the 10 ms data path (was ASSERT_SWC_STATUS -> while(1)). */
+static volatile swc_error_t s_last_fb_info_err;  /* last err from swc_connection_get_fallback_info */
+static volatile swc_error_t s_last_send_err;     /* last err from swc_connection_send */
+static volatile uint32_t s_send_err_count;       /* cumulative data-send failures */
+/* Last link margin the node reported over the back channel (fed to the audio fallback). */
+static volatile uint8_t s_node_rx_lm;
+
 /* **** Application Specific **** */
 static facade_certification_mode_t certification_mode;
 static fallback_states_t fallback_state;
@@ -279,6 +307,9 @@ static void abort_pairing_procedure(void);
 /* **** Fallback LED and Terminal Display **** */
 static bool should_print_stats(void);
 static void print_stats(void);
+#if LINK_WATCH
+static void link_watch(void);
+#endif
 
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -341,9 +372,12 @@ int main(void)
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
             /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
-            if (should_print_stats()) {
+            if (STATS_PRINT_ENABLED && should_print_stats()) {
                 print_stats();
             }
+#if LINK_WATCH
+            link_watch();
+#endif
         }
     }
 
@@ -357,9 +391,13 @@ int main(void)
         at_cmd_core_process();
 
         /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
-        if (should_print_stats()) {
+        if (STATS_PRINT_ENABLED && should_print_stats()) {
             print_stats();
         }
+
+#if LINK_WATCH
+        link_watch();
+#endif
 
         /* Wait for an interrupt event. */
         facade_wait_for_interrupt();
@@ -766,6 +804,26 @@ static void conn_rx_audio_success_callback(void *conn, void *arg)
     back_channel_trigger_count++;
 }
 
+#ifdef SINE_DEBUG_CAPTURE
+/* DG-side TX observability. dbg_dg_produce_cnt is incremented in the main-channel RX-complete
+ * callback (one per injected/produced audio buffer); the rest are refreshed every ~10 ms in
+ * conn_rx_data_success_callback. Compare the per-second deltas:
+ *   dbg_dg_produce_cnt  = DG audio buffers produced/sec. Should be 96000/40 = 2400/s. >2400 => the
+ *                         DG SAI/codec clock is fast => it generates audio faster than the node plays.
+ *   dbg_tx_queue_load   = DG TX (radio) consumer buffer load; climbing/full => produce faster than
+ *                         the radio can send => buffers dropped before TX.
+ *   dbg_tx_acked        = packets actually sent+acked/sec.
+ *   dbg_tx_dropped      = Wireless Core timeout drops (produce faster than TX).
+ *   dbg_tx_notx         = TX timeslots with nothing to send (producer starved).
+ *   dbg_tx_cca_fail     = CCA fails (channel busy). */
+volatile uint32_t dbg_dg_produce_cnt = 0;
+volatile uint32_t dbg_tx_queue_load  = 0;
+volatile uint32_t dbg_tx_acked       = 0;
+volatile uint32_t dbg_tx_dropped     = 0;
+volatile uint32_t dbg_tx_notx        = 0;
+volatile uint32_t dbg_tx_cca_fail    = 0;
+#endif
+
 /** @brief Callback function when a data frame has been successfully received on data connection.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
@@ -796,6 +854,9 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* The fallback state is updated. */
         sac_fallback_set_rx_link_margin(&main_channel_fallback_instance, received_user_data.link_margin, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
+        /* Snapshot for link_watch: this is the margin the DG actually uses to pick the
+         * fallback mode. Compare against the lm the HS prints to spot a dead back channel. */
+        s_node_rx_lm = received_user_data.link_margin;
 
         /* Forward commands from node to SOC via UART. */
         if (received_user_data.cmd_type == 1) {
@@ -811,6 +872,20 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* Cache battery level reported by node. */
         at_cmd_core_set_battery_level(received_user_data.battery_pct);
     }
+
+#ifdef SINE_DEBUG_CAPTURE
+    {
+        swc_statistics_t *tx_stats = swc_connection_update_stats(tx_audio_conn, &swc_err);
+
+        dbg_tx_queue_load = sac_pipeline_get_consumer_buffer_load(main_channel_sac_pipeline, &sac_status);
+        if (tx_stats != NULL) {
+            dbg_tx_acked    = tx_stats->packet_sent_and_acked_count;
+            dbg_tx_dropped  = tx_stats->packet_dropped_count;
+            dbg_tx_notx     = tx_stats->no_packet_tranmission_count;
+            dbg_tx_cca_fail = tx_stats->cca_fail_count;
+        }
+    }
+#endif
 }
 
 /** @brief Initialize the Audio Core.
@@ -1025,7 +1100,7 @@ static void app_audio_core_init(void)
     ASSERT_SAC_STATUS(sac_status);
 
     /* Processing stage packs 24-bit audio before sending. Real audio (master or slave,
-     * RJF) and SINE_INJECT_I2S both deliver right-justified 24-bit audio (bits[23:0]),
+     * RJF) and SINE_INJECT_DG both deliver right-justified 24-bit audio (bits[23:0]),
      * so use the plain 24-bit packing == v230_official / the AP-validated config. */
     main_channel_packing_instance.packing_mode = SAC_PACK_24BITS;
     main_channel_packing_processing = sac_processing_stage_init((void *)&main_channel_packing_instance, "Audio Packing",
@@ -1202,6 +1277,18 @@ static void app_audio_core_init(void)
         sac_fallback_set_current_mode(&main_channel_fallback_instance, 0, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
     }
+
+#if SINE_INJECT_DG
+    /* SINE test: pin the main channel to mode 0 (96 kHz 24-bit, no resample/compression) and
+     * disable automatic fallback. The link-margin auto-fallback otherwise drops to mode 2/3
+     * (48 kHz 16-bit / ADPCM), whose resampling + lossy compression introduce phase
+     * discontinuities at buffer boundaries that sound like noise on a pure tone. Manual mode
+     * stops automatic mode change; the node follows the mode 0 we transmit. */
+    sac_fallback_set_current_mode(&main_channel_fallback_instance, 0, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_set_manual_mode(&main_channel_fallback_instance, true, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
 
     /*
      * Back Channel Audio Pipeline (RX)
@@ -1638,10 +1725,15 @@ static void main_channel_audio_rx_complete_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
 
-#if SINE_INJECT_I2S
+#if SINE_INJECT_DG
     /* External I2S clocks the DMA (precise 96 kHz timing); overwrite the just-read buffer
      * with a 1 kHz sine before it enters the pipeline. Same path/format as real audio. */
     sac_facade_i2s_inject_sine();
+#endif
+
+#ifdef SINE_DEBUG_CAPTURE
+    /* One increment per produced audio buffer: delta/sec = DG produce rate (expect 2400/s). */
+    dbg_dg_produce_cnt++;
 #endif
 
     /* The codec produces audio samples when it receives input audio. */
@@ -1791,6 +1883,81 @@ static bool should_print_stats(void)
     return false;
 }
 
+#if LINK_WATCH
+/** @brief DG-side link diagnostic. Prints one line every LINK_WATCH_INTERVAL_MS to the USB
+ *         CDC port. Non-asserting reads, so it keeps running through a link drop.
+ *
+ *  Line format:
+ *    [LW seq t=<ms>] <OK|LOST> fb=<mode> node_lm=<n> bk_ok=<n> bk_miss=<n>
+ *        tx_slot=<n> tx_noframe=<n> tx_drop=<n> swc=<RUN|STOP> send_err=<e>(<n>)
+ *
+ *  How to read it against the HS log:
+ *    - node_lm low/0 while the HS prints lm=255  => HS->DG back channel is dead; the DG
+ *      never learns the link is good and keeps audio at the worst fallback. Watch bk_ok/
+ *      bk_miss: if bk_miss climbs and bk_ok stalls, the node's reports are not arriving.
+ *    - tx_noframe climbing in lockstep with the HS rx_miss => the DG audio producer is
+ *      starved (nothing queued to send), so the HS sees empty slots. Not an RF problem.
+ *    - fb mode here is what the DG decided and transmits; the node follows it. */
+static void link_watch(void)
+{
+    static uint32_t tick_start;
+    static uint32_t seq;
+    static bool initialized;
+    static bool prev_connected;
+
+    if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
+        initialized = false;
+        return;
+    }
+
+    uint32_t now = facade_get_tick_ms();
+    if (initialized && (now - tick_start) < LINK_WATCH_INTERVAL_MS) {
+        return;
+    }
+    tick_start = now;
+
+    swc_error_t conn_err = SWC_ERR_NONE;
+    swc_error_t tx_err = SWC_ERR_NONE;
+    swc_error_t bk_err = SWC_ERR_NONE;
+    sac_status_t fb_status = SAC_OK;
+    bool connected = swc_connection_get_connect_status(tx_audio_conn, &conn_err);
+    swc_statistics_t *tx_stats = swc_connection_update_stats(tx_audio_conn, &tx_err);
+    swc_statistics_t *bk_stats = swc_connection_update_stats(rx_data_conn, &bk_err);
+    swc_status_t swc_state = swc_get_status();
+    uint8_t fb_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, &fb_status);
+
+    uint32_t tx_slot = (tx_stats != NULL) ? tx_stats->tx_timeslot_occurrence : 0;
+    uint32_t tx_noframe = (tx_stats != NULL) ? tx_stats->no_packet_tranmission_count : 0;
+    uint32_t tx_drop = (tx_stats != NULL) ? tx_stats->packet_dropped_count : 0;
+    uint32_t bk_ok = (bk_stats != NULL) ? bk_stats->packet_successfully_received_count : 0;
+    uint32_t bk_miss = (bk_stats != NULL) ? bk_stats->no_packet_reception_count : 0;
+
+    char line[224];
+
+    /* Edge: announce connect<->disconnect transitions immediately. */
+    if (!initialized) {
+        prev_connected = connected;
+        initialized = true;
+    } else if (connected != prev_connected) {
+        snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
+                 (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
+        facade_print_string(line);
+        prev_connected = connected;
+    }
+
+    snprintf(line, sizeof(line),
+             "[LW %lu t=%lu] %s fb=%u node_lm=%u bk_ok=%lu bk_miss=%lu "
+             "tx_slot=%lu tx_noframe=%lu tx_drop=%lu swc=%s send_err=%d(%lu)\r\n",
+             (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
+             (unsigned)fb_mode, (unsigned)s_node_rx_lm,
+             (unsigned long)bk_ok, (unsigned long)bk_miss,
+             (unsigned long)tx_slot, (unsigned long)tx_noframe, (unsigned long)tx_drop,
+             (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
+             (int)s_last_send_err, (unsigned long)s_send_err_count);
+    facade_print_string(line);
+}
+#endif /* LINK_WATCH */
+
 /** @brief Print the audio and wireless statistics.
  */
 static void print_stats(void)
@@ -1922,9 +2089,10 @@ static void data_callback(void)
     swc_fallback_info_t fallback_info = {0};
     user_data_t transmitted_user_data = {0};
 
-    /* Update the link margin. */
+    /* Update the link margin. Do NOT assert: this runs every 10 ms and a transient error on
+     * link loss must not hang the device. Record and continue. */
     fallback_info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    s_last_fb_info_err = swc_err;
 
     /* Send the button state and the link margin to the Node. */
     transmitted_user_data.link_margin = fallback_info.link_margin;
@@ -2092,9 +2260,14 @@ static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t
         memcpy(buffer, transmitted_data, size);
     }
 
-    /* Send the payload through the Wireless Core. */
+    /* Send the payload through the Wireless Core. Do NOT assert: when the link is down the TX
+     * queue fills up and this returns an error every 10 ms. Record and return; the queue drains
+     * once the link is back. */
     swc_connection_send(tx_data_conn, buffer, size, swc_err);
-    ASSERT_SWC_STATUS(*swc_err);
+    if (*swc_err != SWC_ERR_NONE) {
+        s_last_send_err = *swc_err;
+        s_send_err_count++;
+    }
 }
 
 /** @brief Read data from a specific connection.

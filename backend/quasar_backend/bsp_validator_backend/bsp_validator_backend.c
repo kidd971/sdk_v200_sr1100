@@ -10,6 +10,8 @@
 /* INCLUDES *******************************************************************/
 #include "bsp_validator_facade.h"
 #include "quasar.h"
+#include "quasar_def.h"
+#include "quasar_gpio.h"
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void facade_bsp_init(void)
@@ -121,6 +123,18 @@ void facade_uart_init(void)
 void facade_time_delay(uint32_t ms)
 {
     quasar_timer_delay_ms(ms);
+}
+
+void facade_radio_cs_drive(uint8_t radio_index, bool level)
+{
+    GPIO_TypeDef *port = (radio_index == 0) ? QUASAR_DEF_RADIO_1_CS_PORT : QUASAR_DEF_RADIO_2_CS_PORT;
+    quasar_gpio_pin_t pin = (radio_index == 0) ? QUASAR_DEF_RADIO_1_CS_PIN : QUASAR_DEF_RADIO_2_CS_PIN;
+
+    if (level) {
+        quasar_gpio_set(port, pin);
+    } else {
+        quasar_gpio_clear(port, pin);
+    }
 }
 
 void facade_log_io(char *string)

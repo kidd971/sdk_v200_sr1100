@@ -10,7 +10,7 @@
 /* INCLUDES *******************************************************************/
 #include "sac_sinus_endpoint_96k.h"
 
-#if SINE_INJECT_I2S
+#if SINE_INJECT_DG || SINE_INJECT_HS
 
 /* CONSTANTS ******************************************************************/
 /* One period of 1 kHz sampled at 96 kHz: 96 samples, 24-bit amplitude (±8388607). */

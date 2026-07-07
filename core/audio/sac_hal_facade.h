@@ -34,14 +34,14 @@ extern "C" {
  */
 void sac_facade_audio_endpoint_init(sac_endpoint_interface_t *producer_iface, sac_endpoint_interface_t *consumer_iface);
 
-/** @brief Overwrite the last I2S producer buffer with a 1 kHz sine (SINE_INJECT_I2S).
+/** @brief Overwrite the last I2S producer buffer with a 1 kHz sine (SINE_INJECT_DG).
  *
  *  Call from the I2S RX-complete callback before sac_pipeline_produce: the external I2S
  *  DMA provides the 96 kHz timing, the buffer content is replaced with sine.
  */
 void sac_facade_i2s_inject_sine(void);
 
-/** @brief Fill a buffer with the next chunk of 1 kHz sine and re-arm the I2S TX DMA (SINE_INJECT_I2S).
+/** @brief Fill a buffer with the next chunk of 1 kHz sine and re-arm the I2S TX DMA (SINE_INJECT_HS).
  *
  *  Self-clocked local tone for the headset side: call once to kick the first transfer, then again
  *  from the I2S TX-complete callback. The external I2S clock keeps completing the TX DMA, so a

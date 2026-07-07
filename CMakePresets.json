@@ -67,6 +67,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-master-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S master, RJF format",
             "cacheVariables": {
@@ -76,6 +77,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-master-ljf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S master, LJF format",
             "cacheVariables": {
@@ -85,6 +87,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-master-std",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S master, I2S standard format",
             "cacheVariables": {
@@ -104,28 +107,29 @@
         {
             "name": "puretone-headset-quasar-u5a5-slave-rjf-sineinj",
             "inherits": ["puretone-headset-quasar-u5a5"],
-            "description": "Puretone headset U5A5, I2S slave, RJF, sine injected into I2S producer buffer (external I2S clock drives timing, no internal timer)",
+            "description": "Puretone headset U5A5, I2S slave, RJF, sine on both sides: DG injects into pipeline (radio TX), HS self-clocked local tone on SAI TX (external I2S clock drives timing, no internal timer)",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "0",
                 "I2S_FMT_DEFAULT": "0",
-                "SINE_INJECT_I2S": "1",
+                "SINE_INJECT_DG": "1",
+                "SINE_INJECT_HS": "1",
                 "SINE_DEBUG_CAPTURE": "1"
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-slave-rjf-nocodec-sineinj",
+            "name": "puretone-headset-quasar-u535-slave-std-nocodec-sineinj",
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, RJF, no codec (direct I2S to SOC), sine injected into I2S producer buffer (external I2S clock drives timing)",
+            "description": "Puretone headset U535, I2S slave, I2S standard format, no codec (direct I2S to SOC), DG injects sine into pipeline (radio TX); HS plays the RF-received audio through the normal pipeline so SINE_DEBUG_CAPTURE (s_node_debug_buf) reflects the actual decoded data. NOTE: SINE_INJECT_HS intentionally omitted — enabling it bypasses the consumer and the capture stays zero.",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0",
-                "NO_CODEC": "1",
-                "SINE_INJECT_I2S": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "SINE_INJECT_DG": "1",
                 "SINE_DEBUG_CAPTURE": "1"
             }
         },
         {
             "name": "puretone-headset-quasar-u5a5-dualradio-slave-rjf",
+            "hidden": false,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, dual radio (node only; coord excluded), I2S slave, RJF format",
             "cacheVariables": {
@@ -136,6 +140,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-slave-rjf-node-dbg",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S slave, RJF, node debug capture buffer (I2S consume)",
             "cacheVariables": {
@@ -146,6 +151,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-slave-ljf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S slave, LJF format",
             "cacheVariables": {
@@ -163,6 +169,18 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u5a5-slave-std-sineinj",
+            "inherits": ["puretone-headset-quasar-u5a5"],
+            "description": "Puretone headset U5A5, I2S slave, I2S standard format, sine on both sides: DG injects into pipeline (radio TX), HS self-clocked local tone on SAI TX (external I2S clock drives timing, no internal timer)",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "SINE_INJECT_DG": "1",
+                "SINE_INJECT_HS": "0",
+                "SINE_DEBUG_CAPTURE": "1"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u535",
             "hidden": true,
             "inherits": [
@@ -173,15 +191,6 @@
             "cacheVariables": {
                 "APP": "Puretone-Headset",
                 "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-master-rjf",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S master, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "0"
             }
         },
         {
@@ -203,22 +212,27 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-slave-rjf",
+            "name": "puretone-headset-quasar-u535-master-std-sineinj-dg-nocodec",
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, RJF format",
+            "description": "Puretone headset U535, I2S master, I2S standard format, no codec (direct I2S to SOC), DG injects sine into pipeline (radio TX)",
             "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0"
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "SINE_INJECT_DG": "1"
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-dualradio-slave-rjf",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, RJF format",
+            "name": "bsp-validator-quasar-u535-dualradio",
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "BSP validator on U535 with dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5) - runs radio 1 + radio 2 SPI/CS/reset/IRQ/DMA tests",
             "cacheVariables": {
-                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0"
+                "APP": "BSP-validator",
+                "TRANSCEIVER": "SR1100",
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER"
             }
         },
         {
@@ -240,6 +254,132 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u535-slave-std-nocodec-dcdc",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, I2S standard format, no codec (direct I2S to SOC), DCDC/SMPS regulator (not LDO), no sine",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-std-nocodec-dcdc",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, I2S standard format, no codec (direct I2S to SOC), DCDC/SMPS regulator (not LDO), no sine",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-std-sineinj-hs",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, I2S standard format, HS self-clocked local sine on SAI TX (external I2S clock drives timing, no internal timer)",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "SINE_INJECT_HS": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-std-sineinj-hs",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, I2S standard format, HS local sine on SAI TX (HS drives its own SAI clock; TX-complete re-arms each chunk)",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "SINE_INJECT_HS": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-std-sineinj-dg",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, I2S standard format, DG injects sine into pipeline (radio TX)",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "SINE_INJECT_DG": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-std-sineinj-dg",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, I2S standard format, DG injects sine into pipeline (radio TX)",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "SINE_INJECT_DG": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-rjf",
+            "hidden": true,
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S master, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-rjf",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, RJF format",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-dualradio-slave-rjf",
+            "hidden": true,
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, RJF format",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-dualradio-slave-std",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, I2S standard format",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-dualradio-master-std",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S master, I2S standard format",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-rjf-nocodec-sineinj",
+            "hidden": true,
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535, I2S slave, RJF, no codec (direct I2S to SOC), sine on both sides: DG injects into pipeline (radio TX), HS self-clocked local tone on SAI TX (external I2S clock drives timing)",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0",
+                "NO_CODEC": "1",
+                "SINE_INJECT_DG": "1",
+                "SINE_INJECT_HS": "1",
+                "SINE_DEBUG_CAPTURE": "1"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u535-91evb",
             "hidden": true,
             "inherits": [
@@ -254,6 +394,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-91evb-master-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535-91evb"],
             "description": "Puretone headset U535 91EVB, I2S master, RJF format",
             "cacheVariables": {
@@ -263,6 +404,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-91evb-slave-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535-91evb"],
             "description": "Puretone headset U535 91EVB, I2S slave, RJF format",
             "cacheVariables": {
@@ -282,6 +424,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-avind-slave-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-avind"],
             "description": "Puretone headset U5A5, AV IND, I2S slave (coord), RJF format",
             "cacheVariables": {
@@ -291,6 +434,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-avind-slave-ljf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-avind"],
             "description": "Puretone headset U5A5, AV IND, I2S slave (coord), LJF format",
             "cacheVariables": {
@@ -300,6 +444,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-avind-slave-std",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-avind"],
             "description": "Puretone headset U5A5, AV IND, I2S slave (coord), I2S standard format",
             "cacheVariables": {
@@ -309,6 +454,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-avind-master-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-avind"],
             "description": "Puretone headset U5A5, AV IND, I2S master (node), RJF format",
             "cacheVariables": {
@@ -318,6 +464,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-avind-master-ljf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-avind"],
             "description": "Puretone headset U5A5, AV IND, I2S master (node), LJF format",
             "cacheVariables": {
@@ -327,6 +474,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-avind-master-std",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-avind"],
             "description": "Puretone headset U5A5, AV IND, I2S master (node), I2S standard format",
             "cacheVariables": {
@@ -336,6 +484,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-usb_audio",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -349,6 +498,7 @@
         },
         {
             "name": "audio-bidirectional-quasar",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -361,6 +511,7 @@
         },
         {
             "name": "audio-bidirectional-quasar-usb_audio",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -374,6 +525,7 @@
         },
         {
             "name": "audio-unidirectional-quasar",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -386,6 +538,7 @@
         },
         {
             "name": "audio-unidirectional-quasar-usb_audio",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -424,7 +577,7 @@
         {
             "name": "connection-priority-quasar",
             "description": "Connection priority example for SR11xx with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -437,7 +590,7 @@
         {
             "name": "datalink-quasar",
             "description": "Datalink example for SR11xx with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -450,7 +603,7 @@
         {
             "name": "fragmentation-quasar",
             "description": "Fragmentation example for SR11xx with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -463,7 +616,7 @@
         {
             "name": "hello-world-quasar",
             "description": "Hello-World example for SR11xx with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -476,7 +629,7 @@
         {
             "name": "hello-world-quasar-u535",
             "description": "Hello-World example for SR11xx with Quasar U535",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -489,7 +642,7 @@
         {
             "name": "hello-world-rtos-quasar",
             "description": "Hello-World RTOS example for SR11xx with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -503,7 +656,7 @@
         {
             "name": "star-network-quasar",
             "description": "Star Network example for SR11xx with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -516,7 +669,7 @@
         {
             "name": "bsp-validator-tool-quasar",
             "description": "BSP Validator tool with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -542,7 +695,7 @@
         {
             "name": "profiler-tool-quasar",
             "description": "Profiler tool with Quasar",
-            "hidden": false,
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"

@@ -144,10 +144,12 @@ extern "C" {
 // #define QUASAR_DEF_BUTTON_USER_4_PORT GPIOI
 // #define QUASAR_DEF_BUTTON_USER_4_PIN  QUASAR_GPIO_PIN_0
 
-// #define QUASAR_DEF_LED_USER_1_PORT    GPIOA  // PA1 = RADIO_1_RESET, conflict
-// #define QUASAR_DEF_LED_USER_1_PIN     QUASAR_GPIO_PIN_1
-// #define QUASAR_DEF_LED_USER_2_PORT    GPIOD  // PD0 = BAT_CHRG_TS, conflict
-// #define QUASAR_DEF_LED_USER_2_PIN     QUASAR_GPIO_PIN_0
+/* Orig USER_1=PA1 / USER_2=PD0 conflict on U535 (RADIO_1_RESET / BAT_CHRG_TS).
+ * Borrow the RGB green/red channels so the TX/RX activity LEDs work here. */
+#define QUASAR_DEF_LED_USER_1_PORT    GPIOB  /* RGB green PB4 = TX / uplink activity */
+#define QUASAR_DEF_LED_USER_1_PIN     QUASAR_GPIO_PIN_4
+#define QUASAR_DEF_LED_USER_2_PORT    GPIOH  /* RGB red  PH11 = RX / downlink activity */
+#define QUASAR_DEF_LED_USER_2_PIN     QUASAR_GPIO_PIN_11
 // #define QUASAR_DEF_LED_USER_3_PORT    GPIOG
 // #define QUASAR_DEF_LED_USER_3_PIN     QUASAR_GPIO_PIN_15
 // #define QUASAR_DEF_LED_USER_4_PORT    GPIOI

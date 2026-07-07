@@ -19,8 +19,8 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Fill a buffer with right-justified (bits[23:0], no <<8) 1 kHz sine, stereo.
  *
- *  Used by SINE_INJECT_I2S: overwrite a DMA-read I2S producer buffer with sine while the
- *  real external I2S clock remains the timing source. Same format as real audio.
+ *  Used by SINE_INJECT_DG / SINE_INJECT_HS: overwrite a DMA-read/TX I2S buffer with sine while
+ *  the real external I2S clock remains the timing source. Same format as real audio.
  *
  *  @param[out] samples  Buffer to fill.
  *  @param[in]  size     Size in bytes.

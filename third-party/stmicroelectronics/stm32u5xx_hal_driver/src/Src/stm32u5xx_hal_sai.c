@@ -2268,13 +2268,19 @@ static HAL_StatusTypeDef SAI_InitI2S(SAI_HandleTypeDef *hsai, uint32_t protocol,
   if ((hsai->Init.AudioMode == SAI_MODEMASTER_TX) || (hsai->Init.AudioMode == SAI_MODESLAVE_TX))
   {
     /* Transmit */
-    hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_FALLINGEDGE;
+    hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_FALLINGEDGE; //1
+    //hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_RISINGEDGE; //2 4
+
   }
   else
   {
     /* Receive */
-    hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_RISINGEDGE;
+    hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_RISINGEDGE; //1
+    //hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_FALLINGEDGE; //3
+
   }
+
+
   hsai->FrameInit.FSDefinition   = SAI_FS_CHANNEL_IDENTIFICATION;
   hsai->SlotInit.SlotActive      = SAI_SLOTACTIVE_ALL;
   hsai->SlotInit.FirstBitOffset  = 0;

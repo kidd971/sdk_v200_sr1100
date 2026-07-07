@@ -59,11 +59,15 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(NO_CODEC=1)
     endif()
 
-    if (DEFINED SINE_INJECT_I2S)
-        add_compile_definitions(SINE_INJECT_I2S=1)
+    if (DEFINED SINE_INJECT_DG)
+        add_compile_definitions(SINE_INJECT_DG=1)
     endif()
 
-    if (DEFINED U535_PWR_LDO)
+    if (DEFINED SINE_INJECT_HS)
+        add_compile_definitions(SINE_INJECT_HS=1)
+    endif()
+
+    if (U535_PWR_LDO)
         add_compile_definitions(U535_PWR_LDO=1)
     endif()
 

@@ -39,6 +39,14 @@ static void (*exti14_irq_callback)(void) = default_irq_callback;
 static void (*exti15_rising_edge_irq_callback)(void) = default_irq_callback;
 static void (*exti15_falling_edge_irq_callback)(void) = default_irq_callback;
 
+/* DEBUG: per-radio IRQ hit counters (non-static so they are visible in the
+ * debugger Watch window). Watch them tick to confirm both radios are active:
+ *   radio1 IRQ = PE8 -> EXTI8, radio2 IRQ = PE7 -> EXTI7.
+ * If radio2_irq_count stays frozen while radio1_irq_count climbs, radio 2 is
+ * not being scheduled/received by the Wireless Core. Remove when done. */
+volatile uint32_t radio1_irq_count;
+volatile uint32_t radio2_irq_count;
+
 static void (*pendsv_irq_callback)(void) = default_irq_callback;
 static void (*usb_irq_callback)(void) = default_irq_callback;
 
@@ -339,6 +347,7 @@ void EXTI7_IRQHandler(void)
     /* Clear the rising and falling edge flags. */
     QUASAR_SET_BIT(EXTI->RPR1, EXTI_RPR1_RPIF7_Msk);
     QUASAR_SET_BIT(EXTI->FPR1, EXTI_FPR1_FPIF7_Msk);
+    radio2_irq_count++; /* DEBUG: radio 2 (PE7) activity counter. */
     exti7_irq_callback();
 }
 
@@ -349,6 +358,7 @@ void EXTI8_IRQHandler(void)
     /* Clear the rising and falling edge flags. */
     QUASAR_SET_BIT(EXTI->RPR1, EXTI_RPR1_RPIF8_Msk);
     QUASAR_SET_BIT(EXTI->FPR1, EXTI_FPR1_FPIF8_Msk);
+    radio1_irq_count++; /* DEBUG: radio 1 (PE8) activity counter. */
     exti8_irq_callback();
 }
 

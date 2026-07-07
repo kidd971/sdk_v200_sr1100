@@ -13,6 +13,7 @@
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
 #include "at_cmd_core.h"
+#include "at_cmd_core_facade.h"  /* facade_expansion_uart_write: route link_watch to the AT UART pin */
 #include "pairing_api.h"
 #include "pairing_cfg.h"
 #include "puretone_headset_facade.h"
@@ -53,7 +54,21 @@
 /* Size of the buffer used to print errors. */
 #define ERROR_MESSAGE_BUFFER_SIZE 50
 /* Interval to print statistics in ms. */
-#define PRINT_INTERVAL_MS 1000
+#define PRINT_INTERVAL_MS 3000
+
+/* **** Link watch ****
+ * Lightweight diagnostic that polls the RX-audio connection and prints a one-line
+ * report so we can see WHY/WHEN the HS link drops and whether it recovers.
+ *   - All SWC reads use a local err and DO NOT call ASSERT_SWC_STATUS, so the watch
+ *     itself can never trap in swc_error_handler()'s while(1).
+ *   - A monotonically increasing sequence number lets you tell a real RF loss
+ *     (keeps printing "LOST") apart from a firmware hang (log freezes mid-stream).
+ * Set LINK_WATCH to 0 to compile it out. */
+#ifndef LINK_WATCH
+#define LINK_WATCH 0
+#endif
+/* Poll/print cadence for the link watch in ms. */
+#define LINK_WATCH_INTERVAL_MS 200
 
 /* **** Fallback **** */
 /* Fallback channel index. */
@@ -140,8 +155,8 @@ static sac_pipeline_t *main_channel_accumulator_pipeline;
 static sac_pipeline_t *back_channel_sac_pipeline;
 static sac_pipeline_t *back_channel_src_pipeline;
 
-#if SINE_INJECT_I2S
-/* SINE_INJECT_I2S (HS local test): free-running 1 kHz sine straight to SAI TX (SD_A).
+#if SINE_INJECT_HS
+/* SINE_INJECT_HS (HS local test): free-running 1 kHz sine straight to SAI TX (SD_A).
  * The external I2S clock keeps completing the TX DMA; each completion refills this buffer
  * and re-arms the write, so a tone comes out SD_A with no radio link and without the pipeline.
  * Sized to one normal I2S consumer payload so cadence/format match real audio. */
@@ -212,6 +227,14 @@ static uint32_t channel_frequency[] = CHANNEL_FREQ;
 static int32_t tx_timeslots[] = NODE_TIMESLOTS;
 static int32_t rx_timeslots[] = COORD_TIMESLOTS;
 
+/* Non-fatal error tracking for the 10 ms data path. These used to be ASSERT_SWC_STATUS
+ * traps (swc_error_handler -> while(1)): on a link drop swc_connection_send() returns a
+ * queue-full / not-connected error every 10 ms, which would hang the MCU so the HS could
+ * never recover. We now record the codes here and keep running; link_watch() surfaces them. */
+static volatile swc_error_t s_last_fb_info_err;  /* last err from swc_connection_get_fallback_info */
+static volatile swc_error_t s_last_send_err;     /* last err from swc_connection_send */
+static volatile uint32_t s_send_err_count;       /* cumulative data-send failures */
+
 /* **** Application Specific **** */
 static facade_certification_mode_t certification_mode;
 static fallback_states_t fallback_state;
@@ -280,6 +303,9 @@ static void abort_pairing_procedure(void);
 /* **** Fallback LED and Terminal Display **** */
 static bool should_print_stats(void);
 static void print_stats(void);
+#if LINK_WATCH
+static void link_watch(void);
+#endif
 
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -356,6 +382,9 @@ int main(void)
             if (should_print_stats()) {
                 print_stats();
             }
+#if LINK_WATCH
+            link_watch();
+#endif
         }
     }
 
@@ -382,6 +411,10 @@ int main(void)
         if (should_print_stats()) {
             print_stats();
         }
+
+#if LINK_WATCH
+        link_watch();
+#endif
 
         /* Wait for an interrupt event. */
         facade_wait_for_interrupt();
@@ -1634,7 +1667,7 @@ static void volume_down(void)
  */
 static void main_channel_audio_tx_complete_callback(void)
 {
-#if SINE_INJECT_I2S
+#if SINE_INJECT_HS
     /* Free-running local sine: bypass the pipeline and feed the next sine chunk to SAI TX. */
     sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
     return;
@@ -1661,7 +1694,7 @@ static void main_channel_audio_tx_complete_callback(void)
  */
 static void main_channel_audio_tx_complete_callback(void)
 {
-#if SINE_INJECT_I2S
+#if SINE_INJECT_HS
     /* Free-running local sine: bypass the pipeline and feed the next sine chunk to SAI TX. */
     sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
     return;
@@ -1790,6 +1823,89 @@ static bool should_print_stats(void)
     return false;
 }
 
+#if LINK_WATCH
+/** @brief Lightweight link diagnostic for the HS RX-audio connection.
+ *
+ *  Prints a one-line report at LINK_WATCH_INTERVAL_MS and an immediate event line
+ *  on every connect<->disconnect transition. Output goes to the AT-command/expansion
+ *  UART (LPUART1 on u535) via facade_expansion_uart_write, NOT the USB CDC port, so it
+ *  can be watched on the same UART pins as the AT console. Reads are non-asserting on
+ *  purpose, so the watch keeps running through a link drop instead of trapping.
+ *
+ *  Line format:
+ *    [LW seq t=<ms>] <OK|LOST> lm=<link_margin> fb=<mode> swc=<RUN|STOP> cca_fail=<n>
+ *        tx_drop=<n> rx_ok=<n> rx_miss=<n> rx_rej=<n> err=<connErr>/<statErr>
+ *        send_err=<lastErr>(<count>)
+ *
+ *  How to read it:
+ *    - lm (link margin): higher is better; collapsing toward 0 right before LOST
+ *      points to RF range/interference.
+ *    - fb (fallback mode): 0=96k/24b, 1=48k/24b, 2=48k/16b, 3=48k/ADPCM. Climbing
+ *      0->3 before a drop is the link degrading down the fallback ladder.
+ *    - OK->LOST edge prints the moment the link layer declares the conn down.
+ *    - If the log FREEZES at/after the drop (seq stops advancing), the firmware
+ *      trapped in swc_error_handler()'s while(1) -- that's a hang, not RF.
+ *    - If it keeps printing LOST forever, the node never re-syncs (true RF loss);
+ *      if it returns to OK on its own, auto-resync worked. */
+static void link_watch(void)
+{
+    static uint32_t tick_start;
+    static uint32_t seq;
+    static bool initialized;
+    static bool prev_connected;
+
+    if (device_pairing_state != DEVICE_PAIRED || rx_audio_conn == NULL) {
+        initialized = false;
+        return;
+    }
+
+    uint32_t now = facade_get_tick_ms();
+    if (initialized && (now - tick_start) < LINK_WATCH_INTERVAL_MS) {
+        return;
+    }
+    tick_start = now;
+
+    swc_error_t conn_err = SWC_ERR_NONE;
+    swc_error_t stat_err = SWC_ERR_NONE;
+    sac_status_t fb_status = SAC_OK;
+    bool connected = swc_connection_get_connect_status(rx_audio_conn, &conn_err);
+    swc_fallback_info_t info = swc_connection_get_fallback_info(rx_audio_conn, &conn_err);
+    swc_statistics_t *rx_stats = swc_connection_update_stats(rx_audio_conn, &stat_err);
+    swc_status_t swc_state = swc_get_status();
+    /* Current main-channel fallback mode: 0=96k/24b, 1=48k/24b, 2=48k/16b, 3=48k/ADPCM.
+     * Climbing 0->3 before a LOST is the link degrading down the fallback ladder. */
+    uint8_t fb_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, &fb_status);
+
+    uint32_t rx_ok = (rx_stats != NULL) ? rx_stats->packet_successfully_received_count : 0;
+    uint32_t rx_miss = (rx_stats != NULL) ? rx_stats->no_packet_reception_count : 0;
+    uint32_t rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
+
+    char line[200];
+
+    /* Edge: announce connect<->disconnect transitions immediately. */
+    if (!initialized) {
+        prev_connected = connected;
+        initialized = true;
+    } else if (connected != prev_connected) {
+        snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
+                 (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
+        facade_expansion_uart_write(line);
+        prev_connected = connected;
+    }
+
+    snprintf(line, sizeof(line),
+             "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
+             "rx_ok=%lu rx_miss=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)\r\n",
+             (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
+             (unsigned)info.link_margin, (unsigned)fb_mode,
+             (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
+             (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
+             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
+             (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
+    facade_expansion_uart_write(line);
+}
+#endif /* LINK_WATCH */
+
 /** @brief Print the audio and wireless statistics.
  */
 static void print_stats(void)
@@ -1893,7 +2009,8 @@ static void print_stats(void)
                                                  sizeof(stats_string) - string_length, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    facade_print_string(stats_string);
+    /* Stats go to the AT-command/expansion UART (LPUART1 on u535), same pins as the AT console. */
+    facade_expansion_uart_write(stats_string);
 
     /* ** APP Statistics ** */
     string_length = snprintf(stats_string, sizeof(stats_string), "\r\n<< Application Statistics >>\r\n");
@@ -1908,8 +2025,26 @@ static void print_stats(void)
                                   " 48kHz ADPCM\r\n");
     }
 
-    facade_print_string(stats_string);
+    facade_expansion_uart_write(stats_string);
 }
+
+#ifdef SINE_DEBUG_CAPTURE
+/* Node-side observability, all updated every 10 ms in data_callback. Watch these instead of the
+ * void* current_mode pointer.
+ *   dbg_main_fb_mode    = current main-channel fallback mode index (0=96k/24b, 1=48k/24b,
+ *                         2=48k/16b, 3=48k/ADPCM)
+ *   dbg_main_fb_lm      = measured RX link margin
+ *   dbg_main_queue_load = audio output (accumulator->SAI) consumer buffer load; 0 = starved/underflow,
+ *                         climbing-to-full then dropping = overflow / producer faster than consumer
+ *   dbg_rx_ok / miss / rej = cumulative SWC RX counts on rx_audio_conn: CRC-good / timeslot-empty
+ *                         (lost) / corrupted. miss+rej rising in step with the audible glitches = RF loss. */
+volatile uint8_t  dbg_main_fb_mode    = 0xFF;
+volatile uint8_t  dbg_main_fb_lm      = 0;
+volatile uint32_t dbg_main_queue_load = 0;
+volatile uint32_t dbg_rx_ok           = 0;
+volatile uint32_t dbg_rx_miss         = 0;
+volatile uint32_t dbg_rx_rej          = 0;
+#endif
 
 /** @brief Callback sends the link margin and the button state every 10 ms.
  */
@@ -1919,9 +2054,28 @@ static void data_callback(void)
     swc_fallback_info_t fallback_info = {0};
     user_data_t transmitted_user_data = {0};
 
-    /* Update the link margin and the button state. */
+    /* Update the link margin and the button state. Do NOT assert here: this runs every
+     * 10 ms and a transient error on link loss must not hang the device. Record and continue;
+     * fallback_info stays zero-initialized on error so we just report a zero link margin. */
     fallback_info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    s_last_fb_info_err = swc_err;
+
+#ifdef SINE_DEBUG_CAPTURE
+    {
+        sac_status_t fb_status = SAC_OK;
+        swc_error_t stats_err = SWC_ERR_NONE;
+        swc_statistics_t *rx_stats = swc_connection_update_stats(rx_audio_conn, &stats_err);
+
+        dbg_main_fb_mode    = sac_fallback_get_current_mode(&main_channel_fallback_instance, &fb_status);
+        dbg_main_fb_lm      = fallback_info.link_margin;
+        dbg_main_queue_load = sac_pipeline_get_consumer_buffer_load(main_channel_accumulator_pipeline, &fb_status);
+        if (rx_stats != NULL) {
+            dbg_rx_ok   = rx_stats->packet_successfully_received_count;
+            dbg_rx_miss = rx_stats->no_packet_reception_count;
+            dbg_rx_rej  = rx_stats->packet_rejected_count;
+        }
+    }
+#endif
 
     transmitted_user_data.link_margin = fallback_info.link_margin;
     transmitted_user_data.button_state = facade_read_button_state();
@@ -2093,9 +2247,15 @@ static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t
         memcpy(buffer, transmitted_data, size);
     }
 
-    /* Send the payload through the Wireless Core. */
+    /* Send the payload through the Wireless Core. Do NOT assert: when the link is down the
+     * TX queue fills up and this returns an error every 10 ms. Trapping here was a prime cause
+     * of the HS never recovering. Record the error and return; the queue drains once the link
+     * is back. */
     swc_connection_send(tx_data_conn, buffer, size, swc_err);
-    ASSERT_SWC_STATUS(*swc_err);
+    if (*swc_err != SWC_ERR_NONE) {
+        s_last_send_err = *swc_err;
+        s_send_err_count++;
+    }
 }
 
 /** @brief Read data from a specific connection.
@@ -2167,7 +2327,7 @@ static void app_init(void)
     sac_pipeline_start(back_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-#if SINE_INJECT_I2S
+#if SINE_INJECT_HS
     /* Kick the first SAI TX so the self-clocked sine loop starts. Without this the consumer
      * never starts (the pipeline queue stays empty with no OTA data), so no TX-complete would
      * ever fire. After this first write, each TX-complete re-arms the next sine chunk. */

@@ -86,6 +86,10 @@ static volatile bool mocked_radio_2_irq_flag;
 static volatile uint32_t mocked_radio_1_dma_transfer_cb_count;
 static volatile uint32_t mocked_radio_2_dma_transfer_cb_count;
 static volatile bool mocked_context_switch_flag;
+/*! Latched result of the SPI-blocking test per radio, captured at test time
+ *  (right after a clean reset) so the LED report does not depend on a fragile
+ *  re-read after the DMA/IRQ/sleep tests have changed the radio state. */
+static bool radio_spi_blocking_ok[2];
 
 static swc_hal_validator_t swc_hal[2] = {
     {
@@ -185,65 +189,58 @@ int main(void)
      * before any init runs. Watch for blue, then green, then red in turn; any
      * colour that never lights is a dead/miswired LED (or unbonded pin), not a
      * firmware-logic problem. Runs pre-init at MSI ~4 MHz. */
-    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 3000000);
-    facade_debug_led_blink(FACADE_DEBUG_LED_GREEN, 3, 3000000);
-    facade_debug_led_blink(FACADE_DEBUG_LED_RED, 3, 3000000);
-
-    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 5, 3000000);   /* A: MCU alive (pre-init) */
 
     /* Initiate basic components. */
     facade_bsp_init();
-    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 2, 12000000);  /* B: bsp_init returned */
+    //facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 2, 12000000);  /* B: bsp_init returned */
 
     facade_uart_init();
-    facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 12000000);  /* C: uart_init returned */
+    //facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 12000000);  /* C: uart_init returned */
 
     /* Simple TX sanity string before the structured tests. */
     facade_log_io("\r\n=== BSP VALIDATOR UART ALIVE ===\r\n");
 
     swc_config_hardware_interface();
 
+    /* Repeated SFD read on both radios to confirm radio 2 now responds after the
+     * wireless_core_backend guard fix (SWC_RADIO_COUNT > 1). Inspect rx1/rx2 in
+     * the debugger: a healthy radio returns 1D C1 A6 5E. */
+    // reset_transceiver(RADIO_ID_1);
+    // reset_transceiver(RADIO_ID_2);
+    // while (1) {
+    //     uint8_t rx1[5] = {0};
+    //     read_sfd(RADIO_ID_1, rx1);
+    //     uint8_t rx2[5] = {0};
+    //     read_sfd(RADIO_ID_2, rx2);
+    // }
+
     run_radio_1_bsp_validator_tests();
 
     if (SWC_RADIO_COUNT == 2) {
-        run_radio_2_bsp_validator_tests();
+        while(1){
+            run_radio_2_bsp_validator_tests();
+        }
     }
+    facade_time_delay(300);
+
 
     /*
-     * These boards have no working UART, so report the key SPI result on the
-     * RGB LED instead, using a different colour per radio so they are
-     * distinguishable at a glance. Read each radio's SFD register and compare
-     * it to the known reset default:
-     *   BLUE blinks  -> radio 1 SPI OK  (dark = radio 1 SPI FAIL)
-     *   GREEN blinks -> radio 2 SPI OK  (dark = radio 2 SPI FAIL / the SPI2 issue)
-     * So blue+green = Layer-1 PASS; blue only = radio 2 dead; nothing = radio 1
-     * dead. Blinked once after a short gap (clearly separate from the boot
-     * 5/2/3 blue markers above), then the MCU idles - no repeating pattern.
+     * These boards have no working UART, so report the SPI-blocking result on
+     * the RGB LED, using a different colour per radio. The result is the one
+     * LATCHED inside validate_spi_blocking() during each radio's test suite
+     * (right after a clean reset), NOT a re-read here: by this point the DMA /
+     * IRQ / sleep / critical-section tests have changed the radio state, so a
+     * fresh read would spuriously fail even on a known-good radio.
+     *   BLUE blinks  -> radio 1 SPI-blocking PASSED (dark = failed)
+     *   GREEN blinks -> radio 2 SPI-blocking PASSED (dark = failed)
+     * Blinked once after a short gap, then the MCU idles - no repeating pattern.
      */
-    {
-        uint8_t sfd[5];
-        bool radio1_ok;
-        bool radio2_ok = true;
-
-        memset(sfd, 0, sizeof(sfd));
-        reset_transceiver(RADIO_ID_1);
-        read_sfd(RADIO_ID_1, sfd);
-        radio1_ok = compare_reg_value(&sfd[1], DEFAULT_SFD, SFD_LENGTH);
-
-        if (SWC_RADIO_COUNT == 2) {
-            memset(sfd, 0, sizeof(sfd));
-            reset_transceiver(RADIO_ID_2);
-            read_sfd(RADIO_ID_2, sfd);
-            radio2_ok = compare_reg_value(&sfd[1], DEFAULT_SFD, SFD_LENGTH);
-        }
-
-        facade_time_delay(1500);
-        if (radio1_ok) {
-            facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 4000000);
-        }
-        if ((SWC_RADIO_COUNT == 2) && radio2_ok) {
-            facade_debug_led_blink(FACADE_DEBUG_LED_GREEN, 3, 4000000);
-        }
+    facade_time_delay(1500);
+    if (radio_spi_blocking_ok[RADIO_ID_1]) {
+        facade_debug_led_blink(FACADE_DEBUG_LED_BLUE, 3, 4000000);
+    }
+    if ((SWC_RADIO_COUNT == 2) && radio_spi_blocking_ok[RADIO_ID_2]) {
+        facade_debug_led_blink(FACADE_DEBUG_LED_GREEN, 3, 4000000);
     }
 
     while (1);
@@ -325,8 +322,11 @@ static void validate_spi_blocking(bsp_radio_t radio_index)
     /* Read SFD in blocking mode. */
     read_sfd(radio_index, rx_data);
 
-    /* Validate that the SFD is equal to the DEFAULT one. */
-    if (!compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH)) {
+    /* Validate that the SFD is equal to the DEFAULT one. Latch the outcome so
+     * the LED report can use it (UART may be unavailable on this board). */
+    bool ok = compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH);
+    radio_spi_blocking_ok[radio_index] = ok;
+    if (!ok) {
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
         /* Abort scenario. */
         return;

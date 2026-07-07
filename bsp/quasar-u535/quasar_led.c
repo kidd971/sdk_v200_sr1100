@@ -22,6 +22,13 @@ void quasar_led_init(void)
     /* Only initialize LEDs with pins defined in quasar_def.h for this board variant. */
     led_init(QUASAR_LED_USB);
     quasar_led_clear(QUASAR_LED_USB);
+
+    /* TX/RX activity LEDs borrow the RGB green (PB4) / red (PH11) channels on U535.
+     * They are active-high (drive high = on), so start them off by driving low. */
+    led_init(QUASAR_LED_USER_1);
+    quasar_gpio_clear(QUASAR_DEF_LED_USER_1_PORT, QUASAR_DEF_LED_USER_1_PIN);
+    led_init(QUASAR_LED_USER_2);
+    quasar_gpio_clear(QUASAR_DEF_LED_USER_2_PORT, QUASAR_DEF_LED_USER_2_PIN);
 }
 
 void quasar_led_deinit(void)
@@ -135,27 +142,28 @@ static quasar_gpio_config_t led_get_config(quasar_led_peripherals_t led_peripher
     //     config.alternate = QUASAR_GPIO_ALTERNATE_NONE;
     //     break;
 
-    /* The LED_USER1 is designated for application purposes. */
-    // case QUASAR_LED_USER_1:
-    //     config.port = QUASAR_DEF_LED_USER_1_PORT;
-    //     config.pin = QUASAR_DEF_LED_USER_1_PIN;
-    //     config.mode = QUASAR_GPIO_MODE_OUTPUT;
-    //     config.type = QUASAR_GPIO_TYPE_OD;
-    //     config.pull = QUASAR_GPIO_PULL_UP;
-    //     config.speed = QUASAR_GPIO_SPEED_LOW;
-    //     config.alternate = QUASAR_GPIO_ALTERNATE_NONE;
-    //     break;
+    /* The LED_USER1 borrows RGB green (PB4) for TX/uplink activity on U535.
+     * Push-pull active-high (matches the bsp_validator RGB drive that lights it). */
+    case QUASAR_LED_USER_1:
+        config.port = QUASAR_DEF_LED_USER_1_PORT;
+        config.pin = QUASAR_DEF_LED_USER_1_PIN;
+        config.mode = QUASAR_GPIO_MODE_OUTPUT;
+        config.type = QUASAR_GPIO_TYPE_PP;
+        config.pull = QUASAR_GPIO_PULL_NONE;
+        config.speed = QUASAR_GPIO_SPEED_LOW;
+        config.alternate = QUASAR_GPIO_ALTERNATE_NONE;
+        break;
 
-    /* The LED_USER2 is designated for application purposes. */
-    // case QUASAR_LED_USER_2:
-    //     config.port = QUASAR_DEF_LED_USER_2_PORT;
-    //     config.pin = QUASAR_DEF_LED_USER_2_PIN;
-    //     config.mode = QUASAR_GPIO_MODE_OUTPUT;
-    //     config.type = QUASAR_GPIO_TYPE_OD;
-    //     config.pull = QUASAR_GPIO_PULL_UP;
-    //     config.speed = QUASAR_GPIO_SPEED_LOW;
-    //     config.alternate = QUASAR_GPIO_ALTERNATE_NONE;
-    //     break;
+    /* The LED_USER2 borrows RGB red (PH11) for RX/downlink activity on U535. */
+    case QUASAR_LED_USER_2:
+        config.port = QUASAR_DEF_LED_USER_2_PORT;
+        config.pin = QUASAR_DEF_LED_USER_2_PIN;
+        config.mode = QUASAR_GPIO_MODE_OUTPUT;
+        config.type = QUASAR_GPIO_TYPE_PP;
+        config.pull = QUASAR_GPIO_PULL_NONE;
+        config.speed = QUASAR_GPIO_SPEED_LOW;
+        config.alternate = QUASAR_GPIO_ALTERNATE_NONE;
+        break;
 
     /* The LED_USER3 is designated for application purposes. */
     // case QUASAR_LED_USER_3:

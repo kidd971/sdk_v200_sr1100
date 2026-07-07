@@ -145,6 +145,16 @@ void facade_time_delay(uint32_t ms);
  */
 void facade_log_io(char *string);
 
+/** @brief Directly drive a radio's SPI CS pin via the GPIO API (debug/bring-up).
+ *
+ *  Bypasses SPI entirely so the MCU CS GPIO can be probed in isolation to check
+ *  the pin/trace is healthy (radio 1 CS = PE11, radio 2 CS = PD5 on U535).
+ *
+ *  @param[in] radio_index  0 = radio 1, 1 = radio 2.
+ *  @param[in] level        true = drive high, false = drive low.
+ */
+void facade_radio_cs_drive(uint8_t radio_index, bool level);
+
 #ifdef __cplusplus
 }
 #endif
