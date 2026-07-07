@@ -186,6 +186,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-master-ljf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535, I2S master, LJF format",
             "cacheVariables": {
@@ -228,6 +229,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-slave-ljf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535, I2S slave, LJF format",
             "cacheVariables": {
@@ -264,6 +266,26 @@
                 "I2S_FMT_DEFAULT": "2",
                 "NO_CODEC": "1",
                 "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-slave-std-nocodec",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535 (OneOdio DG/coord), I2S slave, standard format, no codec (direct I2S to SOC), LDO regulator",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-master-std-nocodec",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535 (OneOdio HS/node), I2S master, standard format, no codec (direct I2S to SOC), LDO regulator",
+            "cacheVariables": {
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1"
             }
         },
         {
