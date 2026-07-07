@@ -345,6 +345,18 @@ void facade_expansion_uart_write(char *string)
 #endif
 }
 
+void facade_stats_write(char *string)
+{
+#ifdef QUASAR_U535
+    /* u535 (LDO board) has no convenient USB CDC, so route the stats dump to the
+     * AT-command/expansion UART (LPUART1), same pins as the AT console. */
+    facade_expansion_uart_write(string);
+#else
+    /* u5a5 EVK and other boards print stats over the USB CDC port. */
+    facade_print_string(string);
+#endif
+}
+
 uint8_t facade_expansion_uart_read_byte(void)
 {
 #if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)

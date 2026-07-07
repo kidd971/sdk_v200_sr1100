@@ -207,6 +207,17 @@ void facade_battery_init(void);
  */
 uint8_t facade_read_battery_level_pct(void);
 
+/** @brief Write the periodic statistics dump to the board's console.
+ *
+ *  Board-dependent routing (decided in the backend, where the chip macro is visible):
+ *  u535 (LDO board) has no convenient USB CDC, so stats go to the AT-command/expansion
+ *  UART (LPUART1, same pins as the AT console); every other board (u5a5 EVK, etc.)
+ *  prints to the USB CDC port.
+ *
+ *  @param[in] string  Null-terminated statistics string to emit.
+ */
+void facade_stats_write(char *string);
+
 #if USB_AUDIO_ENABLED
 /** @brief Configure the coordinator's USB audio.
  */

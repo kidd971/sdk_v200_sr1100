@@ -2009,8 +2009,8 @@ static void print_stats(void)
                                                  sizeof(stats_string) - string_length, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    /* Stats go to the AT-command/expansion UART (LPUART1 on u535), same pins as the AT console. */
-    facade_expansion_uart_write(stats_string);
+    /* Board-dependent routing: u535 -> AT/expansion UART (LPUART1); u5a5 EVK & others -> USB CDC. */
+    facade_stats_write(stats_string);
 
     /* ** APP Statistics ** */
     string_length = snprintf(stats_string, sizeof(stats_string), "\r\n<< Application Statistics >>\r\n");
@@ -2025,7 +2025,7 @@ static void print_stats(void)
                                   " 48kHz ADPCM\r\n");
     }
 
-    facade_expansion_uart_write(stats_string);
+    facade_stats_write(stats_string);
 }
 
 #ifdef SINE_DEBUG_CAPTURE
