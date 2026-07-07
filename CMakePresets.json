@@ -360,6 +360,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-dualradio-slave-std",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, I2S standard format",
             "cacheVariables": {
