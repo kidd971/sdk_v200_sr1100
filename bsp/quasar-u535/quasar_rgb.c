@@ -35,11 +35,6 @@ void quasar_rgb_init(void)
 #endif
     blue_is_active = false;
     rgb_is_set = false;
-#ifdef QUASAR_U535_91EVB
-    /* 91EVB has only one LED (PB2); turn it on at boot as a power indicator. */
-    blue_is_active = true;
-    quasar_rgb_set();
-#endif
 }
 
 void quasar_rgb_deinit(void)

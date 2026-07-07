@@ -108,45 +108,21 @@ __attribute__((weak)) void facade_notify_enter_pairing(void)
         quasar_timer_delay_ms(delay_ms);
         quasar_rgb_clear();
     }
-#ifdef QUASAR_U535_91EVB
-    /* 91EVB: restore always-on power indicator after pairing animation. */
-    quasar_rgb_set();
-#endif
 }
 
 __attribute__((weak)) void facade_notify_not_paired(void)
 {
-#ifdef QUASAR_U535_91EVB
-    /* 91EVB: LED is always-on power indicator. Flash off 4 times to signal failure. */
-    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
-    for (uint8_t i = 0; i < 4; i++) {
-        quasar_rgb_clear();
-        quasar_timer_delay_ms(250);
-        quasar_rgb_set();
-        quasar_timer_delay_ms(250);
-    }
-    quasar_rgb_clear();
-#else
     quasar_rgb_clear();
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
     quasar_rgb_set();
     quasar_timer_delay_ms(250);
     quasar_rgb_clear();
-#endif
 }
 
 __attribute__((weak)) void facade_notify_pairing_successful(void)
 {
-#ifdef QUASAR_U535_91EVB
-    /* 91EVB: LED is always-on power indicator. Flash off once to signal success. */
-    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
-    quasar_rgb_clear();
-    quasar_timer_delay_ms(250);
-    quasar_rgb_set();
-#else
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
     quasar_rgb_set();
-#endif
 }
 
 __attribute__((weak)) void facade_led_all_off(void)
