@@ -47,8 +47,25 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(I2S_FMT_DEFAULT=${I2S_FMT_DEFAULT})
     endif()
 
-    if (DEFINED AV_IND)
-        add_compile_definitions(AV_IND=${AV_IND})
+    # Board pin/behavior overrides (orthogonal, self-documenting).
+    if (DEFINED LED_USER1_PD7)
+        add_compile_definitions(LED_USER1_PD7=1)
+    endif()
+
+    if (DEFINED LED_RGB_BLUE_PA1)
+        add_compile_definitions(LED_RGB_BLUE_PA1=1)
+    endif()
+
+    if (DEFINED LED_RGB_BLUE_PB2)
+        add_compile_definitions(LED_RGB_BLUE_PB2=1)
+    endif()
+
+    if (DEFINED RADIO1_RESET_PA1)
+        add_compile_definitions(RADIO1_RESET_PA1=1)
+    endif()
+
+    if (DEFINED BYPASS_BOARD_REV_CHECK)
+        add_compile_definitions(BYPASS_BOARD_REV_CHECK=1)
     endif()
 
     if (DEFINED SINE_DEBUG_CAPTURE)

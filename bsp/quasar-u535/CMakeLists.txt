@@ -51,7 +51,3 @@ endif()
 
 target_compile_definitions(hardware PUBLIC QUASAR_U535=1)
 
-if (U535_BOARD_VARIANT STREQUAL "91EVB")
-    target_compile_definitions(hardware PUBLIC QUASAR_U535_91EVB=1)
-endif()
-
