@@ -136,8 +136,8 @@ extern "C" {
 #define QUASAR_DEF_BUTTON_USER_4_PORT GPIOI
 #define QUASAR_DEF_BUTTON_USER_4_PIN  QUASAR_GPIO_PIN_0
 
-#if defined(AV_IND)
-/* AV IND: USER_1 <-> pairing (RGB blue) LED are swapped (RGB blue takes PA1 below). */
+#if defined(LED_USER1_PD7)
+/* USER_1 LED on PD7 (e.g. AV IND, swapped with pairing/RGB-blue which takes PA1 below). */
 #define QUASAR_DEF_LED_USER_1_PORT    GPIOD
 #define QUASAR_DEF_LED_USER_1_PIN     QUASAR_GPIO_PIN_7
 #else
@@ -158,8 +158,8 @@ extern "C" {
 #define QUASAR_DEF_LED_HP_JACK_PIN    QUASAR_GPIO_PIN_14
 #define QUASAR_DEF_LED_RGB_GREEN_PORT GPIOB
 #define QUASAR_DEF_LED_RGB_GREEN_PIN  QUASAR_GPIO_PIN_4
-#if defined(AV_IND)
-/* AV IND: pairing (RGB blue) LED on PA1, swapped with USER_1 (moved to PD7 above) so
+#if defined(LED_RGB_BLUE_PA1)
+/* Pairing (RGB blue) LED on PA1 (e.g. AV IND, swapped with USER_1 moved to PD7 above) so
  * PA1 is driven only by pairing notification. */
 #define QUASAR_DEF_LED_RGB_BLUE_PORT  GPIOA
 #define QUASAR_DEF_LED_RGB_BLUE_PIN   QUASAR_GPIO_PIN_1

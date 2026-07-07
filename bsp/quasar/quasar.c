@@ -41,12 +41,15 @@ void quasar_init(quasar_config_t quasar_config, quasar_bsp_status_t *err)
 
     quasar_power_set_vdd_level(quasar_config.quasar_vdd_selection);
     quasar_power_enable_ldo_led();
-    /* Both GPIOs are set to power up the ADC circuitry to allow getting the board revision. */
+#if !defined(BYPASS_BOARD_REV_CHECK)
+    /* Both GPIOs are set to power up the ADC circuitry to allow getting the board revision.
+     * Skipped when bypassing: those pins have no LDO on such boards (reused for Radio2 SPI). */
     quasar_power_enable_ldo_mcu(QUASAR_REVA, err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
 
     quasar_power_enable_ldo_mcu(QUASAR_REVB, err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
+#endif
 
     HAL_Delay(100);
 
@@ -55,11 +58,15 @@ void quasar_init(quasar_config_t quasar_config, quasar_bsp_status_t *err)
         quasar_debug_init();
     }
 
-    /* Initialize ADC and get board revision. */
+    /* Initialize ADC (battery monitoring; board-revision read on boards with the divider). */
     board_revision = quasar_adc_init(err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
+#if defined(BYPASS_BOARD_REV_CHECK)
+    /* This board has no board-revision divider; use a fixed value. */
+    board_revision = QUASAR_REVB;
+#endif
 
-    /* Deinitialize the unnecessary GPIO based on the detected revision. */
+    /* Deinitialize the unnecessary GPIO based on the (fixed or detected) revision. */
     patch_board_revision(board_revision);
 
     /* Initialize LEDs and buttons. */
@@ -163,8 +170,8 @@ quasar_revision_t quasar_get_board_revision(void)
 static void patch_board_revision(quasar_revision_t board_revision)
 {
     /* The GPIO that had been initialized as output for LDO enable is deinitialized. */
-#if defined(AV_IND)
-    /* AV IND board has no ADC voltage divider for revision detection.
+#if defined(BYPASS_BOARD_REV_CHECK)
+    /* Board has no ADC voltage divider for revision detection.
      * Deinit both LDO MCU EN GPIOs so neither conflicts with Radio2 SPI pins.
      */
     quasar_gpio_deinit(QUASAR_DEF_LDO_MCU_EN_PORT_REVA, QUASAR_DEF_LDO_MCU_EN_PIN_REVA);
