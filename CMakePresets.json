@@ -495,51 +495,6 @@
         },
 
         {
-            "name": "puretone-headset-quasar-u535-91",
-            "hidden": true,
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Base: Puretone headset U535, 91_535_evb board (Radio1 reset=PA1, RGB blue LED=PB2, codec kept as original)",
-            "cacheVariables": {
-                "RADIO1_RESET_PA1": "1",
-                "LED_RGB_BLUE_PB2": "1"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-91-slave-rjf",
-            "inherits": ["puretone-headset-quasar-u535-91"],
-            "description": "Puretone headset U535 91, I2S slave, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-91-master-rjf",
-            "inherits": ["puretone-headset-quasar-u535-91"],
-            "description": "Puretone headset U535 91, I2S master, RJF format",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-91-slave-rjf-sineinj-dg",
-            "inherits": ["puretone-headset-quasar-u535-91-slave-rjf"],
-            "description": "Puretone headset U535 91 as DG, I2S slave, RJF; DG injects sine into pipeline (radio TX) for end-to-end audio path verification (flash puretone_dongle.bin). NOTE: needs an external I2S clock to drive the inject DMA.",
-            "cacheVariables": {
-                "SINE_INJECT_DG": "1"
-            }
-        },
-        {
-            "name": "puretone-headset-quasar-u535-91-master-rjf-sineinj-dg",
-            "inherits": ["puretone-headset-quasar-u535-91-master-rjf"],
-            "description": "Puretone headset U535 91 as DG, I2S MASTER, RJF; DG self-clocks SAI so the sine-inject DMA runs without an external I2S clock (flash puretone_dongle.bin)",
-            "cacheVariables": {
-                "SINE_INJECT_DG": "1"
-            }
-        },
-
-        {
             "name": "audio-bidirectional-quasar",
             "hidden": true,
             "inherits": [

@@ -56,14 +56,6 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(LED_RGB_BLUE_PA1=1)
     endif()
 
-    if (DEFINED LED_RGB_BLUE_PB2)
-        add_compile_definitions(LED_RGB_BLUE_PB2=1)
-    endif()
-
-    if (DEFINED RADIO1_RESET_PA1)
-        add_compile_definitions(RADIO1_RESET_PA1=1)
-    endif()
-
     if (DEFINED BYPASS_BOARD_REV_CHECK)
         add_compile_definitions(BYPASS_BOARD_REV_CHECK=1)
     endif()
