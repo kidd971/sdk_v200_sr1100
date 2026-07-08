@@ -293,6 +293,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-slave-std-nocodec",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio DG/coord), I2S slave, standard format, no codec (direct I2S to SOC), LDO regulator",
             "cacheVariables": {
@@ -303,6 +304,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-master-std-nocodec",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), I2S master, standard format, no codec (direct I2S to SOC), LDO regulator",
             "cacheVariables": {
@@ -334,18 +336,8 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-slave-std-nocodec-sineinj",
-            "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, I2S standard format, no codec (direct I2S to SOC), DG injects sine into pipeline (radio TX); HS plays the RF-received audio through the normal pipeline so SINE_DEBUG_CAPTURE (s_node_debug_buf) reflects the actual decoded data. NOTE: SINE_INJECT_HS intentionally omitted — enabling it bypasses the consumer and the capture stays zero.",
-            "cacheVariables": {
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "2",
-                "SINE_INJECT_DG": "1",
-                "SINE_DEBUG_CAPTURE": "1"
-            }
-        },
-        {
             "name": "puretone-headset-quasar-u535-master-std-sineinj-hs",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535, I2S master, I2S standard format, HS local sine on SAI TX (HS drives its own SAI clock; TX-complete re-arms each chunk)",
             "cacheVariables": {
@@ -356,6 +348,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-dualradio-master-std-nocodec",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S master, standard format, no codec (direct I2S to SOC), LDO regulator",
             "cacheVariables": {
