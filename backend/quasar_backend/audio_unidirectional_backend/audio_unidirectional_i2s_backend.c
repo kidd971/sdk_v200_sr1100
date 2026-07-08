@@ -66,7 +66,7 @@ void facade_audio_coord_init(void)
     };
 
 #if NO_CODEC
-    /* No codec: route I2S directly to the external expansion port (e.g. AV IND board). */
+    /* No codec: route I2S directly to the external expansion port (e.g. configure1 board). */
     configure_sai(sai_cfg);
     quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
 #else
@@ -93,7 +93,7 @@ void facade_audio_node_init(void)
     };
 
 #if NO_CODEC
-    /* No codec: route I2S directly to the external expansion port (e.g. AV IND board). */
+    /* No codec: route I2S directly to the external expansion port (e.g. configure1 board). */
     configure_sai(sai_cfg);
     quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
 #else

@@ -90,10 +90,10 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u5a5-avind",
+            "name": "puretone-headset-quasar-u5a5-configure1",
             "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
-            "description": "Base: Puretone headset U5A5, AV IND board (no codec, LED remap User1=PD7/RGBblue=PA1, bypass board-rev ADC)",
+            "description": "Base: Puretone headset U5A5, configure1 board (no codec, LED remap User1=PD7/RGBblue=PA1, bypass board-rev ADC)",
             "cacheVariables": {
                 "NO_CODEC": "1",
                 "LED_USER1_PD7": "1",
@@ -102,18 +102,18 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u5a5-avind-slave-rjf",
-            "inherits": ["puretone-headset-quasar-u5a5-avind"],
-            "description": "Puretone headset U5A5, AV IND, I2S slave (coord), RJF format",
+            "name": "puretone-headset-quasar-u5a5-configure1-slave-rjf",
+            "inherits": ["puretone-headset-quasar-u5a5-configure1"],
+            "description": "Puretone headset U5A5, configure1, I2S slave (coord), RJF format",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "0",
                 "I2S_FMT_DEFAULT": "0"
             }
         },
         {
-            "name": "puretone-headset-quasar-u5a5-avind-master-rjf",
-            "inherits": ["puretone-headset-quasar-u5a5-avind"],
-            "description": "Puretone headset U5A5, AV IND, I2S master (node), RJF format",
+            "name": "puretone-headset-quasar-u5a5-configure1-master-rjf",
+            "inherits": ["puretone-headset-quasar-u5a5-configure1"],
+            "description": "Puretone headset U5A5, configure1, I2S master (node), RJF format",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "1",
                 "I2S_FMT_DEFAULT": "0"
@@ -521,10 +521,10 @@
             }
         },
         {
-            "name": "audio-unidir-quasar-avind-slave-rjf",
+            "name": "audio-unidir-quasar-configure1-slave-rjf",
             "hidden": true,
             "inherits": ["audio-unidirectional-quasar"],
-            "description": "Audio unidirectional U5A5, AV IND board, I2S slave, RJF format, no codec",
+            "description": "Audio unidirectional U5A5, configure1 board, I2S slave, RJF format, no codec",
             "cacheVariables": {
                 "NO_CODEC": "1",
                 "LED_USER1_PD7": "1",
@@ -535,10 +535,10 @@
             }
         },
         {
-            "name": "audio-unidir-quasar-avind-master-rjf",
+            "name": "audio-unidir-quasar-configure1-master-rjf",
             "hidden": true,
             "inherits": ["audio-unidirectional-quasar"],
-            "description": "Audio unidirectional U5A5, AV IND board, I2S master, RJF format, no codec",
+            "description": "Audio unidirectional U5A5, configure1 board, I2S master, RJF format, no codec",
             "cacheVariables": {
                 "NO_CODEC": "1",
                 "LED_USER1_PD7": "1",
