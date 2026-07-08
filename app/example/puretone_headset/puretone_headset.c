@@ -65,7 +65,8 @@
  *     (keeps printing "LOST") apart from a firmware hang (log freezes mid-stream).
  * Set LINK_WATCH to 0 to compile it out. */
 #ifndef LINK_WATCH
-#define LINK_WATCH 0
+#define LINK_WATCH 1  /* ON for dual-radio crash-log collection (HQ). Set to 0 for release:
+                       * it prints every LINK_WATCH_INTERVAL_MS on the shared AT/expansion UART. */
 #endif
 /* Poll/print cadence for the link watch in ms. */
 #define LINK_WATCH_INTERVAL_MS 200
@@ -318,6 +319,7 @@ static void at_start_disconnect(void);
 static void at_start_shutdown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
+static void at_crash_dump(void);
 static void at_play(void);
 static void at_stop(void);
 static void at_set_vol(uint8_t vol);
@@ -355,6 +357,7 @@ int main(void)
     at_cmd_core_register_shutdown_cb(at_start_shutdown);
     at_cmd_core_register_link_status_cb(at_get_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
+    at_cmd_core_register_crash_dump_cb(at_crash_dump);
     at_cmd_core_register_play_cb(at_play);
     at_cmd_core_register_stop_cb(at_stop);
     at_cmd_core_register_vol_cb(at_set_vol);
@@ -1880,7 +1883,12 @@ static void link_watch(void)
     uint32_t rx_miss = (rx_stats != NULL) ? rx_stats->no_packet_reception_count : 0;
     uint32_t rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
 
-    char line[200];
+    /* Dual-radio HW liveness: if one of these freezes while the LW seq keeps
+     * advancing, that radio's IRQ/DMA path stalled (the dual-only failure mode). */
+    uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
+    bool have_hw = facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma);
+
+    char line[256];
 
     /* Edge: announce connect<->disconnect transitions immediately. */
     if (!initialized) {
@@ -1893,15 +1901,23 @@ static void link_watch(void)
         prev_connected = connected;
     }
 
-    snprintf(line, sizeof(line),
+    int n = snprintf(line, sizeof(line),
              "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
-             "rx_ok=%lu rx_miss=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)\r\n",
+             "rx_ok=%lu rx_miss=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
              (unsigned)info.link_margin, (unsigned)fb_mode,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
              (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
              (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
+    if (have_hw && n > 0 && n < (int)sizeof(line)) {
+        snprintf(line + n, sizeof(line) - n,
+                 " r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",
+                 (unsigned long)r1_irq, (unsigned long)r2_irq,
+                 (unsigned long)r1_dma, (unsigned long)r2_dma);
+    } else if (n > 0 && n < (int)sizeof(line)) {
+        snprintf(line + n, sizeof(line) - n, "\r\n");
+    }
     facade_expansion_uart_write(line);
 }
 #endif /* LINK_WATCH */
@@ -2428,6 +2444,74 @@ static int32_t at_get_link_margin(void)
     }
     info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
     return (int32_t)info.link_margin;
+}
+
+/** @brief AT+CRASH_DUMP? — emit an on-demand crash/stall snapshot to the AT UART.
+ *
+ *  Captures, in one block: the dual-radio HW liveness counters, the wireless link
+ *  state (same fields as LINK_WATCH), and any HardFault register snapshot. All SWC
+ *  reads use a local err and never assert, so this is safe to call in a stalled
+ *  state and does not require the link to be up (covers the "hangs during sync,
+ *  before pairing" case as long as the CPU is still running).
+ */
+static void at_crash_dump(void)
+{
+    char buf[288];
+
+    facade_expansion_uart_write("\r\n+CRASH_DUMP:\r\n");
+
+    snprintf(buf, sizeof(buf), " build=v2.3.0 role=HS paired=%d\r\n",
+             (device_pairing_state == DEVICE_PAIRED) ? 1 : 0);
+    facade_expansion_uart_write(buf);
+
+    /* Wireless link state (non-asserting; rx_audio_conn may be NULL before pairing). */
+    if (rx_audio_conn != NULL) {
+        swc_error_t conn_err = SWC_ERR_NONE;
+        swc_error_t stat_err = SWC_ERR_NONE;
+        sac_status_t fb_status = SAC_OK;
+        bool connected = swc_connection_get_connect_status(rx_audio_conn, &conn_err);
+        swc_fallback_info_t info = swc_connection_get_fallback_info(rx_audio_conn, &conn_err);
+        swc_statistics_t *rx_stats = swc_connection_update_stats(rx_audio_conn, &stat_err);
+        swc_status_t swc_state = swc_get_status();
+        uint8_t fb_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, &fb_status);
+        uint32_t rx_ok = (rx_stats != NULL) ? rx_stats->packet_successfully_received_count : 0;
+        uint32_t rx_miss = (rx_stats != NULL) ? rx_stats->no_packet_reception_count : 0;
+        uint32_t rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
+
+        snprintf(buf, sizeof(buf),
+                 " swc=%s conn=%s fb=%u lm=%u cca_fail=%lu tx_drop=%lu "
+                 "rx_ok=%lu rx_miss=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)\r\n",
+                 (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
+                 connected ? "OK" : "LOST", (unsigned)fb_mode, (unsigned)info.link_margin,
+                 (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
+                 (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
+                 (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
+    } else {
+        snprintf(buf, sizeof(buf), " swc=%s conn=N/A (no connection yet)\r\n",
+                 (swc_get_status() == SWC_STATUS_RUNNING) ? "RUN" : "STOP");
+    }
+    facade_expansion_uart_write(buf);
+
+    /* Dual-radio HW liveness counters (u535 only). */
+    uint32_t r1_irq, r2_irq, r1_dma, r2_dma;
+    if (facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma)) {
+        snprintf(buf, sizeof(buf), " hw: r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",
+                 (unsigned long)r1_irq, (unsigned long)r2_irq,
+                 (unsigned long)r1_dma, (unsigned long)r2_dma);
+    } else {
+        snprintf(buf, sizeof(buf), " hw: N/A (single-radio board)\r\n");
+    }
+    facade_expansion_uart_write(buf);
+
+    /* Last captured HardFault (all-zero = no fault seen; cross-ref pc/lr against the .map). */
+    uint32_t cfsr, hfsr, pc, lr;
+    if (facade_get_hardfault_snapshot(&cfsr, &hfsr, &pc, &lr)) {
+        snprintf(buf, sizeof(buf), " fault: cfsr=0x%08lX hfsr=0x%08lX pc=0x%08lX lr=0x%08lX\r\n",
+                 (unsigned long)cfsr, (unsigned long)hfsr, (unsigned long)pc, (unsigned long)lr);
+    } else {
+        snprintf(buf, sizeof(buf), " fault: N/A\r\n");
+    }
+    facade_expansion_uart_write(buf);
 }
 
 static void at_play(void)

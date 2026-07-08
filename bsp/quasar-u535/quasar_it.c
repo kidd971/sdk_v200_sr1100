@@ -65,19 +65,8 @@ static void (*timer17_callback)(void) = default_irq_callback;
 static volatile uint32_t nested_critical;
 
 /* ------------------------------------------------------------------------- */
-/* HardFault 增强调试结构体与全局变量                                        */
+/* HardFault 增强调试结构体与全局变量 (HardFaultRegs_t declared in quasar_it.h) */
 /* ------------------------------------------------------------------------- */
-typedef struct {
-    uint32_t r0;
-    uint32_t r1;
-    uint32_t r2;
-    uint32_t r3;
-    uint32_t r12;
-    uint32_t lr;
-    uint32_t pc;
-    uint32_t psr;
-} HardFaultRegs_t;
-
 volatile HardFaultRegs_t hardfault_regs;
 volatile uint32_t hardfault_cfsr;
 volatile uint32_t hardfault_hfsr;

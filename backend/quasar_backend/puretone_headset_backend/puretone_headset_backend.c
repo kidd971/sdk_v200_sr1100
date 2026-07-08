@@ -12,6 +12,7 @@
 #include "at_cmd_core_facade.h"
 #include "quasar.h"
 #include "quasar_adc.h"
+#include "quasar_it.h"  /* dual-radio HW counters + HardFault snapshot (u535 only) */
 #include "sac_cfg.h"
 #include <string.h>
 
@@ -363,6 +364,40 @@ uint8_t facade_expansion_uart_read_byte(void)
     return quasar_uart_receive_irq(QUASAR_DEF_UART_SELECTION_EXPANSION);
 #else
     return 0;  /* Expansion UART not available on this board variant. */
+#endif
+}
+
+bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *r1_dma, uint32_t *r2_dma)
+{
+#if defined(STM32U535xx)
+    *r1_irq = radio1_irq_count;
+    *r2_irq = radio2_irq_count;
+    *r1_dma = radio1_dma_count;
+    *r2_dma = radio2_dma_count;
+    return true;
+#else
+    (void)r1_irq;
+    (void)r2_irq;
+    (void)r1_dma;
+    (void)r2_dma;
+    return false; /* per-radio debug counters exist only on the u535 dual-radio BSP */
+#endif
+}
+
+bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr)
+{
+#if defined(STM32U535xx)
+    *cfsr = hardfault_cfsr;
+    *hfsr = hardfault_hfsr;
+    *pc = hardfault_regs.pc;
+    *lr = hardfault_regs.lr;
+    return true;
+#else
+    (void)cfsr;
+    (void)hfsr;
+    (void)pc;
+    (void)lr;
+    return false; /* HardFault snapshot globals exist only on the u535 BSP */
 #endif
 }
 

@@ -33,6 +33,7 @@ static bool handler_stop(const char *args, char *resp, uint16_t resp_size);
 static bool handler_next_track(const char *args, char *resp, uint16_t resp_size);
 static bool handler_pre_track(const char *args, char *resp, uint16_t resp_size);
 static bool handler_battery(const char *args, char *resp, uint16_t resp_size);
+static bool handler_crash_dump(const char *args, char *resp, uint16_t resp_size);
 static void at_cmd_core_fallback(void);
 
 /* PRIVATE VARIABLES **********************************************************/
@@ -55,6 +56,7 @@ static void               (*s_pre_track_hw_cb)(void)                     = NULL;
 static void               (*s_disconnect_cb)(void)      = NULL;
 static void               (*s_shutdown_cb)(void)        = NULL;
 static uint8_t            (*s_battery_cb)(void)         = NULL;
+static void               (*s_crash_dump_cb)(void)      = NULL;
 static bool                 s_i2s_mux_is_ext   = false; /* default: ON_BOARD; AT+I2S_MUX toggles to EXT */
 static bool                 s_pair_requested        = false;
 static bool                 s_reset_requested       = false;
@@ -98,6 +100,7 @@ void at_cmd_core_init(void)
     at_server_register("NEXT_TRACK",      handler_next_track);
     at_server_register("PRE_TRACK",       handler_pre_track);
     at_server_register("BATTERY",         handler_battery);
+    at_server_register("CRASH_DUMP",      handler_crash_dump);
 
     at_module_set_fallback_handler(at_cmd_core_fallback);
 }
@@ -211,6 +214,11 @@ void at_cmd_core_register_battery_cb(uint8_t (*cb)(void))
 void at_cmd_core_register_connect_cb(void (*cb)(void))
 {
     s_connect_cb = cb;
+}
+
+void at_cmd_core_register_crash_dump_cb(void (*cb)(void))
+{
+    s_crash_dump_cb = cb;
 }
 
 void at_cmd_core_register_disconnect_cb(void (*cb)(void))
@@ -537,6 +545,25 @@ static bool handler_battery(const char *args, char *resp, uint16_t resp_size)
     return true;
 }
 
+/** @brief AT+CRASH_DUMP? — emit a crash/stall diagnostic snapshot for HQ.
+ *
+ *  Delegates to the app-registered dump callback, which writes the full block
+ *  (radio HW counters, wireless link state, captured HardFault registers)
+ *  directly to the expansion UART. Only works while the CPU is still running
+ *  (link stall); a true HardFault traps the CPU before this can run.
+ */
+static bool handler_crash_dump(const char *args, char *resp, uint16_t resp_size)
+{
+    (void)args;
+    if (s_crash_dump_cb == NULL) {
+        snprintf(resp, resp_size, "+CRASH_DUMP: N/A");
+        return true;
+    }
+    s_crash_dump_cb();
+    resp[0] = '\0'; /* dump already written by cb; at_module appends OK\r\n */
+    return true;
+}
+
 /** @brief AT+UWB_GET_ROLE? — report device role (0=Node, 1=Coordinator). */
 static bool handler_uwb_get_role(const char *args, char *resp, uint16_t resp_size)
 {
@@ -593,6 +620,7 @@ static bool handler_help(const char *args, char *resp, uint16_t resp_size)
         "  AT+NEXT_TRACK\r\n",
         "  AT+PRE_TRACK\r\n",
         "  AT+BATTERY?\r\n",
+        "  AT+CRASH_DUMP?\r\n",
     };
 
     facade_expansion_uart_write("+HELP:\r\n");

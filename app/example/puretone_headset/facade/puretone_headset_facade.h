@@ -70,6 +70,33 @@ void facade_audio_node_init(bool i2s_master_mode);
  */
 void facade_audio_deinit(void);
 
+/** @brief Read the per-radio hardware liveness counters (dual-radio crash triage).
+ *
+ *  Only meaningful on the u535 dual-radio board, where the BSP maintains
+ *  per-radio IRQ and RX-DMA-complete counters. If one counter freezes while
+ *  the others keep ticking, that radio's HW path stalled.
+ *
+ *  @param[out] r1_irq  radio1 IRQ (PE8/EXTI8) hit count.
+ *  @param[out] r2_irq  radio2 IRQ (PE7/EXTI7) hit count.
+ *  @param[out] r1_dma  radio1 RX DMA-complete (GPDMA1 Ch2) count.
+ *  @param[out] r2_dma  radio2 RX DMA-complete (GPDMA1 Ch6) count.
+ *  @return true if counters are available on this board; false otherwise (outputs untouched).
+ */
+bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *r1_dma, uint32_t *r2_dma);
+
+/** @brief Read the last captured HardFault register snapshot.
+ *
+ *  The BSP HardFault handler stores the faulting register frame plus the fault
+ *  status registers before halting. All-zero means no fault has been captured.
+ *
+ *  @param[out] cfsr  Configurable Fault Status Register (0xE000ED28) snapshot.
+ *  @param[out] hfsr  HardFault Status Register (0xE000ED2C) snapshot.
+ *  @param[out] pc    Program counter at fault.
+ *  @param[out] lr    Link register at fault.
+ *  @return true if the snapshot is available on this board; false otherwise (outputs untouched).
+ */
+bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr);
+
 /** @brief Set the serial audio interface transfer complete callbacks.
  *
  *  @note Set NULL in place of unused callback.

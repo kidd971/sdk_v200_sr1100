@@ -10,11 +10,45 @@
 #ifndef QUASAR_IT_H_
 #define QUASAR_IT_H_
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TYPES **********************************************************************/
+/** @brief Captured CPU register frame at the moment of a HardFault.
+ *
+ *  Populated by HardFault_Handler before it halts. Read it (together with
+ *  hardfault_cfsr / hardfault_hfsr) to post-mortem a crash: cross-reference
+ *  pc/lr against the .map/.elf to locate the faulting instruction.
+ */
+typedef struct {
+    uint32_t r0;
+    uint32_t r1;
+    uint32_t r2;
+    uint32_t r3;
+    uint32_t r12;
+    uint32_t lr;
+    uint32_t pc;
+    uint32_t psr;
+} HardFaultRegs_t;
+
+/*! Last captured HardFault register frame (see HardFaultRegs_t). Zero if no fault yet. */
+extern volatile HardFaultRegs_t hardfault_regs;
+/*! Configurable Fault Status Register (0xE000ED28) snapshot at last HardFault. */
+extern volatile uint32_t hardfault_cfsr;
+/*! HardFault Status Register (0xE000ED2C) snapshot at last HardFault. */
+extern volatile uint32_t hardfault_hfsr;
+
+/* DEBUG: per-radio hardware liveness counters (dual-radio bring-up / crash triage).
+ * IRQ counters live in quasar_it.c, DMA-complete counters in quasar_dma.c. If one of
+ * these freezes while the others keep ticking, that radio's HW path stalled. */
+extern volatile uint32_t radio1_irq_count; /*!< radio1 IRQ (PE8/EXTI8) hit count. */
+extern volatile uint32_t radio2_irq_count; /*!< radio2 IRQ (PE7/EXTI7) hit count. */
+extern volatile uint32_t radio1_dma_count; /*!< radio1 RX DMA-complete (GPDMA1 Ch2) count. */
+extern volatile uint32_t radio2_dma_count; /*!< radio2 RX DMA-complete (GPDMA1 Ch6) count. */
+
 /** @brief List of the available interrupt request priorities.
  */
 typedef enum quasar_irq_priority {

@@ -302,6 +302,20 @@ void at_cmd_core_register_shutdown_cb(void (*cb)(void));
 void at_cmd_core_register_disconnect_cb(void (*cb)(void));
 
 /**
+ * @brief Register a callback invoked when AT+CRASH_DUMP? is received.
+ *
+ * The callback should write a diagnostic snapshot to the expansion UART via
+ * facade_expansion_uart_write() — e.g. radio HW liveness counters, wireless
+ * link state, and any captured HardFault registers. Intended for collecting
+ * crash/stall logs to send to HQ. Works while the CPU is still alive (link
+ * stall); it will not run if the CPU is trapped in a HardFault.
+ * If no callback is registered the command replies with "+CRASH_DUMP: N/A".
+ *
+ * @param[in] cb  Function that emits the dump. May be NULL to unregister.
+ */
+void at_cmd_core_register_crash_dump_cb(void (*cb)(void));
+
+/**
  * @brief Register a callback invoked when AT+UWB_CONNECT is received.
  *
  * The callback should attempt to re-establish the UWB connection using the
