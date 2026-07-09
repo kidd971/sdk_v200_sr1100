@@ -76,6 +76,10 @@ static IRQn_Type uart_get_selected_irq(quasar_uart_selection_t uart_selection);
 static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UART_HandleTypeDef *uart_handle,
                                      void (*rx_irq_callback)(void));
 
+/* TEMP DEBUG: 1 = echo bytes received on LPUART1 (AT/expansion UART) back out its TX,
+ * so we can tell if RX physically delivers a byte at all. Set to 0 for release. */
+#define LPUART1_RX_ECHO_DEBUG 0
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 void quasar_uart_init(quasar_uart_config_t uart_config)
 {
@@ -626,7 +630,20 @@ static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UAR
     if (((uart_handle->Instance->ISR & USART_ISR_RXNE) == USART_ISR_RXNE) &&
         ((uart_handle->Instance->CR3 & USART_CR3_DMAR) != USART_CR3_DMAR)) {
         /* Transfer the contents of RDR into the associated FIFO buffer. */
-        quasar_fifo_push(&quasar_uart_fifo_rx[uart_selection], uart_handle->Instance->RDR);
+        uint8_t rx_byte = (uint8_t)uart_handle->Instance->RDR;
+        quasar_fifo_push(&quasar_uart_fifo_rx[uart_selection], rx_byte);
+
+#if LPUART1_RX_ECHO_DEBUG
+        /* TEMP DEBUG: echo the byte straight back on the AT/expansion UART TX. If you see
+         * your typed characters mirrored, RX physically works and the fault is upstream
+         * (parser/wiring); if nothing echoes, RX never delivered a byte (pin/init). */
+        if (uart_selection == QUASAR_UART_SELECTION_LPUART1) {
+            while ((uart_handle->Instance->ISR & USART_ISR_TXE) != USART_ISR_TXE) {
+                /* wait for TX data register empty */
+            }
+            uart_handle->Instance->TDR = rx_byte;
+        }
+#endif
 
         if (rx_irq_callback != NULL) {
             rx_irq_callback();
@@ -658,8 +675,10 @@ static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UAR
     }
 
     if ((uart_handle->Instance->ISR & USART_ISR_ORE) == USART_ISR_ORE) {
-        /* Disable the interrupt flag to prevent anything from interrupting (No error handling). */
-        QUASAR_CLEAR_BIT(uart_handle->Instance->CR1, USART_ICR_ORECF_Msk);
+        /* Clear the overrun flag by writing ORECF into ICR (write-1-to-clear). The old code
+         * cleared this mask in CR1 instead, which never cleared ORE (and wiped TE): once an
+         * overrun latched, RXNE stopped firing and RX died permanently. */
+        uart_handle->Instance->ICR = USART_ICR_ORECF;
     }
 }
 
