@@ -54,7 +54,7 @@
 /* Size of the buffer used to print errors. */
 #define ERROR_MESSAGE_BUFFER_SIZE 50
 /* Interval to print statistics in ms. */
-#define PRINT_INTERVAL_MS 3000
+#define PRINT_INTERVAL_MS 2000
 
 /* **** Link watch ****
  * Lightweight diagnostic that polls the RX-audio connection and prints a one-line
@@ -65,11 +65,18 @@
  *     (keeps printing "LOST") apart from a firmware hang (log freezes mid-stream).
  * Set LINK_WATCH to 0 to compile it out. */
 #ifndef LINK_WATCH
-#define LINK_WATCH 1  /* ON for dual-radio crash-log collection (HQ). Set to 0 for release:
-                       * it prints every LINK_WATCH_INTERVAL_MS on the shared AT/expansion UART. */
+#define LINK_WATCH 1  /* ON for dual-radio crash-log collection: prints every LINK_WATCH_INTERVAL_MS
+                       * on the AT/expansion UART (LPUART1 TX). Set to 0 for release. */
 #endif
 /* Poll/print cadence for the link watch in ms. */
-#define LINK_WATCH_INTERVAL_MS 200
+#define LINK_WATCH_INTERVAL_MS 2000
+
+/* Periodic on-board CRASH_DUMP: emit the same consolidated snapshot as AT+CRASH_DUMP?
+ * every N ms, WITHOUT waiting for a stall or an AT command (the AT-UART RX pad is
+ * unusable on this board). Output goes to LPUART1 TX. Set to 0 to disable. */
+#ifndef CRASH_DUMP_PERIODIC_MS
+#define CRASH_DUMP_PERIODIC_MS 2000
+#endif
 
 /* **** Fallback **** */
 /* Fallback channel index. */
@@ -417,6 +424,19 @@ int main(void)
 
 #if LINK_WATCH
         link_watch();
+#endif
+
+#if CRASH_DUMP_PERIODIC_MS
+        /* Periodic consolidated snapshot (link state + HW counters + last HardFault),
+         * same block as AT+CRASH_DUMP? — auto-emitted because the AT-UART RX is unusable here. */
+        {
+            static uint32_t crash_dump_tick_start = 0;
+            uint32_t cd_now = facade_get_tick_ms();
+            if ((cd_now - crash_dump_tick_start) >= CRASH_DUMP_PERIODIC_MS) {
+                crash_dump_tick_start = cd_now;
+                at_crash_dump();
+            }
+        }
 #endif
 
         /* Wait for an interrupt event. */
