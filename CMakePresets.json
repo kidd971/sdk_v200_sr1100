@@ -103,6 +103,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-configure1-slave-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-configure1"],
             "description": "Puretone headset U5A5, configure1, I2S slave (coord), RJF format",
             "cacheVariables": {
@@ -112,6 +113,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-configure1-master-rjf",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5-configure1"],
             "description": "Puretone headset U5A5, configure1, I2S master (node), RJF format",
             "cacheVariables": {
@@ -292,10 +294,9 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-slave-std-nocodec",
-            "hidden": true,
+            "name": "puretone-headset-quasar-u535-slave-std-nocodec-ldo",
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535 (OneOdio DG/coord), I2S slave, standard format, no codec (direct I2S to SOC), LDO regulator",
+            "description": "Puretone headset U535 (OneOdio DG/coord), I2S slave, standard format, no codec (direct I2S to SOC), LDO regulator, no sine",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "0",
                 "I2S_FMT_DEFAULT": "2",
@@ -303,10 +304,10 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-master-std-nocodec",
+            "name": "puretone-headset-quasar-u535-master-std-nocodec-ldo-single-radio-hs",
             "hidden": false,
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535 (OneOdio HS/node), I2S master, standard format, no codec (direct I2S to SOC), LDO regulator",
+            "description": "Puretone headset U535 (OneOdio HS/node), single radio HS, I2S master, standard format, no codec (direct I2S to SOC), LDO regulator, no sine",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "1",
                 "I2S_FMT_DEFAULT": "2",
@@ -314,9 +315,9 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-slave-std-nocodec-dcdc",
+            "name": "puretone-headset-quasar-u535-slave-std-nocodec-smps",
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S slave, I2S standard format, no codec (direct I2S to SOC), DCDC/SMPS regulator (not LDO), no sine",
+            "description": "Puretone headset U535, I2S slave, I2S standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO), no sine",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "0",
                 "I2S_FMT_DEFAULT": "2",
@@ -325,9 +326,9 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-master-std-nocodec-dcdc",
+            "name": "puretone-headset-quasar-u535-master-std-nocodec-smps-single-radio-hs",
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535, I2S master, I2S standard format, no codec (direct I2S to SOC), DCDC/SMPS regulator (not LDO), no sine",
+            "description": "Puretone headset U535 (OneOdio HS/node), single radio HS, I2S master, standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO), no sine",
             "cacheVariables": {
                 "I2S_MASTER_MODE": "1",
                 "I2S_FMT_DEFAULT": "2",
@@ -347,7 +348,7 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-dualradio-master-std-nocodec",
+            "name": "puretone-headset-quasar-u535-dualradio-master-std-nocodec-ldo",
             "hidden": false,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S master, standard format, no codec (direct I2S to SOC), LDO regulator",
@@ -359,12 +360,37 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-dualradio-master-std-nocodec-dcdc",
+            "name": "puretone-headset-quasar-u535-dualradio-master-std-nocodec-smps",
             "inherits": ["puretone-headset-quasar-u535"],
-            "description": "Puretone headset U535 (OneOdio HS/node), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S master, standard format, no codec (direct I2S to SOC), DCDC/SMPS regulator (not LDO)",
+            "description": "Puretone headset U535 (OneOdio HS/node), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S master, standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO)",
             "cacheVariables": {
                 "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
                 "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-dualradio-slave-std-nocodec-ldo",
+            "hidden": true,
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535 (OneOdio DG/coord), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, standard format, no codec (direct I2S to SOC), LDO regulator",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-dualradio-slave-std-nocodec-smps",
+            "hidden": true,
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "Puretone headset U535 (OneOdio DG/coord), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO)",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
                 "I2S_FMT_DEFAULT": "2",
                 "NO_CODEC": "1",
                 "U535_PWR_LDO": "0"
