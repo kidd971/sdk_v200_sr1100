@@ -589,7 +589,7 @@ void Error_Handler(void)
  *
  *  Naked so the stacked exception frame (R0-R3,R12,LR,PC,PSR) is copied verbatim
  *  into hardfault_regs, then CFSR/HFSR are captured, then it spins. Read the
- *  globals via AT+CRASH_DUMP? / the periodic dump, or in the debugger.
+ *  globals via the periodic crash dump, or in the debugger.
  */
 __attribute__((naked))
 void HardFault_Handler(void)

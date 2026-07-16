@@ -71,9 +71,10 @@
 /* Poll/print cadence for the link watch in ms. */
 #define LINK_WATCH_INTERVAL_MS 2000
 
-/* Periodic on-board CRASH_DUMP: emit the same consolidated snapshot as AT+CRASH_DUMP?
- * every N ms, WITHOUT waiting for a stall or an AT command (the AT-UART RX pad is
- * unusable on this board). Output goes to LPUART1 TX. Set to 0 to disable. */
+/* Periodic on-board crash/stall snapshot: emit the consolidated dump every N ms,
+ * WITHOUT waiting for a stall or any command (the AT-UART RX pad is unusable on this
+ * board, so the log is grabbed automatically). Output goes to LPUART1 TX. Set to 0
+ * to disable. */
 #ifndef CRASH_DUMP_PERIODIC_MS
 #define CRASH_DUMP_PERIODIC_MS 2000
 #endif
@@ -411,7 +412,7 @@ static void at_start_disconnect(void);
 static void at_start_shutdown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
-static void at_crash_dump(void);
+static void emit_crash_dump(void);
 static void at_play(void);
 static void at_stop(void);
 static void at_set_vol(uint8_t vol);
@@ -455,7 +456,6 @@ int main(void)
     at_cmd_core_register_shutdown_cb(at_start_shutdown);
     at_cmd_core_register_link_status_cb(at_get_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
-    at_cmd_core_register_crash_dump_cb(at_crash_dump);
     at_cmd_core_register_play_cb(at_play);
     at_cmd_core_register_stop_cb(at_stop);
     at_cmd_core_register_vol_cb(at_set_vol);
@@ -519,13 +519,13 @@ int main(void)
 
 #if CRASH_DUMP_PERIODIC_MS
         /* Periodic consolidated snapshot (link state + HW counters + last HardFault),
-         * same block as AT+CRASH_DUMP? — auto-emitted because the AT-UART RX is unusable here. */
+         * auto-emitted every CRASH_DUMP_PERIODIC_MS because the AT-UART RX is unusable here. */
         {
             static uint32_t crash_dump_tick_start = 0;
             uint32_t cd_now = facade_get_tick_ms();
             if ((cd_now - crash_dump_tick_start) >= CRASH_DUMP_PERIODIC_MS) {
                 crash_dump_tick_start = cd_now;
-                at_crash_dump();
+                emit_crash_dump();
             }
         }
 #endif
@@ -2602,7 +2602,8 @@ static int32_t at_get_link_margin(void)
     return (int32_t)info.link_margin;
 }
 
-/** @brief AT+CRASH_DUMP? — emit an on-demand crash/stall snapshot to the AT UART.
+/** @brief Emit a crash/stall snapshot to the AT UART (called periodically, every
+ *         CRASH_DUMP_PERIODIC_MS, from the main loop).
  *
  *  Captures, in one block: the dual-radio HW liveness counters, the wireless link
  *  state (same fields as LINK_WATCH), and any HardFault register snapshot. All SWC
@@ -2668,7 +2669,7 @@ static void stall_auto_recover(void)
 }
 #endif
 
-static void at_crash_dump(void)
+static void emit_crash_dump(void)
 {
     char buf[288];
 
