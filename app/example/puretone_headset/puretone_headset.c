@@ -1980,14 +1980,15 @@ static bool should_print_stats(void)
 /** @brief Lightweight link diagnostic for the HS RX-audio connection.
  *
  *  Prints a one-line report at LINK_WATCH_INTERVAL_MS and an immediate event line
- *  on every connect<->disconnect transition. Output goes to the AT-command/expansion
- *  UART (LPUART1 on u535) via facade_expansion_uart_write, NOT the USB CDC port, so it
- *  can be watched on the same UART pins as the AT console. Reads are non-asserting on
- *  purpose, so the watch keeps running through a link drop instead of trapping.
+ *  on every connect<->disconnect transition. Output goes via facade_stats_write
+ *  (board-aware: ST-Link VCP / UART4 PC10-PC11 on u535, USB CDC elsewhere), the same
+ *  channel as the crash-dump, so LW + crash-dump land on one port. The AT console
+ *  (LPUART1) is left untouched. Reads are non-asserting on purpose, so the watch keeps
+ *  running through a link drop instead of trapping.
  *
  *  Line format:
  *    [LW seq t=<ms>] <OK|LOST> lm=<link_margin> fb=<mode> swc=<RUN|STOP> cca_fail=<n>
- *        tx_drop=<n> rx_ok=<n> rx_miss=<n> rx_rej=<n> err=<connErr>/<statErr>
+ *        tx_drop=<n> rx_ok=<n> rx_miss=<n> miss/s=<n> rx_rej=<n> err=<connErr>/<statErr>
  *        send_err=<lastErr>(<count>)
  *
  *  How to read it:
@@ -2006,9 +2007,13 @@ static void link_watch(void)
     static uint32_t seq;
     static bool initialized;
     static bool prev_connected;
+    static uint32_t rxmiss_prev;
+    static uint32_t rxmiss_prev_tick;
+    static bool rxmiss_prev_valid;
 
     if (device_pairing_state != DEVICE_PAIRED || rx_audio_conn == NULL) {
         initialized = false;
+        rxmiss_prev_valid = false;
         return;
     }
 
@@ -2033,6 +2038,21 @@ static void link_watch(void)
     uint32_t rx_miss = (rx_stats != NULL) ? rx_stats->no_packet_reception_count : 0;
     uint32_t rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
 
+    /* rx_miss per-second delta (empty/lost timeslots per second) — the live rate is far more
+     * readable than the cumulative total. Compare against the DG's prod=<n>/s on the same time
+     * axis: a high miss/s that tracks the DG being healthy (prod~2400) means the empties are the
+     * fallback-mode slot occupancy, not starvation. Normalized to /s over the real interval. */
+    uint32_t rxmiss_rate = 0;
+    if (rxmiss_prev_valid) {
+        uint32_t dms = now - rxmiss_prev_tick;
+        if (dms > 0) {
+            rxmiss_rate = (uint32_t)(((uint64_t)(rx_miss - rxmiss_prev) * 1000U) / dms);
+        }
+    }
+    rxmiss_prev = rx_miss;
+    rxmiss_prev_tick = now;
+    rxmiss_prev_valid = true;
+
     /* Dual-radio HW liveness: if one of these freezes while the LW seq keeps
      * advancing, that radio's IRQ/DMA path stalled (the dual-only failure mode). */
     uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
@@ -2047,18 +2067,19 @@ static void link_watch(void)
     } else if (connected != prev_connected) {
         snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
-        facade_expansion_uart_write(line);
+        facade_stats_write(line);
         prev_connected = connected;
     }
 
     int n = snprintf(line, sizeof(line),
              "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
-             "rx_ok=%lu rx_miss=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)",
+             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
              (unsigned)info.link_margin, (unsigned)fb_mode,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
-             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
+             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
+             (unsigned long)rx_rej,
              (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
     if (have_hw && n > 0 && n < (int)sizeof(line)) {
         snprintf(line + n, sizeof(line) - n,
@@ -2068,7 +2089,7 @@ static void link_watch(void)
     } else if (n > 0 && n < (int)sizeof(line)) {
         snprintf(line + n, sizeof(line) - n, "\r\n");
     }
-    facade_expansion_uart_write(line);
+    facade_stats_write(line);
 }
 #endif /* LINK_WATCH */
 

@@ -356,9 +356,49 @@ void facade_expansion_uart_write(char *string)
 void facade_stats_write(char *string)
 {
 #ifdef QUASAR_U535
-    /* u535 (LDO board) has no convenient USB CDC, so route the stats dump to the
-     * AT-command/expansion UART (LPUART1), same pins as the AT console. */
-    facade_expansion_uart_write(string);
+    /* Route stats / LINK_WATCH / crash-dump to the ST-Link VCP (UART4 on PC10=TX / PC11=RX),
+     * which is reliably wired through the on-board ST-Link. This is separate from the LPUART1
+     * AT console (PA3/PA2), which is deliberately left untouched (its PA2 RX pad is unreliable
+     * and, on the DG, LPUART1 output was not reaching anything). Lazily init UART4 on first use;
+     * debug_enabled is false so quasar_debug_init never claimed UART4, and we avoid its extra
+     * DEBUG_IO (PA4) GPIO config by initialising only the two ST-Link UART pins here. */
+    static bool stlink_uart_ready = false;
+    quasar_bsp_status_t err = QUASAR_OK;
+
+    if (!stlink_uart_ready) {
+        quasar_gpio_config_t gpio_tx = {
+            .port      = QUASAR_DEF_STLINK_UART_TX_PORT,
+            .pin       = QUASAR_DEF_STLINK_UART_TX_PIN,
+            .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+            .type      = QUASAR_GPIO_TYPE_PP,
+            .pull      = QUASAR_GPIO_PULL_UP,
+            .speed     = QUASAR_GPIO_SPEED_LOW,
+            .alternate = QUASAR_GPIO_ALTERNATE_AF8,  /* UART4 on PC10/PC11 */
+        };
+        quasar_gpio_config_t gpio_rx = {
+            .port      = QUASAR_DEF_STLINK_UART_RX_PORT,
+            .pin       = QUASAR_DEF_STLINK_UART_RX_PIN,
+            .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+            .type      = QUASAR_GPIO_TYPE_OD,
+            .pull      = QUASAR_GPIO_PULL_UP,
+            .speed     = QUASAR_GPIO_SPEED_LOW,
+            .alternate = QUASAR_GPIO_ALTERNATE_AF8,
+        };
+        quasar_uart_config_t uart_cfg = {
+            .uart_selection = QUASAR_DEF_UART_SELECTION_DEBUG,  /* UART4 (ST-Link VCP) */
+            .baud_rate      = QUASAR_UART_BAUD_RATE_115200,
+            .parity         = QUASAR_UART_PARITY_NONE,
+            .stop           = QUASAR_UART_STOP_BITS_1B,
+            .irq_priority   = QUASAR_IRQ_PRIORITY_NONE,  /* TX-only, no RX IRQ */
+            .gpio_config_tx = gpio_tx,
+            .gpio_config_rx = gpio_rx,
+        };
+        quasar_uart_init(uart_cfg);
+        stlink_uart_ready = true;
+    }
+
+    quasar_uart_transmit_blocking(QUASAR_DEF_UART_SELECTION_DEBUG, (uint8_t *)string,
+                                  strlen(string), EXPANSION_UART_TX_TIMEOUT_MS, &err);
 #else
     /* u5a5 EVK and other boards print stats over the USB CDC port. */
     facade_print_string(string);

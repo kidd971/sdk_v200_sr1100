@@ -57,7 +57,8 @@
 
 /* **** Link watch ****
  * DG-side diagnostic counterpart of the HS link_watch. Prints one line every
- * LINK_WATCH_INTERVAL_MS to the USB CDC port (facade_print_string), focused on the TX
+ * LINK_WATCH_INTERVAL_MS via facade_stats_write (board-aware: ST-Link VCP / UART4 PC10-PC11
+ * on U535, USB CDC elsewhere), focused on the TX
  * side and on what the DG actually learns from the node:
  *   - node_lm : link margin the HS reported back over the data link (drives auto fallback).
  *               If this stays low/0 while the HS prints lm=255, the HS->DG back channel
@@ -804,19 +805,21 @@ static void conn_rx_audio_success_callback(void *conn, void *arg)
     back_channel_trigger_count++;
 }
 
+/* DG audio production counter — ALWAYS compiled (not gated on SINE_DEBUG_CAPTURE) so the produce
+ * rate can be read over UART on no-SINE builds: LINK_WATCH prints its per-second delta as prod=<n>/s.
+ * Incremented once per main-channel audio buffer produced (SAI RX-DMA complete). Expect 2400/s
+ * (96000/40); a sustained value below that = producer starved = the "dead air" the node sees. */
+volatile uint32_t dbg_dg_produce_cnt = 0;
+
 #ifdef SINE_DEBUG_CAPTURE
-/* DG-side TX observability. dbg_dg_produce_cnt is incremented in the main-channel RX-complete
- * callback (one per injected/produced audio buffer); the rest are refreshed every ~10 ms in
+/* DG-side TX observability. The rest are refreshed every ~10 ms in
  * conn_rx_data_success_callback. Compare the per-second deltas:
- *   dbg_dg_produce_cnt  = DG audio buffers produced/sec. Should be 96000/40 = 2400/s. >2400 => the
- *                         DG SAI/codec clock is fast => it generates audio faster than the node plays.
  *   dbg_tx_queue_load   = DG TX (radio) consumer buffer load; climbing/full => produce faster than
  *                         the radio can send => buffers dropped before TX.
  *   dbg_tx_acked        = packets actually sent+acked/sec.
  *   dbg_tx_dropped      = Wireless Core timeout drops (produce faster than TX).
  *   dbg_tx_notx         = TX timeslots with nothing to send (producer starved).
  *   dbg_tx_cca_fail     = CCA fails (channel busy). */
-volatile uint32_t dbg_dg_produce_cnt = 0;
 volatile uint32_t dbg_tx_queue_load  = 0;
 volatile uint32_t dbg_tx_acked       = 0;
 volatile uint32_t dbg_tx_dropped     = 0;
@@ -1731,10 +1734,9 @@ static void main_channel_audio_rx_complete_callback(void)
     sac_facade_i2s_inject_sine();
 #endif
 
-#ifdef SINE_DEBUG_CAPTURE
-    /* One increment per produced audio buffer: delta/sec = DG produce rate (expect 2400/s). */
+    /* One increment per produced audio buffer: delta/sec = DG produce rate (expect 2400/s).
+     * Always compiled (not just SINE_DEBUG_CAPTURE) so LINK_WATCH reports it on no-SINE builds. */
     dbg_dg_produce_cnt++;
-#endif
 
     /* The codec produces audio samples when it receives input audio. */
     sac_pipeline_produce(main_channel_sac_pipeline, &sac_status);
@@ -1884,8 +1886,9 @@ static bool should_print_stats(void)
 }
 
 #if LINK_WATCH
-/** @brief DG-side link diagnostic. Prints one line every LINK_WATCH_INTERVAL_MS to the USB
- *         CDC port. Non-asserting reads, so it keeps running through a link drop.
+/** @brief DG-side link diagnostic. Prints one line every LINK_WATCH_INTERVAL_MS via
+ *         facade_stats_write (board-aware: ST-Link VCP / UART4 PC10-PC11 on U535, USB CDC
+ *         elsewhere). Non-asserting reads, so it keeps running through a link drop.
  *
  *  Line format:
  *    [LW seq t=<ms>] <OK|LOST> fb=<mode> node_lm=<n> bk_ok=<n> bk_miss=<n>
@@ -1904,9 +1907,13 @@ static void link_watch(void)
     static uint32_t seq;
     static bool initialized;
     static bool prev_connected;
+    static uint32_t produce_prev;
+    static uint32_t produce_prev_tick;
+    static bool produce_prev_valid;
 
     if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
         initialized = false;
+        produce_prev_valid = false;
         return;
     }
 
@@ -1932,6 +1939,21 @@ static void link_watch(void)
     uint32_t bk_ok = (bk_stats != NULL) ? bk_stats->packet_successfully_received_count : 0;
     uint32_t bk_miss = (bk_stats != NULL) ? bk_stats->no_packet_reception_count : 0;
 
+    /* DG audio production rate (buffers/s). Expect 2400 (96000/40). A sustained value below that
+     * = producer starved (dead air), which is what the node records as rx_miss. Computed as the
+     * delta of dbg_dg_produce_cnt over the real elapsed interval, normalized to per-second. */
+    uint32_t produce_now = dbg_dg_produce_cnt;
+    uint32_t prod_rate = 0;
+    if (produce_prev_valid) {
+        uint32_t dms = now - produce_prev_tick;
+        if (dms > 0) {
+            prod_rate = (uint32_t)(((uint64_t)(produce_now - produce_prev) * 1000U) / dms);
+        }
+    }
+    produce_prev = produce_now;
+    produce_prev_tick = now;
+    produce_prev_valid = true;
+
     char line[224];
 
     /* Edge: announce connect<->disconnect transitions immediately. */
@@ -1941,20 +1963,21 @@ static void link_watch(void)
     } else if (connected != prev_connected) {
         snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
-        facade_print_string(line);
+        facade_stats_write(line);
         prev_connected = connected;
     }
 
     snprintf(line, sizeof(line),
              "[LW %lu t=%lu] %s fb=%u node_lm=%u bk_ok=%lu bk_miss=%lu "
-             "tx_slot=%lu tx_noframe=%lu tx_drop=%lu swc=%s send_err=%d(%lu)\r\n",
+             "tx_slot=%lu tx_noframe=%lu tx_drop=%lu prod=%lu/s swc=%s send_err=%d(%lu)\r\n",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
              (unsigned)fb_mode, (unsigned)s_node_rx_lm,
              (unsigned long)bk_ok, (unsigned long)bk_miss,
              (unsigned long)tx_slot, (unsigned long)tx_noframe, (unsigned long)tx_drop,
+             (unsigned long)prod_rate,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (int)s_last_send_err, (unsigned long)s_send_err_count);
-    facade_print_string(line);
+    facade_stats_write(line);
 }
 #endif /* LINK_WATCH */
 
@@ -2057,7 +2080,7 @@ static void print_stats(void)
                                                  sizeof(stats_string) - string_length, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    facade_print_string(stats_string);
+    facade_stats_write(stats_string);
 
     /* ** APP Statistics ** */
     string_length = snprintf(stats_string, sizeof(stats_string), "\r\n<< Application Statistics >>\r\n");
@@ -2078,7 +2101,7 @@ static void print_stats(void)
                                   " 48kHz ADPCM\r\n");
     }
 
-    facade_print_string(stats_string);
+    facade_stats_write(stats_string);
 }
 
 /** @brief Callback sends the button state every 10 ms.
