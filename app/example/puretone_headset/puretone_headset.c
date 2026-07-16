@@ -51,8 +51,8 @@
 #define DATA_TX_PERIOD_MS 10
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
-/* Size of the buffer used to print errors. */
-#define ERROR_MESSAGE_BUFFER_SIZE 50
+/* Size of the buffer used to print errors (room for the assert file:line + code). */
+#define ERROR_MESSAGE_BUFFER_SIZE 160
 /* Interval to print statistics in ms. */
 #define PRINT_INTERVAL_MS 2000
 
@@ -77,6 +77,83 @@
 #ifndef CRASH_DUMP_PERIODIC_MS
 #define CRASH_DUMP_PERIODIC_MS 2000
 #endif
+
+/* Periodic print_stats() dump. Turned OFF by default on this debug branch so the
+ * CDC log is quiet enough to watch the crash-dump / assert-trap lines. print_stats()
+ * is also one of the assert-trap sources (see ASSERT_SWC/SAC_STATUS inside it), so
+ * disabling it removes that noise AND that trap while investigating. Set to 1 to
+ * restore normal stats output. */
+#ifndef PRINT_STATS_ENABLED
+#define PRINT_STATS_ENABLED 0
+#endif
+
+/* **** Latch-recovery test hooks (dual-radio wedge investigation) ****
+ * When the radio wedges, the main loop stays alive (the periodic crash-dump keeps
+ * printing) so the polled buttons are still serviced — as long as you DON'T press the
+ * pairing button (USER_1), which traps in unpair_device()->swc_disconnect. So we
+ * repurpose the two volume buttons as non-trapping recovery tests you can press WHILE
+ * wedged, to fill in the recovery matrix without pulling board power:
+ *   USER_3 (vol+) -> dbg_soft_reset(): MCU reset only, radio stays powered.
+ *   USER_4 (vol-) -> dbg_radio_por():  assert both radios' shutdown pins + hold + MCU reset.
+ * Outcome tells us whether the SR1100 latch clears on a plain reboot, only after an
+ * explicit radio power-down, or only after real board-power removal (deep POR).
+ * Set to 0 to restore normal volume buttons. */
+#ifndef LATCH_TEST_HOOKS
+#define LATCH_TEST_HOOKS 1
+#endif
+
+/* **** Stall auto-recovery (EXPERIMENTAL mitigation — NOT the real fix) ****
+ * Dual-radio has no aggressive re-sync after prolonged link loss (fast-sync is hard-blocked
+ * with two radios), so a node whose scheduler stalls re-syncs only very slowly. As a stopgap,
+ * watch the radio HW liveness counters: if all four stay frozen for STALL_AUTO_RECOVER_MS
+ * while paired (the wedge signature), force a scheduler/radio re-init via swc_disconnect()
+ * (tolerating the disconnect-timeout) + swc_connect(). This is a band-aid; the proper fix
+ * (dual-radio aggressive re-sync) belongs in SPARK's SWC core — report to HQ. 0 disables.
+ * Only meaningful on the node/HS and on boards with the HW counters (u535/u5a5 dual-radio). */
+#ifndef STALL_AUTO_RECOVER_MS
+#define STALL_AUTO_RECOVER_MS 6000
+#endif
+/* How often to sample the counters (must be well below STALL_AUTO_RECOVER_MS). */
+#define STALL_SAMPLE_MS 1000
+
+/* **** Assert-site capture (no ST-Link needed) ****
+ * The library ASSERT_SWC/SAC_STATUS macros only pass the error CODE to the fatal
+ * handler, not where the assert tripped. Re-define them for THIS translation unit
+ * so they stash __FILE__/__LINE__ into the globals below before trapping; the fatal
+ * handler then prints "<TAG> TRAP <file>:<line> code=<n>" to the CDC. So a repro is
+ * self-diagnosing: the last line before the log freezes names the exact assert. */
+static volatile const char *s_assert_file = NULL;
+static volatile uint32_t s_assert_line = 0;
+
+#undef ASSERT_SWC_STATUS
+#define ASSERT_SWC_STATUS(swc_status)        \
+    do {                                     \
+        if ((swc_status) == SWC_ERR_NONE) {  \
+            break;                           \
+        }                                    \
+        if ((swc_status) > 0) {              \
+            swc_warning_handler(swc_status); \
+            break;                           \
+        }                                    \
+        s_assert_file = __FILE__;            \
+        s_assert_line = __LINE__;            \
+        swc_error_handler(swc_status);       \
+    } while (0)
+
+#undef ASSERT_SAC_STATUS
+#define ASSERT_SAC_STATUS(sac_status)        \
+    do {                                     \
+        if ((sac_status) == SAC_OK) {        \
+            break;                           \
+        }                                    \
+        if ((sac_status) > SAC_OK) {         \
+            sac_warning_handler(sac_status); \
+            break;                           \
+        }                                    \
+        s_assert_file = __FILE__;            \
+        s_assert_line = __LINE__;            \
+        sac_error_handler(sac_status);       \
+    } while (0)
 
 /* **** Fallback **** */
 /* Fallback channel index. */
@@ -284,9 +361,13 @@ static void audio_process_back_channel_callback(void);
 static void data_callback(void);
 static void pairing_process_callback(void);
 static void pairing_button_callback(void);
-static void volume_up(void);
-static void volume_down(void);
+static void volume_up(void) __attribute__((unused));
+static void volume_down(void) __attribute__((unused));
 static void change_fallback_state(void);
+#if LATCH_TEST_HOOKS
+static void dbg_soft_reset(void);
+static void dbg_radio_por(void);
+#endif
 
 /* **** Processing Stages **** */
 /* Processing stages that are used for the main channel. */
@@ -317,6 +398,10 @@ static void link_watch(void);
 
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
+static void fatal_trap(const char *tag, int code);
+#if STALL_AUTO_RECOVER_MS
+static void stall_auto_recover(void);
+#endif
 static uint32_t get_accumulator_size(sac_pipeline_t *pipeline);
 
 /* **** AT Command Core Callbacks **** */
@@ -350,8 +435,14 @@ int main(void)
 
     facade_button_callbacks_t button_callbacks = {
         .pairing_callback = pairing_button_callback,
+#if LATCH_TEST_HOOKS
+        /* Volume buttons repurposed as latch-recovery tests (see LATCH_TEST_HOOKS). */
+        .volume_up_callback = dbg_soft_reset,
+        .volume_down_callback = dbg_radio_por,
+#else
         .volume_up_callback = volume_up,
         .volume_down_callback = volume_down,
+#endif
         .fallback_callback = change_fallback_state,
     };
     facade_set_button_callbacks(button_callbacks);
@@ -437,6 +528,10 @@ int main(void)
                 at_crash_dump();
             }
         }
+#endif
+
+#if STALL_AUTO_RECOVER_MS
+        stall_auto_recover();
 #endif
 
         /* Wait for an interrupt event. */
@@ -1682,6 +1777,41 @@ static void volume_down(void)
     ASSERT_SAC_STATUS(sac_status);
 }
 
+#if LATCH_TEST_HOOKS
+/** @brief Recovery test A: reset the MCU only, WITHOUT power-cycling the radio.
+ *
+ *  Boot re-inits the radio (toggles its reset/shutdown pins, re-calibrates). If this
+ *  recovers the wedge, the SR1100 latch is cleared by a normal reboot -> in-firmware
+ *  recoverable without pulling power. Non-trapping, so it works while wedged.
+ */
+static void dbg_soft_reset(void)
+{
+    facade_system_reset();
+}
+
+/** @brief Recovery test B: force a radio power-down (assert both shutdown pins), hold
+ *         long enough to drain the SR1100's internal rails toward a true POR, then reset.
+ *
+ *  facade_uwb_shutdown() drives the radio SHUTDOWN pins (real on u5a5, no-op on u535).
+ *  The hold is a tick busy-wait — valid here because this runs in the still-alive main
+ *  loop. If B recovers but A does not, boot's normal bring-up isn't power-cycling the
+ *  radio hard enough and an explicit shutdown belongs in the recovery/boot path. If
+ *  neither A nor B recovers and only removing board power does, it is a deep POR-only
+ *  latch (hardware / HQ territory).
+ */
+static void dbg_radio_por(void)
+{
+    facade_uwb_shutdown();
+
+    uint32_t t0 = facade_get_tick_ms();
+    while ((facade_get_tick_ms() - t0) < 300) {
+        /* Hold the radios in shutdown ~300 ms before rebooting. */
+    }
+
+    facade_system_reset();
+}
+#endif
+
 #if USB_AUDIO_ENABLED
 /** @brief SAI DMA TX complete callback.
  *
@@ -1946,6 +2076,11 @@ static void link_watch(void)
  */
 static void print_stats(void)
 {
+#if !PRINT_STATS_ENABLED
+    /* Disabled on this debug branch to keep the CDC log quiet (see PRINT_STATS_ENABLED). */
+    return;
+#endif
+
     if (device_pairing_state != DEVICE_PAIRED) {
         return;
     }
@@ -2171,8 +2306,9 @@ static void enter_pairing_mode(void)
     pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE_NODE,
                                        &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
-        facade_print_error_string("An error occured during the pairing process.");
-        while (1);
+        s_assert_file = __FILE__;
+        s_assert_line = __LINE__;
+        fatal_trap("PAIRING", (int)pairing_err);
     }
 
     /* Handle the pairing events. */
@@ -2474,15 +2610,75 @@ static int32_t at_get_link_margin(void)
  *  state and does not require the link to be up (covers the "hangs during sync,
  *  before pairing" case as long as the CPU is still running).
  */
+#if STALL_AUTO_RECOVER_MS
+/** @brief EXPERIMENTAL stall watchdog: force an SWC re-init if the radios wedge.
+ *
+ *  Samples the per-radio HW liveness counters every STALL_SAMPLE_MS. In normal operation
+ *  they tick thousands/second even while out of range, so all four staying identical for
+ *  STALL_AUTO_RECOVER_MS is the dual-radio scheduler-wedge signature. On that, force a
+ *  scheduler/radio re-init: swc_disconnect() (which may return SWC_ERR_DISCONNECT_TIMEOUT
+ *  from a frozen state — tolerated, NOT asserted) then swc_connect() (restarts TIM4, re-arms
+ *  the radios, resets sync state). Mitigation only — see STALL_AUTO_RECOVER_MS. */
+static void stall_auto_recover(void)
+{
+    static uint32_t last_sample_ms;
+    static uint32_t last_r1_irq, last_r2_irq, last_r1_dma, last_r2_dma;
+    static uint32_t frozen_ms;
+    static bool have_baseline;
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        have_baseline = false;
+        frozen_ms = 0;
+        return;
+    }
+
+    uint32_t now = facade_get_tick_ms();
+    if (have_baseline && (now - last_sample_ms) < STALL_SAMPLE_MS) {
+        return; /* sample at a fixed cadence, not every loop iteration */
+    }
+
+    uint32_t r1_irq, r2_irq, r1_dma, r2_dma;
+    if (!facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma)) {
+        return; /* no HW counters on this board (single-radio) — nothing to watch */
+    }
+
+    if (have_baseline) {
+        bool moved = (r1_irq != last_r1_irq) || (r2_irq != last_r2_irq) ||
+                     (r1_dma != last_r1_dma) || (r2_dma != last_r2_dma);
+        frozen_ms = moved ? 0 : (frozen_ms + (now - last_sample_ms));
+    }
+    last_sample_ms = now;
+    last_r1_irq = r1_irq;
+    last_r2_irq = r2_irq;
+    last_r1_dma = r1_dma;
+    last_r2_dma = r2_dma;
+    have_baseline = true;
+
+    if (frozen_ms >= STALL_AUTO_RECOVER_MS) {
+        swc_error_t swc_err = SWC_ERR_NONE;
+
+        facade_stats_write("\r\n+AUTO-RECOVER: radio stall -> swc reconnect\r\n");
+        swc_disconnect(&swc_err); /* tolerate SWC_ERR_DISCONNECT_TIMEOUT — do NOT assert */
+        swc_connect(&swc_err);    /* restarts TIM4 + radios + resets sync state */
+
+        /* Re-baseline so we give the link time to come back before re-checking. */
+        frozen_ms = 0;
+        have_baseline = false;
+    }
+}
+#endif
+
 static void at_crash_dump(void)
 {
     char buf[288];
 
-    facade_expansion_uart_write("\r\n+CRASH_DUMP:\r\n");
+    /* Board-dependent routing (same channel as print_stats via facade_stats_write):
+     * u535 -> AT/expansion UART (LPUART1); u5a5 EVK & others -> USB CDC. */
+    facade_stats_write("\r\n+CRASH_DUMP:\r\n");
 
     snprintf(buf, sizeof(buf), " build=v2.3.0 role=HS paired=%d\r\n",
              (device_pairing_state == DEVICE_PAIRED) ? 1 : 0);
-    facade_expansion_uart_write(buf);
+    facade_stats_write(buf);
 
     /* Wireless link state (non-asserting; rx_audio_conn may be NULL before pairing). */
     if (rx_audio_conn != NULL) {
@@ -2510,9 +2706,9 @@ static void at_crash_dump(void)
         snprintf(buf, sizeof(buf), " swc=%s conn=N/A (no connection yet)\r\n",
                  (swc_get_status() == SWC_STATUS_RUNNING) ? "RUN" : "STOP");
     }
-    facade_expansion_uart_write(buf);
+    facade_stats_write(buf);
 
-    /* Dual-radio HW liveness counters (u535 only). */
+    /* Dual-radio HW liveness counters (u535 & u5a5 dual-radio BSPs). */
     uint32_t r1_irq, r2_irq, r1_dma, r2_dma;
     if (facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma)) {
         snprintf(buf, sizeof(buf), " hw: r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",
@@ -2521,7 +2717,35 @@ static void at_crash_dump(void)
     } else {
         snprintf(buf, sizeof(buf), " hw: N/A (single-radio board)\r\n");
     }
-    facade_expansion_uart_write(buf);
+    facade_stats_write(buf);
+
+    /* Scheduler liveness: mrt=multi-radio timer (TIM4) heartbeat, frt=free-running (TIM8) tick,
+     * irq1/irq2=radio IRQ pin levels. Compare across two dumps: mrt frozen -> SWC scheduler died;
+     * mrt ticking while hw r*_irq/dma frozen -> scheduler alive but radios not serviced. */
+    uint32_t mrt, frt;
+    bool irq1, irq2;
+    if (facade_get_sched_liveness(&mrt, &frt, &irq1, &irq2)) {
+        snprintf(buf, sizeof(buf), " sched: mrt=%lu frt=%lu irq1=%d irq2=%d\r\n",
+                 (unsigned long)mrt, (unsigned long)frt, (int)irq1, (int)irq2);
+    } else {
+        snprintf(buf, sizeof(buf), " sched: N/A\r\n");
+    }
+    facade_stats_write(buf);
+
+    /* Raw multi-radio scheduler timer (TIM4) state, to pin WHY mrt froze:
+     *   cen=0            -> timer was stopped (disconnect/stop path)
+     *   cen=1 arr=0      -> period programmed to 0 -> timer stalled (period-clamp hole)
+     *   cen=1 arr=65534  -> clamped to max but still not firing -> NVIC/other
+     *   cen=1 arr sane, uie=1, cnt advancing -> timer alive (not the wedge) */
+    uint32_t t_cr1, t_arr, t_cnt, t_dier;
+    if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier)) {
+        snprintf(buf, sizeof(buf), " tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX)\r\n",
+                 (unsigned long)(t_cr1 & 0x1u), (unsigned long)t_arr, (unsigned long)t_cnt,
+                 (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier);
+    } else {
+        snprintf(buf, sizeof(buf), " tim4: N/A\r\n");
+    }
+    facade_stats_write(buf);
 
     /* Last captured HardFault (all-zero = no fault seen; cross-ref pc/lr against the .map). */
     uint32_t cfsr, hfsr, pc, lr;
@@ -2531,7 +2755,7 @@ static void at_crash_dump(void)
     } else {
         snprintf(buf, sizeof(buf), " fault: N/A\r\n");
     }
-    facade_expansion_uart_write(buf);
+    facade_stats_write(buf);
 }
 
 static void at_play(void)
@@ -2572,24 +2796,48 @@ static void at_pre_track(void)
     s_pending_cmd = 2;
 }
 
-void sac_error_handler(sac_status_t sac_status)
+/** @brief Emit one self-diagnosing trap line to the CDC, then halt.
+ *
+ *  Prints "<tag> TRAP <file>:<line> code=<n>" naming the assert that tripped (captured
+ *  by the ASSERT_SWC/SAC_STATUS wrappers into s_assert_file/s_assert_line), so a repro
+ *  is diagnosable from the log alone. facade_print_error_string() lights the RGB red and
+ *  raises the USB IRQ to priority 0 so the CDC IN transfer can drain even though we are
+ *  about to spin; the short busy-wait below gives that ISR time to push the bytes out
+ *  (tick-independent on purpose — SysTick may already be dead in a trap context).
+ */
+static void fatal_trap(const char *tag, int code)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
+    const char *file = (s_assert_file != NULL) ? (const char *)s_assert_file : "?";
+    const char *base = file;
 
-    sprintf(buffer, "SAC Error! Code: %d\n\r", sac_status);
+    /* Strip the directory so the log line stays short and readable. */
+    for (const char *p = file; *p != '\0'; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+
+    snprintf(buffer, sizeof(buffer), "\r\n%s TRAP %s:%lu code=%d\r\n",
+             tag, base, (unsigned long)s_assert_line, code);
     facade_print_error_string(buffer);
+
+    /* Let the priority-0 USB ISR drain the one-line message before we stop forever. */
+    for (volatile uint32_t i = 0; i < 4000000u; i++) {
+        __asm volatile("nop");
+    }
 
     while (1);
 }
 
+void sac_error_handler(sac_status_t sac_status)
+{
+    fatal_trap("SAC", (int)sac_status);
+}
+
 void swc_error_handler(swc_error_t swc_status)
 {
-    char buffer[ERROR_MESSAGE_BUFFER_SIZE];
-
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
-    facade_print_error_string(buffer);
-
-    while (1);
+    fatal_trap("SWC", (int)swc_status);
 }
 
 /** @brief Return the accumulator size according to the current fallback mode.

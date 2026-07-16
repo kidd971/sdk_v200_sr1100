@@ -47,6 +47,12 @@ static void (*exti15_falling_edge_irq_callback)(void) = default_irq_callback;
 volatile uint32_t radio1_irq_count;
 volatile uint32_t radio2_irq_count;
 
+/* DEBUG: multi-radio scheduler heartbeat. TIM4 is the SWC dual-radio timeslot timer
+ * (quasar_timer_multi_radio_set_callback -> timer4). If this freezes together with the
+ * radio IRQ/DMA counters, the SWC scheduler stopped; if it keeps ticking while the radio
+ * counters are frozen, the scheduler is alive but no longer servicing the radios. */
+volatile uint32_t multi_radio_timer_count;
+
 static void (*pendsv_irq_callback)(void) = default_irq_callback;
 static void (*usb_irq_callback)(void) = default_irq_callback;
 
@@ -485,6 +491,7 @@ void TIM4_IRQHandler(void)
     if ((TIM4->SR & TIM_SR_UIF) != 0) {
         /* Clear the interruption flag */
         TIM4->SR = ~((uint16_t)TIM_SR_UIF);
+        multi_radio_timer_count++; /* DEBUG: SWC dual-radio scheduler heartbeat. */
         timer4_callback();
     }
 }

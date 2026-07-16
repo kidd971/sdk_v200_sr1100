@@ -39,6 +39,25 @@ static void (*exti14_irq_callback)(void) = default_irq_callback;
 static void (*exti15_rising_edge_irq_callback)(void) = default_irq_callback;
 static void (*exti15_falling_edge_irq_callback)(void) = default_irq_callback;
 
+/* DEBUG: per-radio IRQ hit counters (non-static so they are visible in the
+ * debugger Watch window). Watch them tick to confirm both radios are active:
+ *   radio1 IRQ = PE8 -> EXTI8, radio2 IRQ = PE7 -> EXTI7.
+ * If radio2_irq_count stays frozen while radio1_irq_count climbs, radio 2 is
+ * not being scheduled/received by the Wireless Core. */
+volatile uint32_t radio1_irq_count;
+volatile uint32_t radio2_irq_count;
+
+/* DEBUG: multi-radio scheduler heartbeat. TIM4 is the SWC dual-radio timeslot timer
+ * (quasar_timer_multi_radio_set_callback -> timer4). If this freezes together with the
+ * radio IRQ/DMA counters, the SWC scheduler stopped; if it keeps ticking while the radio
+ * counters are frozen, the scheduler is alive but no longer servicing the radios. */
+volatile uint32_t multi_radio_timer_count;
+
+/* HardFault register snapshot globals (HardFaultRegs_t declared in quasar_it.h). */
+volatile HardFaultRegs_t hardfault_regs;
+volatile uint32_t hardfault_cfsr;
+volatile uint32_t hardfault_hfsr;
+
 static void (*pendsv_irq_callback)(void) = default_irq_callback;
 static void (*usb_irq_callback)(void) = default_irq_callback;
 
@@ -321,6 +340,7 @@ void EXTI7_IRQHandler(void)
     /* Clear the rising and falling edge flags. */
     QUASAR_SET_BIT(EXTI->RPR1, EXTI_RPR1_RPIF7_Msk);
     QUASAR_SET_BIT(EXTI->FPR1, EXTI_FPR1_FPIF7_Msk);
+    radio2_irq_count++; /* DEBUG: radio 2 (PE7) activity counter. */
     exti7_irq_callback();
 }
 
@@ -331,6 +351,7 @@ void EXTI8_IRQHandler(void)
     /* Clear the rising and falling edge flags. */
     QUASAR_SET_BIT(EXTI->RPR1, EXTI_RPR1_RPIF8_Msk);
     QUASAR_SET_BIT(EXTI->FPR1, EXTI_FPR1_FPIF8_Msk);
+    radio1_irq_count++; /* DEBUG: radio 1 (PE8) activity counter. */
     exti8_irq_callback();
 }
 
@@ -468,6 +489,7 @@ void TIM4_IRQHandler(void)
     if ((TIM4->SR & TIM_SR_UIF) != 0) {
         /* Clear the interruption flag */
         TIM4->SR = ~((uint16_t)TIM_SR_UIF);
+        multi_radio_timer_count++; /* DEBUG: SWC dual-radio scheduler heartbeat. */
         timer4_callback();
     }
 }
@@ -563,11 +585,33 @@ void Error_Handler(void)
     while (1);
 }
 
-/** @brief Implementation of weak alias for Exception Handler.
+/** @brief Exception handler that snapshots the CPU/fault registers before halting.
+ *
+ *  Naked so the stacked exception frame (R0-R3,R12,LR,PC,PSR) is copied verbatim
+ *  into hardfault_regs, then CFSR/HFSR are captured, then it spins. Read the
+ *  globals via AT+CRASH_DUMP? / the periodic dump, or in the debugger.
  */
+__attribute__((naked))
 void HardFault_Handler(void)
 {
-    while (1);
+    __asm volatile (
+        " TST LR, #4          \n"
+        " ITE EQ              \n"
+        " MRSEQ R0, MSP       \n"
+        " MRSNE R0, PSP       \n"
+        " LDR R1, =hardfault_regs \n"
+        " LDMIA R0!, {R2-R9}  \n"
+        " STMIA R1!, {R2-R9}  \n"
+        " LDR R1, =hardfault_cfsr \n"
+        " LDR R2, =0xE000ED28 \n"
+        " LDR R2, [R2]        \n"
+        " STR R2, [R1]        \n"
+        " LDR R1, =hardfault_hfsr \n"
+        " LDR R2, =0xE000ED2C \n"
+        " LDR R2, [R2]        \n"
+        " STR R2, [R1]        \n"
+        " B .                 \n"
+    );
 }
 
 /** @brief Implementation of weak alias for MemManage handler.

@@ -158,7 +158,18 @@ void quasar_timer_set_period(quasar_timer_selection_t timer_selection, uint16_t 
 
     /* Configure the maximum count of a cycle (period). */
     if (timer_instance != NULL) {
-        timer_instance->ARR = (uint32_t)period - 1;
+        uint32_t auto_reload = (uint32_t)period - 1;
+        timer_instance->ARR = auto_reload;
+        /* These are 32-bit timers. If the counter has already run past the new (smaller)
+         * period, it would otherwise keep counting all the way to the 32-bit wrap
+         * (0xFFFFFFFF) before the next update event — a multi-second stall of a timer meant
+         * to fire every few microseconds. This is exactly the dual-radio scheduler (TIM4)
+         * wedge on link loss: the SWC drops the period below the live count, CNT runs away,
+         * no update IRQ fires, both radios freeze. Snap the count back so the timer reloads
+         * at the new period on the next cycle. */
+        if (timer_instance->CNT > auto_reload) {
+            timer_instance->CNT = 0;
+        }
     }
 }
 

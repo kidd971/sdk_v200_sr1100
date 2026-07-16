@@ -12,7 +12,9 @@
 #include "at_cmd_core_facade.h"
 #include "quasar.h"
 #include "quasar_adc.h"
-#include "quasar_it.h"  /* dual-radio HW counters + HardFault snapshot (u535 only) */
+#include "quasar_it.h"  /* dual-radio HW counters + HardFault snapshot (u535 & u5a5) */
+#include "quasar_radio.h"  /* radio IRQ pin read for scheduler-liveness triage */
+#include "quasar_timer.h"  /* free-running time-base tick for scheduler-liveness triage */
 #include "sac_cfg.h"
 #include <string.h>
 
@@ -323,7 +325,12 @@ void facade_expansion_uart_init(uint32_t baud_rate)
         .baud_rate      = baud_rate,
         .parity         = QUASAR_UART_PARITY_NONE,
         .stop           = QUASAR_UART_STOP_BITS_1B,
-        .irq_priority   = QUASAR_IRQ_PRIORITY_5,
+        /* Lowest NVIC priority (15): a floating/failed RX pad can storm RXNE/ORE.
+         * At the old prio 5 that storm preempted audio-process (13/14) and the SWC
+         * data timer (15), starving them and dropping audio. At 15 it can no longer
+         * preempt them. NOTE: mitigation only — the real fix is the RX pad hardware
+         * (PA2) / disabling the receiver on boards where RX is unusable. */
+        .irq_priority   = QUASAR_IRQ_PRIORITY_15,
         .gpio_config_tx = gpio_tx,
         .gpio_config_rx = gpio_rx,
     };
@@ -369,7 +376,7 @@ uint8_t facade_expansion_uart_read_byte(void)
 
 bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *r1_dma, uint32_t *r2_dma)
 {
-#if defined(STM32U535xx)
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
     *r1_irq = radio1_irq_count;
     *r2_irq = radio2_irq_count;
     *r1_dma = radio1_dma_count;
@@ -380,13 +387,50 @@ bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *
     (void)r2_irq;
     (void)r1_dma;
     (void)r2_dma;
-    return false; /* per-radio debug counters exist only on the u535 dual-radio BSP */
+    return false; /* per-radio debug counters exist only on the quasar u535/u5a5 BSPs */
+#endif
+}
+
+bool facade_get_sched_liveness(uint32_t *mrt, uint32_t *frt, bool *irq1, bool *irq2)
+{
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
+    *mrt = multi_radio_timer_count;
+    *frt = (uint32_t)quasar_timer_free_running_ms_get_tick_count();
+    *irq1 = quasar_radio_1_read_irq_pin();
+    *irq2 = quasar_radio_2_read_irq_pin();
+    return true;
+#else
+    (void)mrt;
+    (void)frt;
+    (void)irq1;
+    (void)irq2;
+    return false; /* scheduler-liveness signals exist only on the quasar u535/u5a5 BSPs */
+#endif
+}
+
+bool facade_get_multi_radio_timer_regs(uint32_t *cr1, uint32_t *arr, uint32_t *cnt, uint32_t *dier)
+{
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
+    /* TIM4 is the SWC dual-radio "multi-radio" scheduler timer on both quasar BSPs
+     * (quasar_timer_multi_radio_set_callback -> timer4). Read its live state to see
+     * whether/why it stopped generating updates when the radio HW counters froze. */
+    *cr1 = TIM4->CR1;
+    *arr = TIM4->ARR;
+    *cnt = TIM4->CNT;
+    *dier = TIM4->DIER;
+    return true;
+#else
+    (void)cr1;
+    (void)arr;
+    (void)cnt;
+    (void)dier;
+    return false; /* multi-radio timer is TIM4 only on the quasar u535/u5a5 BSPs */
 #endif
 }
 
 bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr)
 {
-#if defined(STM32U535xx)
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
     *cfsr = hardfault_cfsr;
     *hfsr = hardfault_hfsr;
     *pc = hardfault_regs.pc;
@@ -397,7 +441,7 @@ bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc,
     (void)hfsr;
     (void)pc;
     (void)lr;
-    return false; /* HardFault snapshot globals exist only on the u535 BSP */
+    return false; /* HardFault snapshot globals exist only on the quasar u535/u5a5 BSPs */
 #endif
 }
 

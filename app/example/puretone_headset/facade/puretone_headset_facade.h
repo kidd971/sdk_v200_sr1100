@@ -97,6 +97,35 @@ bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *
  */
 bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr);
 
+/** @brief Read dual-radio scheduler liveness signals (crash triage).
+ *
+ *  Distinguishes WHY both radios stalled: the multi-radio scheduler timer (TIM4)
+ *  count and the free-running time-base (TIM8) tick tell whether the SWC heartbeat
+ *  is still running, and the radio IRQ pin levels tell whether the radios are
+ *  asserting events that are not being serviced.
+ *
+ *  @param[out] mrt   Multi-radio scheduler timer (TIM4) ISR count.
+ *  @param[out] frt   Free-running time-base (TIM8) tick count (low 32 bits).
+ *  @param[out] irq1  Current radio1 IRQ pin level.
+ *  @param[out] irq2  Current radio2 IRQ pin level.
+ *  @return true if available on this board; false otherwise (outputs untouched).
+ */
+bool facade_get_sched_liveness(uint32_t *mrt, uint32_t *frt, bool *irq1, bool *irq2);
+
+/** @brief Read the raw multi-radio scheduler timer (TIM4) registers (crash triage).
+ *
+ *  Distinguishes WHY the scheduler heartbeat (mrt) froze: CEN (CR1 bit0) shows whether
+ *  the timer is still enabled, ARR the programmed period (0 = stalled), CNT the live
+ *  count, UIE (DIER bit0) whether the update interrupt is armed.
+ *
+ *  @param[out] cr1   TIM4 CR1 (bit0 = CEN, counter enable).
+ *  @param[out] arr   TIM4 ARR (auto-reload / period).
+ *  @param[out] cnt   TIM4 CNT (current count).
+ *  @param[out] dier  TIM4 DIER (bit0 = UIE, update interrupt enable).
+ *  @return true if available on this board; false otherwise (outputs untouched).
+ */
+bool facade_get_multi_radio_timer_regs(uint32_t *cr1, uint32_t *arr, uint32_t *cnt, uint32_t *dier);
+
 /** @brief Set the serial audio interface transfer complete callbacks.
  *
  *  @note Set NULL in place of unused callback.

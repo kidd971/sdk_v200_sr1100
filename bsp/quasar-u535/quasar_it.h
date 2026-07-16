@@ -48,6 +48,7 @@ extern volatile uint32_t radio1_irq_count; /*!< radio1 IRQ (PE8/EXTI8) hit count
 extern volatile uint32_t radio2_irq_count; /*!< radio2 IRQ (PE7/EXTI7) hit count. */
 extern volatile uint32_t radio1_dma_count; /*!< radio1 RX DMA-complete (GPDMA1 Ch2) count. */
 extern volatile uint32_t radio2_dma_count; /*!< radio2 RX DMA-complete (GPDMA1 Ch6) count. */
+extern volatile uint32_t multi_radio_timer_count; /*!< multi-radio scheduler timer (TIM4) ISR count. */
 
 /** @brief List of the available interrupt request priorities.
  */
