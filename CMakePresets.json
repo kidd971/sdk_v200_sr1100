@@ -324,7 +324,7 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-master-std-nocodec-ldo-single-radio-hs",
+            "name": "puretone-headset-quasar-u535-master-std-nocodec-ldo-hs",
             "hidden": false,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), single radio HS, I2S master, standard format, no codec (direct I2S to SOC), LDO regulator, no sine",
@@ -346,7 +346,7 @@
             }
         },
         {
-            "name": "puretone-headset-quasar-u535-master-std-nocodec-smps-single-radio-hs",
+            "name": "puretone-headset-quasar-u535-master-std-nocodec-smps-hs",
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), single radio HS, I2S master, standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO), no sine",
             "cacheVariables": {
