@@ -38,8 +38,9 @@ __attribute__((weak)) void facade_board_init(void)
     quasar_config_t quasar_cfg = {
         .clk_freq = QUASAR_CLK_160MHZ,
         .debug_enabled = false,
-        .radio1_enabled = true,
-        .radio2_enabled = (SWC_RADIO_COUNT > 1),
+        /* Dual: both on. Single: only the physically selected transceiver (default radio 1). */
+        .radio1_enabled = (SWC_RADIO_COUNT > 1) || (SWC_SINGLE_RADIO_ID == 1),
+        .radio2_enabled = (SWC_RADIO_COUNT > 1) || (SWC_SINGLE_RADIO_ID == 2),
         .adc_enabled = false,
         .quasar_vdd_selection = QUASAR_VDD_SELECTION_1V8,
     };

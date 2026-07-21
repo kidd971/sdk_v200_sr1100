@@ -19,6 +19,16 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(SWC_RADIO_COUNT=1)
     endif()
 
+    # Physical transceiver bound to the single-radio slot (1 or 2). Default 1.
+    # Only meaningful for a single-radio build; ignored when SWC_RADIO_COUNT == 2.
+    # Set to 2 to run single-radio firmware electrically on radio 2 (board bring-up /
+    # isolating a radio-2-line x supply interaction). Requires RADIO_INTERFACE_QSPI=OFF.
+    if (NOT DEFINED SWC_SINGLE_RADIO_ID)
+        set(SWC_SINGLE_RADIO_ID 1)
+    endif()
+    message("SWC_SINGLE_RADIO_ID = ${SWC_SINGLE_RADIO_ID}")
+    add_compile_definitions(SWC_SINGLE_RADIO_ID=${SWC_SINGLE_RADIO_ID})
+
     if (TRANSCEIVER STREQUAL "SR1100")
         add_compile_definitions(SR1100=1)
         add_compile_definitions(SR1000=0)
