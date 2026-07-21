@@ -30,6 +30,15 @@ STM32U535 field board (~11 s from boot, no RF manipulation, only when both ends 
 It is in **Appendix A** — it is not EVK hardware, but it lands in the identical failure state, so a
 fix for §3 would likely cover it too.
 
+**We now have direct evidence that the U535 fb=0 trigger and the §3 re-sync trigger are the same
+defect, one wedge with two entry points (Appendix A.7).** We capped the audio ceiling below `fb = 0`
+on the U535 pair (so the up-shift trigger can no longer fire): the ~11 s spontaneous park stops — but
+cycling the node in and out of RF range still parks it, with the **identical** register signature
+(radios frozen, `ARR` pinned at 65533, `mrt` advancing, `swc` restart unable to recover). In other
+words, **the U535 board reproduces the §3 EVK re-sync park directly, and much faster to iterate on.**
+The 535-specific material is offered only as a fast, deterministic reproduction rig for the one
+underlying wedge (§4.1) — not as a separate problem to fix.
+
 ## 2. Environment
 
 - SWC application build string: `v2.3.0`, role = HS (node).
@@ -381,3 +390,51 @@ Is there a known timing constraint or minimum margin for dual-radio at **96 kHz*
 there any reason the *coordinator's* MCU would affect the *node's* radio servicing? We suspect a
 coordinator↔node timing relationship that is static when both time bases match and drifts when they
 differ, leaving the node in a dead spot — but we cannot identify it.
+
+## A.7 Same wedge, two triggers — capping the audio ceiling removes the fb=0 trigger, but the re-sync park (= §3) remains
+
+This is the observation that ties Appendix A back to §3. We deactivated audio mode 0 (96 kHz) on the
+coordinator — `sac_fallback_mode_set_active_state(mode 0, false)`, auto fallback still on, so the
+link degrades down to `fb 2/3` on a bad link but can **never up-shift to `fb = 0`**. This removes the
+A.4 trigger by construction.
+
+**Result 1 — the fb=0 trigger is gone.** With `fb = 0` unreachable, the ~11 s spontaneous park no
+longer occurs; on a good link the node runs steadily and TIM4 `ARR` toggles healthily
+(65533 ↔ ~5436) with `r1/r2_irq` advancing. So the A.4 park was indeed caused by the up-shift to
+`fb = 0`, not by steady-state 96 kHz.
+
+**Result 2 — the node still parks, via the §3 re-sync path.** Cycling the same U535 node in and out
+of RF range, one re-sync attempt wedges into the **identical** state as §3.2 / §8a. Node log
+(2 s cadence + our per-transition probe):
+
+```
+[LW EVENT t=133516] link DROPPED
+ t=134033  LOST  tim4 arr=5387  cnt=4204   r1_irq=516757    (re-hunting: ARR at retry period, radios ADVANCING)
+ t=136033  LOST  tim4 arr=5387  cnt=4035   r1_irq=524302    (advancing — healthy re-sync so far)
+ t=137516  LOST                            r1_irq=529921
+ t=138031  LOST  tim4 arr=65533 cnt=28083  r1_irq=531470    (ARR jumps to max period)
+ t=139516  LOST                            r1_irq=531470    <-- FROZEN
+ t=140031  LOST  tim4 arr=65533 cnt=52502  r1_irq=531470    (ARR PINNED; CNT + mrt still advancing; radios dead)
+ ... r1_irq/r2_irq/r1_dma/r2_dma all pinned; mrt 531499 -> 535979 advancing; fault: cfsr=hfsr=pc=lr=0
++AUTO-RECOVER: radio stall -> swc reconnect   ->   swc=STOP, radios stay frozen (does not recover — as §3.3)
+```
+
+Signature is exactly §3.2 / §8a: `r1/r2_irq` frozen, `ARR` pinned at 65533, `mrt`/`cnt` still
+advancing, no CPU fault, `swc` restart cannot recover. Contrast the *earlier* drops in the same run
+(e.g. `t=123516` DROP → `t=129516` RECOVER): there `r1_irq` kept advancing and `ARR` toggled the
+retry period throughout — a healthy re-sync. The freeze is a specific re-sync that wedges, not the
+normal LOST state.
+
+**This park is not an audio-mode transition.** Our per-transition probe logs every `fb` change with
+the link margin and connection state *at the instant it changes*. Through this whole capture it
+emitted **no** line coincident with any drop — `fb` was pinned at 3 the entire time (a genuinely weak
+link, `lm ≤ 35`, below the mode-3→2 recovery threshold, so the ladder correctly never climbed). The
+wedge happened during **re-sync**, with no mode change anywhere near it.
+
+**Conclusion.** Removing the `fb = 0` up-shift (Appendix A.4) removes *that* entry point but does not
+stop the node parking: the §3 re-sync entry point lands in the same wedge. So **A.4 and §3 are two
+triggers into one defect** — TIM4 left at max period and never re-armed (§4.1), radios `SLEEP_IDLE`
+(§4.2), no re-hunt. The practical upshot for debugging: **the U535 board reproduces the §3 EVK
+re-sync park on demand and fast** (range-cycle a U535↔U535 pair; no ≥15 s wait, no U5A5 EVK needed),
+so it is the cheapest rig to instrument the re-arm path on. A fix at the §4.1 re-arm should close
+both triggers at once.

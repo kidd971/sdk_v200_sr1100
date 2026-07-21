@@ -119,3 +119,20 @@ range at the freeze).
 
 **If you are willing to look:** is there a known timing constraint for dual-radio at **96 kHz**, and
 is there any reason the *coordinator's* MCU would affect the *node's* radio servicing?
+
+**Same wedge, two triggers.** We capped the audio ceiling below `fb = 0` on the U535 pair
+(deactivated mode 0, auto fallback still on) so the up-shift trigger can no longer fire. The ~11 s
+spontaneous park stops — but **range-cycling the node still parks it**, with the *identical*
+signature (`r1/r2_irq` frozen, `ARR` pinned 65533, `mrt` advancing, `swc` restart cannot recover):
+
+```
+ t=136033  LOST  tim4 arr=5387  r1_irq=524302   (healthy re-hunt: ARR at retry period, radios advancing)
+ t=138031  LOST  tim4 arr=65533 r1_irq=531470   (ARR jumps to max)
+ t=140031  LOST  tim4 arr=65533 r1_irq=531470   <-- FROZEN (ARR pinned; mrt still advancing; radios dead)
++AUTO-RECOVER: radio stall -> swc reconnect  ->  swc=STOP, radios stay frozen (as §1)
+```
+
+So the `fb = 0` up-shift and the §1 re-sync loss are **two entry points into one wedge** (TIM4 left
+at max period, never re-armed). The 535 material is offered only as a **fast, deterministic
+reproduction rig for the §1 EVK park** — range-cycle a U535↔U535 pair, no ≥15 s wait — not as a
+separate problem. A fix at the re-arm path should close both.
