@@ -32,6 +32,11 @@
 #define DELAY_MS_LONG_PERIOD                          250
 #define LED_BLINK_REPEAT                              2
 
+/* Connection-status activity LEDs (USER_1 tx / USER_2 rx) toggle once per SWC
+ * conn-status callback; at audio rate that is far too fast to read. Divide the
+ * toggle down so each LED flips once every N callbacks (~visible blink). */
+#define CONN_STATUS_LED_TOGGLE_DIVIDER               200
+
 #define USER_RESPONSE_DELAY_MS                        1000
 #define LED_BLINK_CERTIFICATION_MODE_1                1
 #define LED_BLINK_CERTIFICATION_MODE_2                2
@@ -168,7 +173,12 @@ void facade_button_handling(void)
 
 void facade_tx_audio_conn_status(void)
 {
-    quasar_led_toggle(QUASAR_LED_USER_1);
+    static uint32_t count;
+
+    if (++count >= CONN_STATUS_LED_TOGGLE_DIVIDER) {
+        count = 0;
+        quasar_led_toggle(QUASAR_LED_USER_1);
+    }
 }
 
 void facade_tx_data_conn_status(void)
@@ -177,7 +187,12 @@ void facade_tx_data_conn_status(void)
 
 void facade_rx_audio_conn_status(void)
 {
-    quasar_led_toggle(QUASAR_LED_USER_2);
+    static uint32_t count;
+
+    if (++count >= CONN_STATUS_LED_TOGGLE_DIVIDER) {
+        count = 0;
+        quasar_led_toggle(QUASAR_LED_USER_2);
+    }
 }
 
 void facade_rx_data_conn_status(void)
