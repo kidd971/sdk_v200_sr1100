@@ -16,7 +16,7 @@ add_subdirectory(config)
 if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
     # The coordinator does not support multi radio
     add_executable(puretone_dongle.elf "")
-    target_sources(puretone_dongle.elf PRIVATE puretone_dongle.c)
+    target_sources(puretone_dongle.elf PRIVATE puretone_dongle.c reconnect_store.c)
     target_link_libraries(puretone_dongle.elf
         PRIVATE
             audio_core
@@ -30,7 +30,7 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
     )
 endif()
 add_executable(puretone_headset.elf "")
-target_sources(puretone_headset.elf PRIVATE puretone_headset.c)
+target_sources(puretone_headset.elf PRIVATE puretone_headset.c reconnect_store.c)
 target_link_libraries(puretone_headset.elf
     PRIVATE
         audio_core

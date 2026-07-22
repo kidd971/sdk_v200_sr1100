@@ -42,12 +42,18 @@ _Min_Heap_Size = 0x200; /* required amount of heap */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
 /* Memories definition */
+/* Last 8 KB page (0x081FE000-0x081FFFFF) reserved for boot auto-reconnect
+ * user data (see boot_auto_reconnect_design.md). FLASH shortened 4096K -> 4088K
+ * so the linker never places code there; the app reaches it via _user_data_base. */
 MEMORY
 {
   RAM   (xrw) : ORIGIN = 0x20000000, LENGTH = 2496K
   SRAM4 (xrw) : ORIGIN = 0x28000000, LENGTH = 16K
-  FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 4096K
+  FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 4088K
 }
+
+/* Base of the reserved user-data page (last 8 KB of the 4 MB flash). */
+_user_data_base = 0x081FE000;
 
 /* Sections */
 SECTIONS

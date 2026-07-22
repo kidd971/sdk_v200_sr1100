@@ -16,6 +16,7 @@
 #include "pairing_api.h"
 #include "pairing_cfg.h"
 #include "puretone_headset_facade.h"
+#include "reconnect_store.h"  /* boot auto-reconnect: persist/restore the pairing address */
 #include "sac_api.h"
 #include "sac_cdc.h"
 #include "sac_cfg.h"
@@ -48,6 +49,8 @@
 #define STATS_ARRAY_LENGTH 5000
 /* Period for data transmission timer in ms. */
 #define DATA_TX_PERIOD_MS 10
+/* Boot auto-reconnect: max time to wait for the persisted peer before falling back to pairing. */
+#define RECONNECT_TIMEOUT_MS 3000
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
 /* Size of the buffer used to print errors. */
@@ -303,6 +306,7 @@ static void app_audio_core_volume_interface_init(sac_processing_interface_t *ifa
 /* **** Button Actions **** */
 static void enter_pairing_mode(void);
 static void unpair_device(void);
+static bool try_boot_reconnect(void);
 static void abort_pairing_procedure(void);
 
 /* **** Fallback LED and Terminal Display **** */
@@ -384,8 +388,12 @@ int main(void)
 
     device_pairing_state = DEVICE_UNPAIRED;
 
-    /* Pairing occurs automatically when the device boots. */
-    enter_pairing_mode();
+    /* Boot auto-reconnect: if a previous pairing was persisted to flash, try to
+     * re-establish it silently. Only fall back to pairing if there is no record
+     * or the peer is unreachable within RECONNECT_TIMEOUT_MS. */
+    if (!try_boot_reconnect()) {
+        enter_pairing_mode();
+    }
 
     while (1) {
         facade_button_handling();
@@ -2200,6 +2208,11 @@ static void enter_pairing_mode(void)
         app_init();
         device_pairing_state = DEVICE_PAIRED;
 
+        /* Persist the assigned address so the next boot reconnects automatically
+         * (boot auto-reconnect). Best-effort: a flash fault here only costs the
+         * auto-reconnect on the next boot, not this session. */
+        reconnect_store_save(&pairing_assigned_address);
+
         break;
     case PAIRING_EVENT_TIMEOUT:
     case PAIRING_EVENT_INVALID_APP_CODE:
@@ -2210,6 +2223,77 @@ static void enter_pairing_mode(void)
         device_pairing_state = DEVICE_UNPAIRED;
         break;
     }
+}
+
+/** @brief Attempt to reconnect to the persisted peer on boot.
+ *
+ *  If a valid pairing address was persisted to flash, rebuild the coordinator's
+ *  discovery list from it and bring the wireless core up (same path as a fresh
+ *  pairing success / at_start_connect), then wait up to RECONNECT_TIMEOUT_MS for
+ *  the real SWC link to come up. On success the device stays paired and
+ *  streaming. On timeout the half-open link is torn down and the caller falls
+ *  back to pairing; the flash record is KEPT (the peer being off is not a reason
+ *  to forget the pair).
+ *
+ *  @return true if the link was re-established; false if there is no record or
+ *          the peer was unreachable within the timeout.
+ */
+static bool try_boot_reconnect(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+    uint32_t start;
+    bool connected = false;
+
+    /* Blank / corrupt / wrong-version flash -> no record -> fall back to pairing. */
+    if (!reconnect_store_load(&pairing_assigned_address)) {
+        return false;
+    }
+
+    /* A valid record should never carry a zero node address, but guard defensively. */
+    if (pairing_assigned_address.node_address == 0) {
+        return false;
+    }
+
+    /* Rebuild the coordinator's discovery list from the persisted addresses:
+     * app_swc_core_init() reads the local (coordinator) and remote (node) node
+     * addresses from it. These equal the assigned coordinator/node addresses. */
+    pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address =
+        pairing_assigned_address.coordinator_address;
+    pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE].node_address =
+        pairing_assigned_address.node_address;
+
+    /* Fast-blink the status LED to show a silent reconnect is in progress. */
+    facade_notify_reconnecting();
+
+    /* Build the wireless core from the restored addresses and connect. */
+    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_CONNECTING);
+    app_init();
+    device_pairing_state = DEVICE_PAIRED;
+
+    /* Poll the real SWC link status (the same tx_audio_conn indicator link_watch
+     * uses on the coordinator) until the node is reachable or the timeout
+     * elapses. Keep servicing buttons and AT commands meanwhile. */
+    start = facade_get_tick_ms();
+    while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
+        swc_err = SWC_ERR_NONE;
+        if (swc_connection_get_connect_status(tx_audio_conn, &swc_err)) {
+            connected = true;
+            break;
+        }
+        facade_button_handling();
+        at_cmd_core_process();
+    }
+
+    if (connected) {
+        facade_notify_pairing_successful();
+        return true;
+    }
+
+    /* Node not reachable in time: tear the half-open link down (also resets
+     * device_pairing_state to UNPAIRED and stops the pipelines) and let the
+     * caller enter pairing. The flash record is intentionally left intact. */
+    at_start_disconnect();
+    return false;
 }
 
 /** @brief Unpair the device. This will reset its discovery list.
@@ -2237,6 +2321,10 @@ static void unpair_device(void)
 
     /* Reset the pairing discovery list. */
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
+
+    /* Erase the persisted pairing address so the next boot does not reconnect
+     * to the device the user just removed (boot auto-reconnect). */
+    reconnect_store_clear();
 
     /* Stop the main channel audio pipeline. */
     sac_pipeline_stop(main_channel_sac_pipeline, &sac_status);

@@ -247,6 +247,47 @@ bool facade_read_button_state(void);
  */
 void facade_notify_pairing_successful(void);
 
+/** @brief Reconnecting notification LED pattern (boot auto-reconnect).
+ *
+ *  Fast blink x5 (~100 ms) on the board status color: blue on the u535 headset,
+ *  green elsewhere. Distinguishable from enter-pairing (slow 250 ms x2). Blocking,
+ *  fired only at the boot reconnect transition, never in the audio loop.
+ */
+void facade_notify_reconnecting(void);
+
+/** @brief Read the boot auto-reconnect record from the reserved flash page.
+ *
+ *  Copies @p len bytes from the reserved user-data page (`_user_data_base`,
+ *  board-specific address handled by the linker) into @p dst. Raw bytes only —
+ *  the record format (magic / version / CRC) lives in the caller.
+ *
+ *  @param[out] dst  Destination buffer.
+ *  @param[in]  len  Number of bytes to read (must be <= reserved page size).
+ *  @return true on success; false on argument error.
+ */
+bool facade_nv_read(void *dst, uint32_t len);
+
+/** @brief Erase the reserved page and write the boot auto-reconnect record.
+ *
+ *  Erases the reserved user-data page, programs @p len bytes at `_user_data_base`,
+ *  then invalidates the instruction cache. @p len must be a multiple of 16 bytes
+ *  (flash quad-word granularity) and fit in one page.
+ *
+ *  @param[in] src  Source buffer.
+ *  @param[in] len  Number of bytes to write (multiple of 16, <= page size).
+ *  @return true on success; false on argument error or a flash fault.
+ */
+bool facade_nv_write(const void *src, uint32_t len);
+
+/** @brief Erase the reserved boot auto-reconnect page.
+ *
+ *  Leaves the page in the blank (0xFF) state so the next read fails the magic
+ *  check and the device falls through to pairing.
+ *
+ *  @return true on success; false on a flash fault.
+ */
+bool facade_nv_erase(void);
+
 /** @brief Set the I2S MUX selection.
  *
  *  @param[in] use_ext  true = external codec port, false = onboard codec.

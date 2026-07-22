@@ -291,6 +291,29 @@ void facade_notify_pairing_successful(void)
     quasar_rgb_set();
 }
 
+void facade_notify_reconnecting(void)
+{
+    /* Fast blink x5 (~100 ms) on the board status color. Fast + 5 blinks
+     * distinguishes it from enter-pairing (slow 250 ms x2). Blocking, fired only
+     * at the boot reconnect transition. */
+    const uint16_t delay_ms = 100;
+    const uint8_t repeat = 5;
+
+    quasar_rgb_clear();
+#ifdef QUASAR_U535
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+#else
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_GREEN);
+#endif
+
+    for (uint8_t i = 0; i < repeat; i++) {
+        quasar_rgb_set();
+        quasar_timer_delay_ms(delay_ms);
+        quasar_rgb_clear();
+        quasar_timer_delay_ms(delay_ms);
+    }
+}
+
 void facade_expansion_uart_init(uint32_t baud_rate)
 {
 #if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)

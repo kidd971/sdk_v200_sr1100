@@ -2,7 +2,9 @@
 
 **Branch:** `feat-boot-auto-reconnect` (base: `release-unify-boards`)
 **Scope:** puretone headset (HS / node) **and** dongle (DG / coordinator)
-**Status:** design agreed, not yet implemented. Resume from "Work Breakdown" below.
+**Status:** implemented 2026-07-22 (all 6 work items). Builds clean on u535 and
+u5a5 (both puretone_headset.elf + puretone_dongle.elf). See "Implementation" at
+the end for what was built and where it deviated from this note.
 
 ---
 
@@ -173,9 +175,34 @@ addresses but the DG re-pairs / re-assigns on boot, the two disagree.
 
 - Same design applies to [puretone_dongle.c](app/example/puretone_headset/puretone_dongle.c)
   (notify calls at lines 2156 / 2182 / 2193 / 2243 mirror the HS).
-- Confirm the DG board's flash page size / bank layout and reserve its own
-  user-data page in the dongle linker script.
 - DG status color for reconnect = **green** (per the `#else` branch).
+
+### 6.1 Reserve **per-chip, not per-role** (flash geometry confirmed 2026-07-22)
+
+Both roles (HS/DG) build for **both** chips — `puretone-headset-quasar-u535-*`
+and `puretone-headset-quasar-u5a5-*` presets exist, and one preset builds
+`puretone_headset.elf` **and** `puretone_dongle.elf` from the same board. So the
+reserved region is a property of the **chip**, not the role. Reserve the last
+page in **each linker script** and expose `_user_data_base`; the app references
+that symbol, so one code path lands on the right address for whichever chip it
+was compiled for. Role never touches the address.
+
+| | HS board (u535) | DG board (u5a5) |
+|---|---|---|
+| Flash total | 512 KB | **4096 KB** |
+| Bank layout | dual-bank, bank = 256 KB | dual-bank, bank = **2 MB** (`0x200000`) |
+| Page size | **8 KB (`0x2000`)** | **8 KB (`0x2000`)** — same |
+| Reserved last page | `0x0807E000`–`0x0807FFFF` | **`0x081FE000`–`0x081FFFFF`** |
+
+- **Size is identical (8 KB), address is not** — the two flashes differ 8×, so
+  each chip's "last page" sits at a different absolute address. Forcing a common
+  address would carve a hole in the middle of u5a5's 4 MB code region; not worth
+  it. `_user_data_base` per linker keeps the C code chip-agnostic.
+- `FLASH_PAGE_SIZE == 0x2000` on both chips (verified in
+  `cmsis_device_u5/.../stm32u535xx.h` and `stm32u5a5xx.h`).
+- **Driver needs no change**: `quasar_memory.c` exists in **both**
+  `bsp/quasar-u535/` and `bsp/quasar/`, and computes bank/page from the address
+  via `FLASH_PAGE_SIZE`/`FLASH_BANK_SIZE` HAL macros (incl. bank-2).
 
 ---
 
@@ -184,8 +211,16 @@ addresses but the DG re-pairs / re-assigns on boot, the two disagree.
 1. **NV record module** (`reconnect_store.[ch]` or similar): magic+version+CRC on
    top of `quasar_memory_*`; `save(addr)` / `load(addr)->bool` / `clear()`.
    Handle 16-byte padding, erase-before-write, cache invalidate.
-2. **Linker**: reserve last 8 KB page on HS (u535) **and** DG; expose
+2. **Linker**: reserve last 8 KB page **per chip** (§6.1); expose
    `_user_data_base`.
+   - `bsp/quasar-u535/GCC/STM32U535xx_FLASH.ld`: `512K → 504K`;
+     `_user_data_base = 0x0807E000;`
+   - `bsp/quasar/GCC/STM32U5A5AJHXQ_FLASH.ld`: `4096K → 4088K`;
+     `_user_data_base = 0x081FE000;`
+   - ⚠️ `CLANG_*_FLASH.ld` variants exist alongside both. pixi is arm-gcc
+     (POST_BUILD uses `arm-none-eabi-objcopy`), so GCC scripts suffice now; sync
+     the clang scripts too if the toolchain ever switches, or `_user_data_base`
+     is undefined.
 3. **Save/clear hooks**: write on `PAIRING_EVENT_SUCCESS`, erase in
    `unpair_device()` — both HS and DG.
 4. **Boot decision**: replace unconditional `enter_pairing_mode()` in `main()`
@@ -203,10 +238,94 @@ addresses but the DG re-pairs / re-assigns on boot, the two disagree.
 
 ### Open items settled
 - Both HS + DG: **yes**.
-- Timeout: **5 s → pairing**.
+- Timeout: **3 s → pairing** (`RECONNECT_TIMEOUT_MS`; tuned down from 5 s on
+  2026-07-22 after HW confirmed reconnect works — 5 s was an unnecessarily long
+  wait before falling back to pairing). Elsewhere in this note "5 s" reflects the
+  original design value.
 - LED: **fast blink × 5** on the board status color (blue HS / green DG).
 - Timeout keeps the flash record: **yes** (recommended default; revisit if undesired).
+- **Fast-blink period: 100 ms** (settled 2026-07-22).
+- **DG flash geometry: u5a5 = 4 MB / dual-bank / 8 KB page → reserve `0x081FE000`**
+  (settled 2026-07-22, §6.1). Reserve is per-chip, not per-role.
 
-### Still to confirm on resume
-- Fast-blink period: 100 ms assumed (vs 60 ms).
-- DG board flash geometry (page size / bank split) before reserving its page.
+---
+
+## 8. Implementation (done 2026-07-22)
+
+Files touched:
+
+| Item | Where |
+|---|---|
+| Linker reserve (§6.1) | `bsp/quasar-u535/GCC/STM32U535xx_FLASH.ld` (504K, `_user_data_base=0x0807E000`); `bsp/quasar/GCC/STM32U5A5AJHXQ_FLASH.ld` (4088K, `_user_data_base=0x081FE000`). Verified with `nm`: symbol lands exactly on each address. CLANG_*.ld left untouched (arm-gcc toolchain). |
+| Raw NV facade | `facade_nv_read/write/erase` declared in `puretone_headset_facade.h`, implemented in **new** `backend/quasar_backend/puretone_headset_backend/puretone_headset_nv_backend.c` (wraps quasar_memory + `_user_data_base`; erase-before-write, cache invalidate, 16-byte multiple guard). |
+| Record module | **new** `app/example/puretone_headset/reconnect_store.[ch]` — 16-byte record (magic `RCON` + version + pad + `pairing_assigned_address_t` + CRC32), bitwise CRC32, `load/save/clear`. Compiled into both elfs. |
+| LED | `facade_notify_reconnecting()` (100 ms x5, blue u535 / green else) in `puretone_headset_backend.c`. |
+| Boot SM + hooks | `try_boot_reconnect()` + save-on-success + clear-on-unpair in both `puretone_headset.c` and `puretone_dongle.c`. |
+
+Deviations from the design above (all deliberate):
+
+1. **Link detection is NOT `at_get_link_status()`.** That function only returns
+   `device_pairing_state == DEVICE_PAIRED`, which `at_start_connect()` sets the
+   instant the local core comes up — it never reflects whether the *peer* is
+   reachable, so it would make the 5 s poll succeed immediately. Instead the poll
+   uses `swc_connection_get_connect_status()` on the same connection each app's
+   `link_watch()` already treats as the live OK/LOST signal: **node → `rx_audio_conn`,
+   coordinator → `tx_audio_conn`**.
+2. **Layered instead of one module on raw quasar_memory.** The app never includes
+   bsp headers, and `_user_data_base` is a per-board linker symbol. So the record
+   format lives app-side (`reconnect_store`, board-agnostic, byte-in/out) and the
+   flash access lives in the backend (`facade_nv_*`, which owns quasar_memory and
+   the linker symbol). Clean split along the existing facade boundary.
+3. **Coordinator rebuilds its discovery list from the 4-byte record.** The DG's
+   `app_swc_core_init()` reads local/remote node addresses from
+   `pairing_discovery_list[]`, not from `pairing_assigned_address`. On reconnect we
+   set `discovery_list[COORDINATOR].node_address = addr.coordinator_address` and
+   `discovery_list[NODE].node_address = addr.node_address` (these are equal by
+   construction), so the same 4-byte record serves both roles.
+
+Open risk to check on hardware (not a build issue):
+- Whether `swc_connection_get_connect_status(tx_audio_conn)` on the **coordinator**
+  goes true only after the node ACKs (peer really present) or as soon as the
+  master's own core connects. If the latter, the DG's reconnect "succeeds"
+  immediately even with no node — harmless (link_watch then shows LOST and the
+  user re-pairs) but means the 5 s peer-presence gate is effectively node-side
+  only. If undesired, switch the DG poll to RX-count-based presence
+  (`rx_audio_conn` `packet_successfully_received_count > 0`).
+
+---
+
+## 9. Persistence scope: survives power-cycle, NOT reflash (decided 2026-07-22)
+
+The record lives in the reserved flash page, so it **survives a power-cycle** —
+which is the entire point of the feature (end users only ever power the device
+off/on). It does **not** survive a **reflash**: a normal full-chip program
+(ST-Link / CubeProgrammer default = mass-erase) wipes the reserved page along
+with everything else, so a reflashed device boots with a blank record and falls
+through to pairing.
+
+**Decision: this is fine — do NOT make reflash preserve the record.** Reasoning:
+
+- **Reflash is a developer / factory action, never an end-user one.** The one
+  scenario the feature exists for (user power-cycle) already works.
+- **Factory flow is "flash first, pair later."** At flash time there is nothing
+  to preserve — the unit is not yet paired.
+- **The only case where reflash-preservation would matter is field OTA update
+  without re-pairing — and there is no OTA path here** (updates = attach a
+  debugger and reflash, itself an engineering action). Revisit only if a real
+  OTA/bootloader path is added; that flow would be page-preserving by design and
+  is a separate mechanism from today's mass-erase.
+- **Cost vs. benefit is lopsided.** Preserving across reflash needs
+  page-preserving programming (per-sector erase excluding the last page, or
+  disabling mass-erase / specifying a range in the flash tool) — tool-dependent
+  and fragile. During development a stale record after reflash is actively
+  *harmful* (misleading state); a clean boot-to-pairing is what you want. The
+  only thing preserving saves is one button-press re-pair after each flash.
+
+**Test procedure implied by this:** flash the firmware once on **both** ends,
+pair once (writes the record), then **power-cycle only — do not reflash between
+runs** — to exercise auto-reconnect. Reflashing mid-test clears the record and
+(correctly) drops back to pairing.
+
+Format evolution is safe regardless: the record carries `version` + CRC32, so a
+new firmware reading an old-format record sees a version/CRC mismatch, treats it
+as "no record," and falls through to pairing.
