@@ -50,11 +50,12 @@
 /* Period for data transmission timer in ms. */
 #define DATA_TX_PERIOD_MS 10
 /* Boot auto-reconnect: max time to wait for the persisted peer before falling back to pairing. */
-#define RECONNECT_TIMEOUT_MS 3000
+#define RECONNECT_TIMEOUT_MS 10000
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
-/* Size of the buffer used to print errors. */
-#define ERROR_MESSAGE_BUFFER_SIZE 50
+/* Size of the buffer used to print errors. Must hold a full trap line:
+ * "<TAG> TRAP <file>:<line> code=<n>". */
+#define ERROR_MESSAGE_BUFFER_SIZE 96
 /* Interval to print statistics in ms. */
 #define PRINT_INTERVAL_MS 1000
 
@@ -86,6 +87,46 @@
 
 /* Number of SWC fallback modes. */
 #define SWC_FALLBACK_MODE_COUNT 3
+
+/* **** Assert-site capture (no ST-Link needed) ****
+ * The library ASSERT_SWC/SAC_STATUS macros only pass the error CODE to the fatal
+ * handler, not where the assert tripped. Re-define them for THIS translation unit
+ * so they stash __FILE__/__LINE__ into the globals below before trapping; the fatal
+ * handler then prints "<TAG> TRAP <file>:<line> code=<n>". Mirrors the HS side.
+ * Matters most on the app_init() re-entry path (AT+UWB_CONNECT, boot auto-reconnect):
+ * every step there is asserted, so without this a failed re-init is an anonymous wedge. */
+static volatile const char *s_assert_file = NULL;
+static volatile uint32_t s_assert_line = 0;
+
+#undef ASSERT_SWC_STATUS
+#define ASSERT_SWC_STATUS(swc_status)        \
+    do {                                     \
+        if ((swc_status) == SWC_ERR_NONE) {  \
+            break;                           \
+        }                                    \
+        if ((swc_status) > 0) {              \
+            swc_warning_handler(swc_status); \
+            break;                           \
+        }                                    \
+        s_assert_file = __FILE__;            \
+        s_assert_line = __LINE__;            \
+        swc_error_handler(swc_status);       \
+    } while (0)
+
+#undef ASSERT_SAC_STATUS
+#define ASSERT_SAC_STATUS(sac_status)        \
+    do {                                     \
+        if ((sac_status) == SAC_OK) {        \
+            break;                           \
+        }                                    \
+        if ((sac_status) > SAC_OK) {         \
+            sac_warning_handler(sac_status); \
+            break;                           \
+        }                                    \
+        s_assert_file = __FILE__;            \
+        s_assert_line = __LINE__;            \
+        sac_error_handler(sac_status);       \
+    } while (0)
 
 /* TYPES **********************************************************************/
 /** @brief Enumeration representing device pairing states.
@@ -326,6 +367,7 @@ static void link_watch(void);
 
 static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
+static void fatal_trap(const char *tag, int code);
 static uint32_t get_accumulator_size(sac_pipeline_t *pipeline);
 
 /* **** AT Command Core Callbacks **** */
@@ -2480,7 +2522,12 @@ static void app_init(void)
     ASSERT_SWC_STATUS(swc_err);
 
     at_cmd_core_set_device_address(pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address);
-    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_CONNECTED);
+    /* Deliberately NOT set to CONNECTED here: swc_connect() only arms the link, it does
+     * not mean the node answered. Declaring CONNECTED at this point overwrote the
+     * CONNECTING state its callers had just set, so the AT_UWB_CONNECT_TIMEOUT_MS window
+     * and +EVENT: UWB_CONNECT_FAIL could never fire and AT+UWB_CONN_STATUS? reported a
+     * live link even when the node was absent. The status is now driven by the link poll
+     * in at_cmd_core_process() via at_get_link_status(). */
 
     /* Initialize Audio Core. */
     app_audio_core_init();
@@ -2589,7 +2636,16 @@ static void at_start_shutdown(void)
 
 static bool at_get_link_status(void)
 {
-    return device_pairing_state == DEVICE_PAIRED;
+    swc_error_t swc_err = SWC_ERR_NONE;
+
+    /* device_pairing_state alone only says "the app believes it is paired" — it is set
+     * unconditionally right after app_init(), so it reported a link that may never have
+     * come up. Ask the Wireless Core instead. Non-asserting read, like link_watch(), so a
+     * status poll during a drop cannot itself trap. */
+    if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
+        return false;
+    }
+    return swc_connection_get_connect_status(tx_audio_conn, &swc_err);
 }
 
 static int32_t at_get_link_margin(void)
@@ -2622,24 +2678,51 @@ static void at_set_vol(uint8_t vol)
     }
 }
 
-void sac_error_handler(sac_status_t sac_status)
+/** @brief Emit one self-diagnosing trap line, then halt.
+ *
+ *  Prints "<tag> TRAP <file>:<line> code=<n>" naming the assert that tripped (captured
+ *  by the ASSERT_SWC/SAC_STATUS wrappers at the top of this file), so a repro is
+ *  diagnosable from the log alone. The line goes to both sinks because the DG's debug
+ *  channel is board-dependent: facade_stats_write() is the ST-Link VCP / UART4 path used
+ *  by LINK_WATCH on U535, facade_print_error_string() is the USB CDC path elsewhere (and
+ *  lights the RGB red). Re-emitted on a slow loop rather than printed once, because the
+ *  operator usually attaches the terminal only after noticing the box has wedged.
+ *  The delay is a nop spin on purpose — SysTick may already be dead in a trap context.
+ */
+static void fatal_trap(const char *tag, int code)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
+    const char *file = (s_assert_file != NULL) ? (const char *)s_assert_file : "?";
+    const char *base = file;
 
-    sprintf(buffer, "SAC Error! Code: %d\n\r", sac_status);
+    /* Strip the directory so the log line stays short and readable. */
+    for (const char *p = file; *p != '\0'; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+
+    snprintf(buffer, sizeof(buffer), "\r\n%s TRAP %s:%lu code=%d\r\n",
+             tag, base, (unsigned long)s_assert_line, code);
+
     facade_print_error_string(buffer);
 
-    while (1);
+    while (1) {
+        facade_stats_write(buffer);
+        for (volatile uint32_t i = 0; i < 8000000u; i++) {
+            __asm volatile("nop");
+        }
+    }
+}
+
+void sac_error_handler(sac_status_t sac_status)
+{
+    fatal_trap("SAC", (int)sac_status);
 }
 
 void swc_error_handler(swc_error_t swc_status)
 {
-    char buffer[ERROR_MESSAGE_BUFFER_SIZE];
-
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
-    facade_print_error_string(buffer);
-
-    while (1);
+    fatal_trap("SWC", (int)swc_status);
 }
 
 /** @brief Return the accumulator size according to the current fallback mode.
