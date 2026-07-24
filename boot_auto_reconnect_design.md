@@ -329,3 +329,46 @@ runs** — to exercise auto-reconnect. Reflashing mid-test clears the record and
 Format evolution is safe regardless: the record carries `version` + CRC32, so a
 new firmware reading an old-format record sees a version/CRC mismatch, treats it
 as "no record," and falls through to pairing.
+
+---
+
+## 10. Pairing button during the reconnect window (fixed 2026-07-24)
+
+**Bug.** `try_boot_reconnect()` sets `device_pairing_state = DEVICE_PAIRED`
+*before* the poll loop, and the loop calls `facade_button_handling()` /
+`at_cmd_core_process()`. `facade_button_handling()` dispatches synchronously, so
+a pairing-button press inside the window ran `pairing_button_callback()` ->
+`DEVICE_PAIRED` -> `unpair_device()`, which NULLs `rx_audio_conn` /
+`tx_audio_conn` **while the loop is still running**. The next pass then called
+`swc_connection_get_connect_status(NULL, ...)` — and that API dereferences
+`conn->wps_conn_handle` with no NULL check (`swc_api.c`, unlike every other
+`swc_connection_*` entry point) -> HardFault. Second, weaker path: even without
+the NULL deref, `unpair_device()` runs `swc_disconnect()` on a link that never
+synced, which can return `SWC_ERR_DISCONNECT_TIMEOUT` and trap in
+`ASSERT_SWC_STATUS` -> `swc_error_handler()`'s `while(1)`. `AT+PAIR` /
+`AT+DISCONNECT` reached the same teardown through `at_start_pairing()` /
+`at_start_disconnect()`.
+
+**Fix — defer, don't disable.** Dead-disabling the button for 3 s is wrong UX:
+a press during reconnect almost always means "stop waiting for the old peer, let
+me pair a new one." So the handlers now only *raise a flag*:
+
+- `s_boot_reconnect_active` / `s_boot_reconnect_abort` (both `volatile`, HS+DG).
+- `pairing_button_callback()`, `at_start_pairing()`, `at_start_disconnect()`
+  return early with `s_boot_reconnect_abort = true` while active — no SWC or
+  flash access from inside the loop.
+- The loop breaks on the flag (and, belt-and-braces, on the connection handle
+  going NULL), clears `s_boot_reconnect_active`, then does the teardown itself
+  through the already-proven timeout path `at_start_disconnect()`, and returns
+  false so `main()` enters pairing mode.
+
+Net behaviour: **press pairing during boot reconnect -> reconnect aborts
+immediately and the device enters pairing mode.** The flash record is *not*
+erased by the abort (and on DG the discovery list is not wiped) — it is
+overwritten when the new pairing succeeds, matching the "record kept on
+timeout" rule in §4.
+
+**Not changed:** the missing `conn == NULL` guard inside
+`swc_connection_get_connect_status()` is a SPARK core defect. Left untouched to
+avoid diverging from vendor code; the app-side NULL check covers us. Add it to
+the HQ report list.

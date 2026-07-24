@@ -251,6 +251,14 @@ static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 static pairing_discovery_list_t pairing_discovery_list[PAIRING_DISCOVERY_LIST_SIZE];
+/* True while try_boot_reconnect() owns the half-open link and is polling it. During that
+ * window device_pairing_state is already DEVICE_PAIRED, so any teardown reached from the
+ * polled button / AT handlers (unpair_device(), at_start_disconnect()) would NULL the
+ * connection handles under the polling loop -- and swc_connection_get_connect_status()
+ * dereferences its argument with no NULL check. Teardown is therefore deferred: the
+ * handlers only raise s_boot_reconnect_abort and the loop unwinds itself. */
+static volatile bool s_boot_reconnect_active;
+static volatile bool s_boot_reconnect_abort;
 static sac_cdc_instance_t back_channel_cdc_instance;
 
 /* Fallback latency. */
@@ -2151,6 +2159,16 @@ static void data_callback(void)
  */
 static void pairing_button_callback(void)
 {
+    /* Boot auto-reconnect in progress: the state says PAIRED but the link is only
+     * half-open and try_boot_reconnect() still owns the connection handles. Do NOT
+     * unpair from here -- that would also wipe the discovery list and the flash
+     * record. Just ask the reconnect to give up; main() then enters pairing mode,
+     * which is what the press meant anyway. */
+    if (s_boot_reconnect_active) {
+        s_boot_reconnect_abort = true;
+        return;
+    }
+
     switch (device_pairing_state) {
     case DEVICE_PAIRED:
         unpair_device();
@@ -2272,7 +2290,11 @@ static bool try_boot_reconnect(void)
 
     /* Poll the real SWC link status (the same tx_audio_conn indicator link_watch
      * uses on the coordinator) until the node is reachable or the timeout
-     * elapses. Keep servicing buttons and AT commands meanwhile. */
+     * elapses. Keep servicing buttons and AT commands meanwhile; those handlers
+     * defer their teardown through s_boot_reconnect_abort. */
+    s_boot_reconnect_abort = false;
+    s_boot_reconnect_active = true;
+
     start = facade_get_tick_ms();
     while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
         swc_err = SWC_ERR_NONE;
@@ -2282,14 +2304,27 @@ static bool try_boot_reconnect(void)
         }
         facade_button_handling();
         at_cmd_core_process();
+
+        if (s_boot_reconnect_abort) {
+            break;
+        }
+        /* Belt-and-braces: every teardown path NULLs the connection handles, and
+         * swc_connection_get_connect_status() would dereference that on the next
+         * pass. Never poll a handle the app has already released. */
+        if (tx_audio_conn == NULL) {
+            break;
+        }
     }
+
+    s_boot_reconnect_active = false;
 
     if (connected) {
         facade_notify_pairing_successful();
         return true;
     }
 
-    /* Node not reachable in time: tear the half-open link down (also resets
+    /* Node not reachable in time, or the user aborted with the pairing button /
+     * an AT command: tear the half-open link down (also resets
      * device_pairing_state to UNPAIRED and stops the pipelines) and let the
      * caller enter pairing. The flash record is intentionally left intact. */
     at_start_disconnect();
@@ -2474,6 +2509,12 @@ static void app_init(void)
 
 static void at_start_pairing(void)
 {
+    /* See pairing_button_callback(): during boot auto-reconnect the teardown is
+     * deferred to the polling loop, which then falls through to pairing mode. */
+    if (s_boot_reconnect_active) {
+        s_boot_reconnect_abort = true;
+        return;
+    }
     if (device_pairing_state == DEVICE_PAIRING) {
         return;
     }
@@ -2502,6 +2543,12 @@ static void at_start_disconnect(void)
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
 
+    /* Called from inside the boot-reconnect polling loop: defer, so the handles
+     * stay valid until the loop has unwound. It calls us again right after. */
+    if (s_boot_reconnect_active) {
+        s_boot_reconnect_abort = true;
+        return;
+    }
     if (device_pairing_state == DEVICE_UNPAIRED) {
         return;
     }
