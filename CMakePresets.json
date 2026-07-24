@@ -404,6 +404,30 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u535-radio2-slave-smps",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "RELEASE: Puretone headset U535, SINGLE radio bound to the physical radio 2 (UWB_L, SPI2, CS=PD5) via SWC_SINGLE_RADIO_ID=2, I2S slave, standard format, no codec (direct I2S to SOC), SMPS regulator. Slave counterpart of -single-radio2-smps, which is I2S master. Name kept short on purpose: long preset names push the object .d paths past MAX_PATH.",
+            "cacheVariables": {
+                "SWC_SINGLE_RADIO_ID": "2",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-dual-slave-smps",
+            "inherits": ["puretone-headset-quasar-u535"],
+            "description": "RELEASE: Puretone headset U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S slave, standard format, no codec (direct I2S to SOC), SMPS regulator. Builds puretone_headset.elf only - the coordinator does not support multi radio. Short-named replacement for the hidden -dualradio-slave-std-nocodec-smps, whose 61-character name sits uncomfortably close to the MAX_PATH limit.",
+            "cacheVariables": {
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u535-single-radio2-ldo",
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "DIAGNOSTIC control for -single-radio2-smps: same SINGLE radio-2-only build (SWC_SINGLE_RADIO_ID=2) but LDO regulator, for an A/B against SMPS.",
