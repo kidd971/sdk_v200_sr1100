@@ -272,10 +272,10 @@ void quasar_radio_2_disable_non_blocking_transfer_irq_it(void)
 }
 #endif
 
-// void quasar_radio_1_set_shutdown_pin(void)
-// {
-//     quasar_gpio_set(QUASAR_DEF_RADIO_1_SHUTDOWN_PORT, QUASAR_DEF_RADIO_1_SHUTDOWN_PIN);
-// }
+void quasar_radio_1_set_shutdown_pin(void)
+{
+    quasar_gpio_set(QUASAR_DEF_RADIO_1_SHUTDOWN_PORT, QUASAR_DEF_RADIO_1_SHUTDOWN_PIN);
+}
 
 #if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_set_shutdown_pin(void)
@@ -284,10 +284,10 @@ void quasar_radio_2_set_shutdown_pin(void)
 }
 #endif
 
-// void quasar_radio_1_reset_shutdown_pin(void)
-// {
-//     quasar_gpio_clear(QUASAR_DEF_RADIO_1_SHUTDOWN_PORT, QUASAR_DEF_RADIO_1_SHUTDOWN_PIN);
-// }
+void quasar_radio_1_reset_shutdown_pin(void)
+{
+    quasar_gpio_clear(QUASAR_DEF_RADIO_1_SHUTDOWN_PORT, QUASAR_DEF_RADIO_1_SHUTDOWN_PIN);
+}
 
 #if 1 /* RADIO 2 ENABLED (535 dual radio) */
 void quasar_radio_2_reset_shutdown_pin(void)

@@ -569,10 +569,17 @@ void facade_enter_standby(void)
 
 void facade_uwb_shutdown(void)
 {
-#if !defined(STM32U535xx)
+    /* Both radios unconditionally, on every chip. This used to be excluded on the U535
+     * because quasar_radio_1_set_shutdown_pin() had no implementation there (it was left
+     * commented out in the BSP), which silently made shutdown a no-op on that board -- the
+     * SR1100 kept drawing current through Standby. The implementation is restored, so the
+     * exclusion is gone.
+     *
+     * Not gated on SWC_RADIO_COUNT either: a single-radio build can be bound to the second
+     * physical radio via SWC_SINGLE_RADIO_ID, so counting radios would leave the live one
+     * powered. Asserting the shutdown pin of a radio this build does not use is harmless. */
     quasar_radio_1_set_shutdown_pin();
     quasar_radio_2_set_shutdown_pin();
-#endif
 }
 
 void facade_set_i2s_mux(bool use_ext)
