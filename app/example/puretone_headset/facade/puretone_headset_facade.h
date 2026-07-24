@@ -247,6 +247,20 @@ bool facade_read_button_state(void);
  */
 void facade_notify_pairing_successful(void);
 
+/** @brief Power the module down into STM32 Standby. Does not return.
+ *
+ *  Asserts the UWB radio shutdown pin, turns the LEDs off, masks every interrupt source
+ *  and enters Standby, where VCORE is off and SRAM/register contents are lost. The board
+ *  leaves Standby only through a reset (NRST on this hardware, or a WKUP pin where one is
+ *  wired), so waking runs main() from the top and therefore boot auto-reconnect.
+ *
+ *  This is deliberately used instead of an in-place teardown: stopping the wireless core
+ *  and audio pipelines to "disconnect" is unreliable (swc_disconnect() can report a
+ *  timeout, and SAC pipelines cannot be restarted once stopped), whereas powering the MCU
+ *  down makes all of that moot.
+ */
+void facade_enter_standby(void);
+
 /** @brief Reconnecting notification LED pattern (boot auto-reconnect).
  *
  *  Fast blink x5 (~100 ms) on the board status color: blue on the u535 headset,

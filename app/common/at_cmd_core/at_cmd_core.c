@@ -546,7 +546,14 @@ static bool handler_uwb_get_role(const char *args, char *resp, uint16_t resp_siz
     return true;
 }
 
-/** @brief AT+UWB_DISCONNECT — terminate the active UWB connection. */
+/** @brief AT+UWB_DISCONNECT — end the session.
+ *
+ *  The puretone apps implement this as a power-down: the UWB radio's shutdown pin is
+ *  asserted and the MCU enters STM32 Standby, so the module draws almost nothing and stops
+ *  responding to AT entirely. It leaves Standby only through a reset (NRST, or
+ *  AT+UWB_CONNECT before the module goes down), which boots into auto-reconnect. Other
+ *  apps may implement the callback differently.
+ */
 static bool handler_uwb_disconnect(const char *args, char *resp, uint16_t resp_size)
 {
     (void)args;
@@ -555,7 +562,13 @@ static bool handler_uwb_disconnect(const char *args, char *resp, uint16_t resp_s
     return true;
 }
 
-/** @brief AT+UWB_CONNECT — re-establish UWB connection using stored pairing address. */
+/** @brief AT+UWB_CONNECT — re-establish the UWB link from the stored pairing address.
+ *
+ *  The puretone apps implement this as an MCU reset into boot auto-reconnect: reconnecting
+ *  in place is not supported (the SAC pipelines cannot be restarted once stopped). The host
+ *  sees OK, then +EVENT: UWB_READY, then +EVENT: UWB_CONNECTED. No-op while already
+ *  connected. Other apps may implement the callback differently.
+ */
 static bool handler_uwb_connect(const char *args, char *resp, uint16_t resp_size)
 {
     (void)args;

@@ -106,6 +106,16 @@
 #define LATCH_TEST_HOOKS 1
 #endif
 
+/* **** Standby test hook ****
+ * Binds USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the sleep path
+ * can be exercised from the board. Needed because the AT-UART RX pad is unusable here
+ * (see CRASH_DUMP_PERIODIC_MS above), which makes AT+UWB_DISCONNECT unreachable on this
+ * node. Takes precedence over LATCH_TEST_HOOKS for that button. Set to 0 to hand USER_3
+ * back to dbg_soft_reset(). */
+#ifndef STANDBY_TEST_HOOKS
+#define STANDBY_TEST_HOOKS 1
+#endif
+
 /* **** Stall auto-recovery (EXPERIMENTAL mitigation — NOT the real fix) ****
  * Dual-radio has no aggressive re-sync after prolonged link loss (fast-sync is hard-blocked
  * with two radios), so a node whose scheduler stalls re-syncs only very slowly. As a stopgap,
@@ -377,7 +387,9 @@ static void volume_up(void) __attribute__((unused));
 static void volume_down(void) __attribute__((unused));
 static void change_fallback_state(void);
 #if LATCH_TEST_HOOKS
-static void dbg_soft_reset(void);
+/* Unreferenced while STANDBY_TEST_HOOKS owns USER_3; kept so setting that flag to 0 hands
+ * the button back to LATCH_TEST_HOOKS unchanged. */
+static void dbg_soft_reset(void) __attribute__((unused));
 static void dbg_radio_por(void);
 #endif
 
@@ -422,6 +434,7 @@ static void at_start_pairing(void);
 static void at_start_connect(void);
 static void at_start_disconnect(void);
 static void at_start_shutdown(void);
+static void app_teardown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
 static void emit_crash_dump(void);
@@ -448,7 +461,15 @@ int main(void)
 
     facade_button_callbacks_t button_callbacks = {
         .pairing_callback = pairing_button_callback,
-#if LATCH_TEST_HOOKS
+#if STANDBY_TEST_HOOKS
+        /* USER_3 drives the Standby power-down, because the AT-UART RX pad is unusable on
+         * this board and AT+UWB_DISCONNECT is otherwise unreachable here. Takes precedence
+         * over LATCH_TEST_HOOKS, which claims the same button for dbg_soft_reset() -- that
+         * is a plain facade_system_reset(), i.e. reboot-and-reconnect, which looks very
+         * similar from the outside and is easy to mistake for a failed sleep. */
+        .volume_up_callback = at_start_disconnect,
+        .volume_down_callback = dbg_radio_por,
+#elif LATCH_TEST_HOOKS
         /* Volume buttons repurposed as latch-recovery tests (see LATCH_TEST_HOOKS). */
         .volume_up_callback = dbg_soft_reset,
         .volume_down_callback = dbg_radio_por,
@@ -2458,8 +2479,10 @@ static bool try_boot_reconnect(void)
     /* Peer not reachable in time, or the user aborted with the pairing button /
      * an AT command: tear the half-open link down (also resets
      * device_pairing_state to UNPAIRED and stops the pipelines) and let the
-     * caller enter pairing. The flash record is intentionally left intact. */
-    at_start_disconnect();
+     * caller enter pairing. In-place teardown here, NOT the Standby that
+     * AT+UWB_DISCONNECT performs -- a failed reconnect must fall through to pairing,
+     * not power the board off. The flash record is intentionally left intact. */
+    app_teardown();
     return false;
 }
 
@@ -2667,20 +2690,46 @@ static void at_start_pairing(void)
     enter_pairing_mode();
 }
 
+/** @brief AT+UWB_CONNECT -- reconnect by resetting the MCU into boot auto-reconnect.
+ *
+ *  This used to re-run app_init() over the stack that at_start_disconnect() had just torn
+ *  down. That crashed: swc_init()/sac_init() themselves are re-entrant (both reset their
+ *  memory pool, and swc_disconnect() clears is_started), but the radio and SAI interrupts
+ *  keep firing into handles being rebuilt, and the SAC pipelines cannot be restarted at
+ *  all -- their lifecycle is start-once (a stopped consumer is never re-started because
+ *  sac_pipeline_start() does not clear buffering_complete, and more state besides).
+ *
+ *  So reconnecting in place is not attempted. A reset boots into try_boot_reconnect(),
+ *  which restores the link from the persisted pairing address -- the one reconnect path
+ *  that is actually validated. The host sees:
+ *      AT+UWB_CONNECT -> OK -> +EVENT: UWB_READY -> +EVENT: UWB_CONNECTED
+ *  The OK is already on the wire when this runs: the AT core defers this callback until
+ *  after the response is sent, and the expansion UART writes are blocking.
+ */
 static void at_start_connect(void)
 {
+    /* Already streaming -- nothing to reconnect, and a reset would drop a working link. */
     if (device_pairing_state == DEVICE_PAIRED) {
         return;
     }
-    if (pairing_assigned_address.node_address == 0) {
+    /* The boot-reconnect window is already bringing the link up; resetting would only
+     * restart the attempt we are in the middle of. */
+    if (s_boot_reconnect_active) {
         return;
     }
-    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_CONNECTING);
-    app_init();
-    device_pairing_state = DEVICE_PAIRED;
+
+    facade_system_reset();
 }
 
-static void at_start_disconnect(void)
+/** @brief Tear the wireless core and audio down in place, leaving the device UNPAIRED.
+ *
+ *  Only used by the boot auto-reconnect timeout, which must dismantle the half-open link
+ *  before main() falls through to pairing. It is NOT what AT+UWB_DISCONNECT does: that
+ *  powers the module down instead (see at_start_disconnect), precisely because this path
+ *  is the unreliable one -- swc_disconnect() can report a timeout and the SAC pipelines
+ *  cannot be restarted afterwards.
+ */
+static void app_teardown(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
@@ -2700,8 +2749,11 @@ static void at_start_disconnect(void)
     facade_audio_process_back_channel_timer_stop();
     facade_data_timer_stop();
 
+    /* Deliberately NOT asserted. swc_disconnect() reports SWC_ERR_DISCONNECT_TIMEOUT when
+     * the scheduler does not stop in time, which is exactly the state a user reaches for
+     * disconnect in. Trapping there would wedge the device instead of tearing it down --
+     * the same reason stall_auto_recover() tolerates this error. */
     swc_disconnect(&swc_err);
-    ASSERT_SWC_STATUS(swc_err);
 
     tx_audio_conn = NULL;
     rx_audio_conn = NULL;
@@ -2725,6 +2777,27 @@ static void at_start_disconnect(void)
     facade_audio_deinit();
     facade_led_all_off();
     at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
+}
+
+/** @brief AT+UWB_DISCONNECT -- power the module down into Standby. Does not return.
+ *
+ *  No SDK teardown is attempted, deliberately. Stopping the wireless core and the audio
+ *  pipelines in place is the unreliable path: swc_disconnect() can report a timeout (and
+ *  asserting on it wedged the device), and a stopped SAC pipeline cannot be restarted at
+ *  all. Powering the MCU off stops everything at once and makes all of that moot -- which
+ *  also means there is nothing left that could quietly bring the link back up.
+ *
+ *  The module leaves Standby only through a reset, which runs main() from the top and so
+ *  goes straight into boot auto-reconnect. On this hardware that is NRST (the SOC line or
+ *  the reset button); AT+UWB_CONNECT reaches the same place via facade_system_reset().
+ *  On the u535 product board the pairing button is PA4 = WKUP2, so it can be armed as a
+ *  wake source later without changing any of this.
+ */
+static void at_start_disconnect(void)
+{
+    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
+
+    facade_enter_standby(); /* does not return */
 }
 
 static void at_start_shutdown(void)

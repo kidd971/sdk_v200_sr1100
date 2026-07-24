@@ -528,6 +528,45 @@ void facade_system_reset(void)
     quasar_system_reset();
 }
 
+void facade_enter_standby(void)
+{
+    /* The SR1100 sits on its own supply, so powering the MCU down does not stop it.
+     * Assert its shutdown pin first or it keeps drawing current for the whole sleep. */
+    facade_uwb_shutdown();
+
+    /* Visible confirmation that the module really went down. */
+    facade_led_all_off();
+    quasar_rgb_clear();
+
+    /* Standby is entered through WFI, which returns immediately if any interrupt is
+     * pending -- the part would just carry on running with its peripherals half torn
+     * down. Mask and flush every source first. SysTick needs doing separately: it is a
+     * Cortex system handler, not an NVIC line, so clearing NVIC alone would leave it
+     * able to defeat the WFI. */
+    __disable_irq();
+    SysTick->CTRL = 0;
+    for (uint32_t i = 0; i < (sizeof(NVIC->ICER) / sizeof(NVIC->ICER[0])); i++) {
+        NVIC->ICER[i] = 0xFFFFFFFFU;
+        NVIC->ICPR[i] = 0xFFFFFFFFU;
+    }
+    __DSB();
+    __ISB();
+
+    /* No WKUP pin is armed: this board comes back through NRST, which is a true reset
+     * into main() and therefore into boot auto-reconnect. An enabled WKUP line left
+     * floating would wake the part again immediately. */
+    HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1 | PWR_WAKEUP_PIN2 | PWR_WAKEUP_PIN3 | PWR_WAKEUP_PIN4 |
+                             PWR_WAKEUP_PIN5 | PWR_WAKEUP_PIN6 | PWR_WAKEUP_PIN7 | PWR_WAKEUP_PIN8);
+    __HAL_PWR_CLEAR_FLAG(PWR_WAKEUP_ALL_FLAG);
+
+    HAL_PWR_EnterSTANDBYMode();
+
+    /* Standby leaves through reset, so this is unreachable. Spin rather than return into
+     * an application whose interrupts have all been masked off. */
+    while (1) {
+    }
+}
+
 void facade_uwb_shutdown(void)
 {
 #if !defined(STM32U535xx)
