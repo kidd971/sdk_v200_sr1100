@@ -89,12 +89,12 @@
 /* Number of SWC fallback modes. */
 #define SWC_FALLBACK_MODE_COUNT 3
 
-/* **** Standby test hook ****
- * Binds USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the sleep path
- * can be exercised from the board rather than only over AT+UWB_DISCONNECT. Mirrors the
- * HS side. Set to 0 to hand USER_3 back to the back-channel volume control. */
+/* **** Standby test hook (bench only — off in product builds) ****
+ * Set to 1 to bind USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the
+ * sleep path can be exercised from the board rather than only over AT+UWB_DISCONNECT.
+ * Mirrors the HS side. Left at 0 so USER_3 keeps the back-channel volume control. */
 #ifndef STANDBY_TEST_HOOKS
-#define STANDBY_TEST_HOOKS 1
+#define STANDBY_TEST_HOOKS 0
 #endif
 
 /* **** Assert-site capture (no ST-Link needed) ****

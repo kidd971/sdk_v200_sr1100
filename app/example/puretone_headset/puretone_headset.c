@@ -51,7 +51,7 @@
 /* Period for data transmission timer in ms. */
 #define DATA_TX_PERIOD_MS 10
 /* Boot auto-reconnect: max time to wait for the persisted peer before falling back to pairing. */
-#define RECONNECT_TIMEOUT_MS 3000
+#define RECONNECT_TIMEOUT_MS 10000
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
 /* Size of the buffer used to print errors (room for the assert file:line + code). */
@@ -106,14 +106,14 @@
 #define LATCH_TEST_HOOKS 1
 #endif
 
-/* **** Standby test hook ****
- * Binds USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the sleep path
- * can be exercised from the board. Needed because the AT-UART RX pad is unusable here
- * (see CRASH_DUMP_PERIODIC_MS above), which makes AT+UWB_DISCONNECT unreachable on this
- * node. Takes precedence over LATCH_TEST_HOOKS for that button. Set to 0 to hand USER_3
- * back to dbg_soft_reset(). */
+/* **** Standby test hook (bench only — off in product builds) ****
+ * Set to 1 to bind USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the
+ * sleep path can be exercised from the board. Needed on benches where the AT-UART RX pad
+ * is unusable (see CRASH_DUMP_PERIODIC_MS above), which makes AT+UWB_DISCONNECT
+ * unreachable. Takes precedence over LATCH_TEST_HOOKS for that button. Left at 0 so the
+ * product keeps its normal button behaviour and reaches Standby over AT. */
 #ifndef STANDBY_TEST_HOOKS
-#define STANDBY_TEST_HOOKS 1
+#define STANDBY_TEST_HOOKS 0
 #endif
 
 /* **** Stall auto-recovery (EXPERIMENTAL mitigation — NOT the real fix) ****
