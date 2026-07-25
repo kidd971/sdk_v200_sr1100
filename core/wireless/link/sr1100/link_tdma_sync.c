@@ -109,10 +109,8 @@ void link_tdma_sync_update_tx(tdma_sync_t *tdma_sync, uint32_t duration_pll_cycl
 
     sync_update(tdma_sync, duration_pll_cycles, sleep_mode);
 
-    /* In TX, force timeout value for auto-reply to be default one */
-    tdma_sync->timeout_value = convert_pll_cycle_base(MUL_2(tdma_sync->setup_time_pll_cycles), TDMA_BASE_PHY_RATE,
-                                                      chip_rate) +
-                               tdma_sync->preamble_size_bits + tdma_sync->sfd_size_bits;
+    /* In TX, force timeout value for auto-reply to be default one. */
+    tdma_sync->timeout_value = link_tdma_get_rx_timeout_base_value(tdma_sync, chip_rate);
 }
 
 void link_tdma_sync_update_rx(tdma_sync_t *tdma_sync, uint32_t duration_pll_cycles, link_cca_t *cca,
@@ -136,10 +134,9 @@ void link_tdma_sync_update_rx(tdma_sync_t *tdma_sync, uint32_t duration_pll_cycl
 
     sync_update(tdma_sync, duration_pll_cycles, sleep_mode);
 
-    /* In RX, timeout value needs to consider CCA window and pwr_up delay for auto-reply to be default one */
-    tdma_sync->timeout_value =
-        convert_pll_cycle_base(MUL_2(tdma_sync->setup_time_pll_cycles), TDMA_BASE_PHY_RATE, chip_rate) +
-        cca_timeout_offset_value + tdma_sync->pwr_up_value + tdma_sync->preamble_size_bits + tdma_sync->sfd_size_bits;
+    /* In RX, timeout value needs to consider CCA window and pwr_up delay for auto-reply to be default one. */
+    tdma_sync->timeout_value = link_tdma_get_rx_timeout_base_value(tdma_sync, chip_rate) + cca_timeout_offset_value +
+                               tdma_sync->pwr_up_value;
 }
 
 void link_tdma_sync_slave_adjust(tdma_sync_t *tdma_sync, frame_outcome_t frame_outcome, uint16_t rx_waited_pll_cycles,
@@ -354,6 +351,12 @@ void link_tdma_update_isi_mitig_pauses(tdma_sync_t *tdma_sync, isi_mitig_t isi_m
         new_chips_per_symbol;
     tdma_sync->sfd_size_bits = tdma_sync->sfd_size_bits * (tdma_sync->isi_mitig_pauses + 1) /
                                (prev_isi_mitig_pauses + 1);
+}
+
+uint32_t link_tdma_get_rx_timeout_base_value(const tdma_sync_t *tdma_sync, chip_rate_cfg_t chip_rate)
+{
+    return convert_pll_cycle_base(MUL_2(tdma_sync->setup_time_pll_cycles), TDMA_BASE_PHY_RATE, chip_rate) +
+           tdma_sync->preamble_size_bits + tdma_sync->sfd_size_bits;
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/

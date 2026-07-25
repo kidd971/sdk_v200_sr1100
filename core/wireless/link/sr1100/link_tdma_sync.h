@@ -406,6 +406,18 @@ void link_tdma_sync_slave_adjust(tdma_sync_t *tdma_sync, frame_outcome_t frame_o
 void link_tdma_sync_slave_find(tdma_sync_t *tdma_sync, frame_outcome_t frame_outcome, uint16_t rx_waited_pll_cycles,
                                link_cca_t *cca, uint8_t rx_cca_retry_count);
 
+/** @brief Get rx timeout base value.
+ *
+ *  @note The base timeout value is the receiver window computed from the optimal setup time, the preamble size and the
+ *        SFD size. The preamble and SFD are included because the radio only registers a frame detection after the SFD
+ *        has been detected, so the receiver must stay on at least long enough to capture both.
+ *
+ *  @param[in] tdma_sync  TDMA sync object.
+ *  @param[in] chip_rate  Current Chip rate.
+ *  @return RX timeout base value.
+ */
+uint32_t link_tdma_get_rx_timeout_base_value(const tdma_sync_t *tdma_sync, chip_rate_cfg_t chip_rate);
+
 /** @brief Get sleep cycles.
  *
  *  @param[in] tdma_sync  TDMA sync object.

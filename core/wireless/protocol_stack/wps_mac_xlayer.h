@@ -25,8 +25,22 @@ extern "C" {
 static inline void wps_mac_xlayer_update_sync(wps_mac_t *wps_mac, xlayer_cfg_internal_t *xlayer_cfg)
 {
     xlayer_cfg->power_up_delay = link_tdma_sync_get_pwr_up(&wps_mac->tdma_sync);
-    xlayer_cfg->rx_timeout = link_tdma_sync_get_timeout(&wps_mac->tdma_sync);
     xlayer_cfg->sleep_time = link_tdma_sync_get_sleep_cycles(&wps_mac->tdma_sync);
+    if ((!link_tdma_sync_is_slave_synced(&wps_mac->tdma_sync)) && (wps_mac->node_role == NETWORK_NODE)) {
+        /* Use the base RX timeout while syncing instead of the full timeout.
+         *
+         * Wireless fallback allows combining different CCA settings and payload sizes, so the full timeout is not
+         * fixed. While unsynced, the reception window cannot be guaranteed to match the transmitter.
+         *
+         * Limiting the RX window protects against timeslot timing overflow and reduces power consumption while
+         * syncing.
+         *
+         * Combined with bounding the RX packet size, this ensures that only a sync frame can be received.
+         */
+        xlayer_cfg->rx_timeout = link_tdma_get_rx_timeout_base_value(&wps_mac->tdma_sync, wps_mac->config.chip_rate);
+    } else {
+        xlayer_cfg->rx_timeout = link_tdma_sync_get_timeout(&wps_mac->tdma_sync);
+    }
 }
 
 /** @brief Update the main connection xlayer gain loop value for PHY.

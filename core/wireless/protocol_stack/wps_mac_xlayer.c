@@ -126,6 +126,8 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_tx_auto(wps_mac_t *wps_mac, wps_connecti
 
 xlayer_t *wps_mac_xlayer_get_xlayer_for_rx(wps_mac_t *wps_mac, wps_connection_t *connection)
 {
+    bool unsync = (!link_tdma_sync_is_slave_synced(&wps_mac->tdma_sync)) && (wps_mac->node_role == NETWORK_NODE);
+
     wps_mac->rx_node = xlayer_queue_get_free_node(connection->free_rx_queue);
     /* Offset the header memory to allow PHY to add SPI command bytes before the payload. */
     uint8_t *header_memory = overrun_buffer + XLAYER_QUEUE_SPI_COMM_ADDITIONAL_BYTES;
@@ -141,7 +143,28 @@ xlayer_t *wps_mac_xlayer_get_xlayer_for_rx(wps_mac_t *wps_mac, wps_connection_t 
         return &wps_mac->empty_frame_rx;
     }
 
-    if (connection->is_main) {
+    if (unsync && connection->cfg.tx_sync_frame_on_syncing) {
+        /* Bound the RX packet size to the sync frame size (header only, no payload) while syncing.
+         *
+         * Wireless fallback allows combining different CCA settings and payload sizes. While unsynced, the reception
+         * window cannot be guaranteed to match the transmitter, and the node only needs the header-only sync frame to
+         * recover timing.
+         *
+         * A corrupted PHY packet size field can extend the reception up to the maximum payload size, producing a
+         * long RX that overflows the timeslot timing. Limiting the packet size prevents this and reduces power
+         * consumption while syncing.
+         *
+         * Combined with bounding the RX timeout, this ensures that only a sync frame can be received.
+         *
+         * This bound is only applied when the peer sends header-only sync frames while we are unsynced, which
+         * corresponds to tx_sync_frame_on_syncing being enabled. The setting is assumed to be configured identically
+         * on both devices. If the peer sends full frames instead, a header-only bound would make the radio reject
+         * them (the size mismatch fails the CRC), so the frame outcome would never be FRAME_RECEIVED and the sync
+         * module could not lock. In that case the RX size is left unbounded by the branches below so a full frame can
+         * still be received and used to recover timing.
+         */
+        wps_mac->rx_node->xlayer.frame.payload_memory_size = 0;
+    } else if (connection->is_main) {
         wps_mac->rx_node->xlayer.frame.payload_memory_size = link_scheduler_get_current_timeslot_main_max_payload_size(
             &wps_mac->scheduler);
     } else {
