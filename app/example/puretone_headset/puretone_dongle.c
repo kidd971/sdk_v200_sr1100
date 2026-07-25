@@ -1366,23 +1366,12 @@ static void app_audio_core_init(void)
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_set_manual_mode(&main_channel_fallback_instance, true, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-#else
-    /* Main-channel ceiling capped at mode 1 (48 kHz 24-bit uncompressed): deactivate mode 0
-     * (96 kHz) while leaving automatic fallback enabled. This keeps graceful downward degradation
-     * intact - trigger_next_mode() still drops to mode 2/3 (48 kHz 16-bit / ADPCM) on a bad link -
-     * while recover_to_previous_mode() skips the inactive mode 0, so the link can degrade down and
-     * recover back up to 48 kHz but never climbs to 96 kHz. Preferred over a manual-mode pin, which
-     * would freeze both directions. Only the DG needs this: the node's main channel is RX (follows
-     * the transmitted header) and its back channel never reaches 96 kHz, so deactivating mode 0 on
-     * the coordinator alone caps the whole main-channel path.
-     *
-     * Mutually exclusive with SINE_INJECT_DG, which instead pins mode 0 (96 kHz) for pure-tone
-     * testing; hence this lives in the #else branch. */
-    sac_fallback_mode_set_active_state(&main_channel_fallback_instance, 0, false, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-    sac_fallback_set_current_mode(&main_channel_fallback_instance, 1, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
 #endif
+    /* Full automatic fallback across all modes, including mode 0 (96 kHz): the main channel
+     * may climb back up to 96 kHz. The earlier 48 kHz ceiling (deactivating mode 0) was a
+     * workaround for the dual-radio re-sync/96k park; that is addressed by the v2.3.1 TDMA
+     * re-sync fix, so the cap is removed. SINE_INJECT_DG still pins mode 0 above for
+     * pure-tone testing. */
 
     /*
      * Back Channel Audio Pipeline (RX)
