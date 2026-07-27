@@ -33,6 +33,13 @@ extern "C" {
 /** @brief Baud rate used for the expansion UART AT channel. */
 #define AT_CMD_CORE_BAUD_RATE  115200
 
+/** @brief SPARK SDK version this firmware is built from.
+ *
+ *  Single source of truth for AT+VER, AT+FW_VERSION and the crash-dump build line.
+ *  Bump this when the underlying SDK is updated (v2.3.0 -> v2.3.1 dual-radio re-sync fix).
+ */
+#define AT_CMD_CORE_SDK_VERSION  "v2.3.1"
+
 /** @brief UWB connection status codes reported by AT+UWB_CONN_STATUS?. */
 typedef enum {
     AT_UWB_CONN_STATUS_STANDBY    = 0, /*!< Idle, not yet started. */

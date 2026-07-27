@@ -2897,7 +2897,10 @@ static void emit_crash_dump(void)
      * u535 -> AT/expansion UART (LPUART1); u5a5 EVK & others -> USB CDC. */
     facade_stats_write("\r\n+CRASH_DUMP:\r\n");
 
-    snprintf(buf, sizeof(buf), " build=v2.3.0 role=HS paired=%d\r\n",
+    /* Version + compile timestamp so the dump self-identifies the exact binary: __DATE__/
+     * __TIME__ change on every rebuild, which is the quick way to confirm the board is
+     * running the build you think it is (a hardcoded label cannot). */
+    snprintf(buf, sizeof(buf), " build=" AT_CMD_CORE_SDK_VERSION " " __DATE__ " " __TIME__ " role=HS paired=%d\r\n",
              (device_pairing_state == DEVICE_PAIRED) ? 1 : 0);
     facade_stats_write(buf);
 
