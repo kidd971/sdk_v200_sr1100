@@ -229,9 +229,14 @@ static void line_dispatch(const char *line)
 {
     /* Incoming AT command → always handled by server. */
     if (strncasecmp(line, "AT", 2) == 0) {
-        //s_tx_fn("+DBG OK: [");
-        //s_tx_fn((char *)line);
-        //s_tx_fn("]\r\n");
+        /* Echo the exact assembled line back in brackets before handling it, so the raw bytes
+         * the module actually received are always visible on the wire. Kept on permanently
+         * (the host tolerates the extra line): when a command misbehaves -- e.g. AT+PING ->
+         * INVALID_CMD from a stray/missing/extra byte, usually line noise -- the bracket shows
+         * exactly what arrived vs what the host thinks it sent, with no special build needed. */
+        s_tx_fn("+DBG OK: [");
+        s_tx_fn((char *)line);
+        s_tx_fn("]\r\n");
         server_process(line);
         return;
     }
