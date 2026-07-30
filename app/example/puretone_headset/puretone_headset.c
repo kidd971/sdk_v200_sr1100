@@ -408,11 +408,19 @@ static void app_audio_core_downsampling_interface_init(sac_processing_interface_
 static void app_audio_core_compressing_interface_init(sac_processing_interface_t *iface);
 static void app_audio_core_compression_discard_interface_init(sac_processing_interface_t *iface);
 
+/* Outcome of a boot auto-reconnect attempt. */
+typedef enum {
+    BOOT_RECONNECT_OK,   /* The stored link was re-established; stay paired and stream. */
+    BOOT_RECONNECT_PAIR, /* No usable record, or the user asked to pair mid-attempt: enter pairing. */
+    BOOT_RECONNECT_IDLE, /* Had a record but the peer was unreachable: stay idle and let the SoC
+                            re-drive a reconnect (AT+UWB_CONNECT) rather than silently re-pairing. */
+} boot_reconnect_result_t;
+
 /* **** Button Actions **** */
 static void enter_pairing_mode(void);
 static void unpair_device(void);
 static void abort_pairing_procedure(void);
-static bool try_boot_reconnect(void);
+static boot_reconnect_result_t try_boot_reconnect(void);
 
 /* **** Fallback LED and Terminal Display **** */
 static bool should_print_stats(void);
@@ -525,9 +533,11 @@ int main(void)
     device_pairing_state = DEVICE_UNPAIRED;
 
     /* Boot auto-reconnect: if a previous pairing was persisted to flash, try to
-     * re-establish it silently. Only fall back to pairing if there is no record
-     * or the peer is unreachable within RECONNECT_TIMEOUT_MS. */
-    if (!try_boot_reconnect()) {
+     * re-establish it silently. Only enter pairing when there is no usable record
+     * (never paired) or the user asked to pair mid-attempt. A record that simply
+     * could not reach its peer in time does NOT re-pair: the device stays idle and
+     * the SoC re-drives a reconnect (AT+UWB_CONNECT) after the +EVENT: UWB_CONNECT_FAIL. */
+    if (try_boot_reconnect() == BOOT_RECONNECT_PAIR) {
         enter_pairing_mode();
     }
 
@@ -2410,27 +2420,32 @@ static void enter_pairing_mode(void)
  *  wireless core up (same path as at_start_connect / a fresh pairing success),
  *  then wait up to RECONNECT_TIMEOUT_MS for the real SWC link to come up. On
  *  success the device stays paired and streaming. On timeout the half-open link
- *  is torn down and the caller falls back to pairing; the flash record is KEPT
- *  (the peer being off is not a reason to forget the pair).
+ *  is torn down; the flash record is KEPT (the peer being off is not a reason to
+ *  forget the pair).
  *
- *  @return true if the link was re-established; false if there is no record or
- *          the peer was unreachable within the timeout.
+ *  @return BOOT_RECONNECT_OK   link re-established (paired, streaming);
+ *          BOOT_RECONNECT_PAIR no usable record (never paired), or the user
+ *                              aborted the attempt to pair (button / AT+UWB_PAIR)
+ *                              -- caller enters pairing;
+ *          BOOT_RECONNECT_IDLE a record existed but the peer was unreachable in
+ *                              time -- caller stays idle and lets the SoC re-drive
+ *                              a reconnect (do NOT auto re-pair).
  */
-static bool try_boot_reconnect(void)
+static boot_reconnect_result_t try_boot_reconnect(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     uint32_t start;
     bool connected = false;
 
-    /* Blank / corrupt / wrong-version flash -> no record -> fall back to pairing. */
+    /* Blank / corrupt / wrong-version flash -> no record -> never paired -> pair. */
     if (!reconnect_store_load(&pairing_assigned_address)) {
-        return false;
+        return BOOT_RECONNECT_PAIR;
     }
 
     /* A valid record should never carry a zero node address, but mirror the
-     * at_start_connect() gate defensively. */
+     * at_start_connect() gate defensively -- treat it as no record and pair. */
     if (pairing_assigned_address.node_address == 0) {
-        return false;
+        return BOOT_RECONNECT_PAIR;
     }
 
     /* Fast-blink the status LED to show a silent reconnect is in progress. */
@@ -2473,17 +2488,21 @@ static bool try_boot_reconnect(void)
 
     if (connected) {
         facade_notify_pairing_successful();
-        return true;
+        return BOOT_RECONNECT_OK;
     }
 
-    /* Peer not reachable in time, or the user aborted with the pairing button /
-     * an AT command: tear the half-open link down (also resets
-     * device_pairing_state to UNPAIRED and stops the pipelines) and let the
-     * caller enter pairing. In-place teardown here, NOT the Standby that
-     * AT+UWB_DISCONNECT performs -- a failed reconnect must fall through to pairing,
-     * not power the board off. The flash record is intentionally left intact. */
+    /* The loop ended without a link. Distinguish intent BEFORE tearing down:
+     *   - abort raised  -> the user pressed the pairing button / sent AT+UWB_PAIR
+     *                      during the window, so pairing is what they meant.
+     *   - plain timeout -> the peer was simply unreachable; do NOT re-pair. Stay
+     *                      idle and let the SoC re-drive a reconnect (it already
+     *                      saw +EVENT: UWB_CONNECT_FAIL).
+     * Either way tear the half-open link down (resets device_pairing_state to
+     * UNPAIRED and stops the pipelines). In-place teardown here, NOT the Standby
+     * that AT+UWB_DISCONNECT performs. The flash record is intentionally kept. */
+    bool user_wants_pairing = s_boot_reconnect_abort;
     app_teardown();
-    return false;
+    return user_wants_pairing ? BOOT_RECONNECT_PAIR : BOOT_RECONNECT_IDLE;
 }
 
 /** @brief Put the device in the unpaired state and disconnect it from the network.
