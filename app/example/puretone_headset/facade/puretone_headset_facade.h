@@ -269,6 +269,15 @@ void facade_enter_standby(void);
  */
 void facade_notify_reconnecting(void);
 
+/** @brief Boot auto-reconnect timeout notification LED pattern.
+ *
+ *  Single ~300 ms blink on the board status color (blue on the u535 headset, green
+ *  elsewhere) so a reconnect timeout is easy to observe. Distinct from reconnecting
+ *  (fast x5) and enter-pairing (slow x2). Blocking, fired only at the boot reconnect
+ *  timeout transition, never in the audio loop.
+ */
+void facade_notify_reconnect_failed(void);
+
 /** @brief Read the boot auto-reconnect record from the reserved flash page.
  *
  *  Copies @p len bytes from the reserved user-data page (`_user_data_base`,

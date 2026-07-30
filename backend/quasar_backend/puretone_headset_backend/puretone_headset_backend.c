@@ -329,6 +329,25 @@ void facade_notify_reconnecting(void)
     }
 }
 
+void facade_notify_reconnect_failed(void)
+{
+    /* Single ~300 ms blink on the board status color, fired once when boot reconnect
+     * times out. One slow blink is easy to spot and is clearly distinct from
+     * reconnecting (fast x5) and enter-pairing (slow x2). Blocking, fired only at the
+     * boot reconnect timeout transition. */
+    const uint16_t on_ms = 300;
+
+    quasar_rgb_clear();
+#ifdef QUASAR_U535
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+#else
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_GREEN);
+#endif
+    quasar_rgb_set();
+    quasar_timer_delay_ms(on_ms);
+    quasar_rgb_clear();
+}
+
 void facade_expansion_uart_init(uint32_t baud_rate)
 {
 #if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)

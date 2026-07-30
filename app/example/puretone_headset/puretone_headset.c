@@ -2491,18 +2491,23 @@ static boot_reconnect_result_t try_boot_reconnect(void)
         return BOOT_RECONNECT_OK;
     }
 
-    /* The loop ended without a link. Distinguish intent BEFORE tearing down:
-     *   - abort raised  -> the user pressed the pairing button / sent AT+UWB_PAIR
-     *                      during the window, so pairing is what they meant.
-     *   - plain timeout -> the peer was simply unreachable; do NOT re-pair. Stay
-     *                      idle and let the SoC re-drive a reconnect (it already
-     *                      saw +EVENT: UWB_CONNECT_FAIL).
-     * Either way tear the half-open link down (resets device_pairing_state to
-     * UNPAIRED and stops the pipelines). In-place teardown here, NOT the Standby
-     * that AT+UWB_DISCONNECT performs. The flash record is intentionally kept. */
-    bool user_wants_pairing = s_boot_reconnect_abort;
+    /* The loop ended without a link. Distinguish intent before tearing down. Either
+     * way tear the half-open link down (resets device_pairing_state to UNPAIRED and
+     * stops the pipelines). In-place teardown here, NOT the Standby that
+     * AT+UWB_DISCONNECT performs. The flash record is intentionally kept. */
+    if (s_boot_reconnect_abort) {
+        /* The user pressed the pairing button / sent AT+UWB_PAIR during the window,
+         * so pairing is what they meant. */
+        app_teardown();
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* Plain timeout: the peer was simply unreachable. Blink the reconnect colour once
+     * so the timeout is easy to observe, then stay idle -- do NOT re-pair; the SoC
+     * re-drives a reconnect (it already saw +EVENT: UWB_CONNECT_FAIL). */
+    facade_notify_reconnect_failed();
     app_teardown();
-    return user_wants_pairing ? BOOT_RECONNECT_PAIR : BOOT_RECONNECT_IDLE;
+    return BOOT_RECONNECT_IDLE;
 }
 
 /** @brief Put the device in the unpaired state and disconnect it from the network.
