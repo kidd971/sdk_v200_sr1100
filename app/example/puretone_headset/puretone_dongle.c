@@ -363,10 +363,18 @@ static void app_audio_core_decompressing_interface_init(sac_processing_interface
 static void app_audio_core_unpacking_interface_init(sac_processing_interface_t *iface);
 static void app_audio_core_volume_interface_init(sac_processing_interface_t *iface);
 
+/* Outcome of a boot auto-reconnect attempt. */
+typedef enum {
+    BOOT_RECONNECT_OK,   /* The stored link was re-established; stay paired and stream. */
+    BOOT_RECONNECT_PAIR, /* No usable record, or the user asked to pair mid-attempt: enter pairing. */
+    BOOT_RECONNECT_IDLE, /* Had a record but the node was not up yet: keep the coordinator's core
+                            running (it is the timebase master) so the node syncs whenever it boots. */
+} boot_reconnect_result_t;
+
 /* **** Button Actions **** */
 static void enter_pairing_mode(void);
 static void unpair_device(void);
-static bool try_boot_reconnect(void);
+static boot_reconnect_result_t try_boot_reconnect(void);
 static void abort_pairing_procedure(void);
 
 /* **** Fallback LED and Terminal Display **** */
@@ -456,9 +464,12 @@ int main(void)
     device_pairing_state = DEVICE_UNPAIRED;
 
     /* Boot auto-reconnect: if a previous pairing was persisted to flash, try to
-     * re-establish it silently. Only fall back to pairing if there is no record
-     * or the peer is unreachable within RECONNECT_TIMEOUT_MS. */
-    if (!try_boot_reconnect()) {
+     * re-establish it silently. Only enter pairing when there is no usable record
+     * (never paired) or the user asked to pair mid-attempt. A record that simply
+     * could not reach its node in time does NOT re-pair: the coordinator keeps its
+     * wireless core running (it is the timebase master) and the node syncs whenever
+     * it boots -- the main loop's AT status machine emits UWB_CONNECTED then. */
+    if (try_boot_reconnect() == BOOT_RECONNECT_PAIR) {
         enter_pairing_mode();
     }
 
@@ -2308,27 +2319,32 @@ static void enter_pairing_mode(void)
  *  discovery list from it and bring the wireless core up (same path as a fresh
  *  pairing success / at_start_connect), then wait up to RECONNECT_TIMEOUT_MS for
  *  the real SWC link to come up. On success the device stays paired and
- *  streaming. On timeout the half-open link is torn down and the caller falls
- *  back to pairing; the flash record is KEPT (the peer being off is not a reason
- *  to forget the pair).
+ *  streaming. On timeout the wireless core is LEFT RUNNING (see below); the flash
+ *  record is KEPT (the peer being off is not a reason to forget the pair).
  *
- *  @return true if the link was re-established; false if there is no record or
- *          the peer was unreachable within the timeout.
+ *  @return BOOT_RECONNECT_OK   link re-established (paired, streaming);
+ *          BOOT_RECONNECT_PAIR no usable record (never paired), or the user
+ *                              aborted the attempt to pair (button / AT+UWB_PAIR)
+ *                              -- caller enters pairing;
+ *          BOOT_RECONNECT_IDLE a record existed but the node was not up in time --
+ *                              the coordinator's core is left running so the node
+ *                              can sync whenever it boots (do NOT teardown / re-pair).
  */
-static bool try_boot_reconnect(void)
+static boot_reconnect_result_t try_boot_reconnect(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     uint32_t start;
     bool connected = false;
 
-    /* Blank / corrupt / wrong-version flash -> no record -> fall back to pairing. */
+    /* Blank / corrupt / wrong-version flash -> no record -> never paired -> pair. */
     if (!reconnect_store_load(&pairing_assigned_address)) {
-        return false;
+        return BOOT_RECONNECT_PAIR;
     }
 
-    /* A valid record should never carry a zero node address, but guard defensively. */
+    /* A valid record should never carry a zero node address, but guard defensively
+     * -- treat it as no record and pair. */
     if (pairing_assigned_address.node_address == 0) {
-        return false;
+        return BOOT_RECONNECT_PAIR;
     }
 
     /* Rebuild the coordinator's discovery list from the persisted addresses:
@@ -2379,17 +2395,25 @@ static bool try_boot_reconnect(void)
 
     if (connected) {
         facade_notify_pairing_successful();
-        return true;
+        return BOOT_RECONNECT_OK;
     }
 
-    /* Node not reachable in time, or the user aborted with the pairing button /
-     * an AT command: tear the half-open link down (also resets
-     * device_pairing_state to UNPAIRED and stops the pipelines) and let the
-     * caller enter pairing. In-place teardown here, NOT the Standby that
-     * AT+UWB_DISCONNECT performs -- a failed reconnect must fall through to pairing,
-     * not power the board off. The flash record is intentionally left intact. */
-    app_teardown();
-    return false;
+    /* The user aborted with the pairing button / AT+UWB_PAIR, or a deferred teardown
+     * already released the core handles: dismantle whatever is left (also resets
+     * device_pairing_state to UNPAIRED and stops the pipelines) and let the caller
+     * enter pairing. The flash record is intentionally left intact. */
+    if (s_boot_reconnect_abort || tx_audio_conn == NULL) {
+        app_teardown();
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* Plain timeout with the core still up: the node just is not on yet. Unlike the
+     * HS (battery -- it powers down and waits for an SoC-driven retry), the
+     * coordinator is mains-powered and IS the timebase master, so LEAVE the wireless
+     * core running. It keeps transmitting the schedule; the node syncs whenever it
+     * boots and the main loop's AT status machine emits UWB_CONNECTED. Do NOT
+     * teardown, do NOT re-pair. */
+    return BOOT_RECONNECT_IDLE;
 }
 
 /** @brief Unpair the device. This will reset its discovery list.

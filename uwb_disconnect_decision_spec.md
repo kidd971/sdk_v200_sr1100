@@ -66,11 +66,12 @@ SoC: AT+UWB_CONNECT
 MCU: OK
 MCU: (reset → boot auto-reconnect)
 MCU: +EVENT: UWB_CONNECTED           (連上,~10s 內)
-  或 +EVENT: UWB_CONNECT_FAIL        (逾時。HS:停在 idle/Standby,不進配對,由 SoC 重下 AT+UWB_CONNECT 重試;DG:目前仍 fall through 進配對)
+  或 +EVENT: UWB_CONNECT_FAIL        (逾時。HS:停在 idle/Standby,不進配對,由 SoC 重下 AT+UWB_CONNECT 重試;DG:core 續跑、無限等 node,不進配對)
 ```
 
-> **HS reconnect 逾時重試(SoC 端注意)**:CONNECT_FAIL 事件約在 5s(`AT_UWB_CONNECT_TIMEOUT_MS`)先送出,但 boot poll 到 10s(`RECONNECT_TIMEOUT_MS`)才真正結束。在 boot 視窗內重下 `AT+UWB_CONNECT` 會被 module 端當 no-op 忽略(防 reset 風暴),所以 **SoC 的重試間隔應 ≥ ~10-12s**。
-> 此行為目前**只在 HS(node)實作**;DG(coordinator)仍是舊行為(逾時進配對),之後再處理。
+> **reconnect 逾時行為(HS 與 DG 不對稱)**:兩端逾時都**不再自動進配對**(配對只由 `AT+UWB_PAIR`、pairing 按鍵、或首次無記錄觸發)。差別在逾時後怎麼「繼續嘗試」:
+> - **HS(node,電池)**:`app_teardown()` 關掉 core 省電,停在 idle/Standby,等 **BT SoC 重下 `AT+UWB_CONNECT`** 重試。CONNECT_FAIL 約 5s(`AT_UWB_CONNECT_TIMEOUT_MS`)先送出,但 boot poll 到 10s(`RECONNECT_TIMEOUT_MS`)才結束;視窗內重下 CONNECT 會被當 no-op(防 reset 風暴),故 **SoC 重試間隔應 ≥ ~10-12s**。
+> - **DG(coordinator,USB,timebase master)**:**不 teardown**,core 續跑、持續發 schedule,node 什麼時候開機就什麼時候 sync 上來(等同斷線重連);無 SoC 介入。
 
 ---
 
