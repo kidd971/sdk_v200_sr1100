@@ -66,11 +66,11 @@ SoC: AT+UWB_CONNECT
 MCU: OK
 MCU: (reset → boot auto-reconnect)
 MCU: +EVENT: UWB_CONNECTED           (連上,~10s 內)
-  或 +EVENT: UWB_CONNECT_FAIL        (逾時。HS:停在 idle/Standby,不進配對,由 SoC 重下 AT+UWB_CONNECT 重試;DG:core 續跑、無限等 node,不進配對)
+  或 +EVENT: UWB_CONNECT_FAIL        (逾時。HS:閃一次回連 LED 後進 Standby 省電,靠 reset/NRST 喚醒重試;DG:core 續跑、無限等 node,不進配對)
 ```
 
 > **reconnect 逾時行為(HS 與 DG 不對稱)**:兩端逾時都**不再自動進配對**(配對只由 `AT+UWB_PAIR`、pairing 按鍵、或首次無記錄觸發)。差別在逾時後怎麼「繼續嘗試」:
-> - **HS(node,電池)**:`app_teardown()` 關掉 core 省電,停在 idle/Standby,等 **BT SoC 重下 `AT+UWB_CONNECT`** 重試。CONNECT_FAIL 約 5s(`AT_UWB_CONNECT_TIMEOUT_MS`)先送出,但 boot poll 到 10s(`RECONNECT_TIMEOUT_MS`)才結束;視窗內重下 CONNECT 會被當 no-op(防 reset 風暴),故 **SoC 重試間隔應 ≥ ~10-12s**。
+> - **HS(node,電池)**:10s(`RECONNECT_TIMEOUT_MS`)逾時 → **閃一次回連 LED → `facade_enter_standby()` 進 Standby 省電**(同 `AT+UWB_DISCONNECT` 的省電路徑,不返回)。UART 在 Standby 死掉,所以**重試不能靠 `AT+UWB_CONNECT`**,必須 **SoC 拉 NRST / WKUP 喚醒** → reset → 重跑 boot auto-reconnect。CONNECT_FAIL 約在 5s(`AT_UWB_CONNECT_TIMEOUT_MS`)先送出,10s 才真正進睡;SoC 判斷「睡了」= module 之後全靜默(crash-dump periodic 停)。
 > - **DG(coordinator,USB,timebase master)**:**不 teardown**,core 續跑、持續發 schedule,node 什麼時候開機就什麼時候 sync 上來(等同斷線重連);無 SoC 介入。
 
 ---

@@ -535,8 +535,9 @@ int main(void)
     /* Boot auto-reconnect: if a previous pairing was persisted to flash, try to
      * re-establish it silently. Only enter pairing when there is no usable record
      * (never paired) or the user asked to pair mid-attempt. A record that simply
-     * could not reach its peer in time does NOT re-pair: the device stays idle and
-     * the SoC re-drives a reconnect (AT+UWB_CONNECT) after the +EVENT: UWB_CONNECT_FAIL. */
+     * could not reach its peer within RECONNECT_TIMEOUT_MS does NOT re-pair:
+     * try_boot_reconnect() powers the module down into Standby (it does not return),
+     * and a reset (SoC NRST / a WKUP button) wakes it back through here to retry. */
     if (try_boot_reconnect() == BOOT_RECONNECT_PAIR) {
         enter_pairing_mode();
     }
@@ -2419,17 +2420,17 @@ static void enter_pairing_mode(void)
  *  If a valid pairing address was persisted to flash, restore it and bring the
  *  wireless core up (same path as at_start_connect / a fresh pairing success),
  *  then wait up to RECONNECT_TIMEOUT_MS for the real SWC link to come up. On
- *  success the device stays paired and streaming. On timeout the half-open link
- *  is torn down; the flash record is KEPT (the peer being off is not a reason to
- *  forget the pair).
+ *  success the device stays paired and streaming. On timeout it powers the module
+ *  down into Standby (does not return); the flash record is KEPT (the peer being
+ *  off is not a reason to forget the pair).
  *
  *  @return BOOT_RECONNECT_OK   link re-established (paired, streaming);
  *          BOOT_RECONNECT_PAIR no usable record (never paired), or the user
  *                              aborted the attempt to pair (button / AT+UWB_PAIR)
- *                              -- caller enters pairing;
- *          BOOT_RECONNECT_IDLE a record existed but the peer was unreachable in
- *                              time -- caller stays idle and lets the SoC re-drive
- *                              a reconnect (do NOT auto re-pair).
+ *                              -- caller enters pairing.
+ *          (A plain timeout does NOT return: the module enters Standby to save the
+ *          battery and a reset wakes it back through boot auto-reconnect. The
+ *          BOOT_RECONNECT_IDLE enumerator is therefore unreachable on the HS.)
  */
 static boot_reconnect_result_t try_boot_reconnect(void)
 {
@@ -2503,11 +2504,16 @@ static boot_reconnect_result_t try_boot_reconnect(void)
     }
 
     /* Plain timeout: the peer was simply unreachable. Blink the reconnect colour once
-     * so the timeout is easy to observe, then stay idle -- do NOT re-pair; the SoC
-     * re-drives a reconnect (it already saw +EVENT: UWB_CONNECT_FAIL). */
+     * so the timeout is easy to observe, then power the module down into Standby to
+     * save the battery -- the HS is battery-powered and there is nothing to do until
+     * the peer is back. Do NOT re-pair. Waking (SoC NRST / a WKUP button) resets the
+     * MCU back through boot auto-reconnect to try again. Same power-down path as
+     * AT+UWB_DISCONNECT; the flash record is intentionally kept so the reset
+     * reconnects to the same peer. */
     facade_notify_reconnect_failed();
-    app_teardown();
-    return BOOT_RECONNECT_IDLE;
+    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
+    facade_enter_standby(); /* does not return */
+    return BOOT_RECONNECT_IDLE; /* unreachable: keeps the non-void return type happy */
 }
 
 /** @brief Put the device in the unpaired state and disconnect it from the network.
