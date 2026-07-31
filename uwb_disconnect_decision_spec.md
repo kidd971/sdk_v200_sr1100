@@ -4,6 +4,7 @@
 > 目的:定義「什麼條件下 SoC 該下 disconnect / connect / shutdown」,以及每個指令在 module 端**實際**做什麼。
 > 對應 code:`app/common/at_cmd_core/at_cmd_core.c`、`app/example/puretone_headset/puretone_headset.c`、
 > `puretone_dongle.c`;背景見 `boot_auto_reconnect_design.md`。
+> **SoC 端**「何時該拉 NRST 喚醒 / reset module」的決策邏輯,見 `soc_reset_wake_decision_spec.md`。
 
 ---
 
