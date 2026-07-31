@@ -415,6 +415,30 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u535-cert-dg-smps",
+            "inherits": ["puretone-headset-quasar-u535-slave-std-nocodec-smps"],
+            "description": "CERTIFICATION: DG/coord. Boots straight into cert mode 2 (48k 24-bit) with no USER_2 button (CERTIF_FORCE_MODE=2). SMPS, single radio1. LED_USER_1 blinks ~1 Hz while running. TAKE puretone_dongle.bin from this build.",
+            "cacheVariables": {
+                "CERTIF_FORCE_MODE": "2"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-cert-hs-radio1-smps",
+            "inherits": ["puretone-headset-quasar-u535-master-std-nocodec-smps-hs"],
+            "description": "CERTIFICATION: HS/node on radio1. Boots straight into cert mode 5 (DATA) with no USER_2 button (CERTIF_FORCE_MODE=5). SMPS, single radio1 (default). LED_USER_1 blinks ~1 Hz while running. TAKE puretone_headset.bin from this build.",
+            "cacheVariables": {
+                "CERTIF_FORCE_MODE": "5"
+            }
+        },
+        {
+            "name": "puretone-headset-quasar-u535-cert-hs-radio2-smps",
+            "inherits": ["puretone-headset-quasar-u535-single-radio2-smps"],
+            "description": "CERTIFICATION: HS/node on radio2 (SWC_SINGLE_RADIO_ID=2, UWB_L/SPI2/CS=PD5). Boots straight into cert mode 5 (DATA) with no USER_2 button (CERTIF_FORCE_MODE=5). SMPS. LED_USER_1 blinks ~1 Hz while running. TAKE puretone_headset.bin from this build.",
+            "cacheVariables": {
+                "CERTIF_FORCE_MODE": "5"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u535-dualradio-slave-std-nocodec-ldo",
             "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],

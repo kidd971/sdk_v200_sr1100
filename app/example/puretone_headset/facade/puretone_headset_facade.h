@@ -247,6 +247,14 @@ bool facade_read_button_state(void);
  */
 void facade_notify_pairing_successful(void);
 
+/** @brief Toggle the certification-mode heartbeat LED (USER_1) once.
+ *
+ *  Non-blocking single toggle -- unlike the button-selection blink, it does NOT delay.
+ *  Called on a time cadence from the certification while-loop so the LED keeps blinking
+ *  the whole time the board runs in certification mode, giving a live visual confirmation.
+ */
+void facade_certification_led_toggle(void);
+
 /** @brief Power the module down into STM32 Standby. Does not return.
  *
  *  Asserts the UWB radio shutdown pin, turns the LEDs off, masks every interrupt source

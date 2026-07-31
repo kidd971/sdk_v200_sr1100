@@ -65,6 +65,11 @@ static facade_button_callbacks_t local_button_callbacks;
 /* PUBLIC FUNCTIONS ***********************************************************/
 facade_certification_mode_t facade_coord_get_certification_mode(void)
 {
+#ifdef CERTIF_FORCE_MODE
+    /* ST-Link-only cert bench: boot straight into a fixed certification mode without
+     * needing the USER_2 button. Bypasses the button-selection sequence entirely. */
+    return (facade_certification_mode_t)CERTIF_FORCE_MODE;
+#endif
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* If button 2 is not pressed, the application runs normally without entering any certification mode. */
         return FACADE_CERTIF_NONE;
@@ -120,6 +125,11 @@ facade_certification_mode_t facade_coord_get_certification_mode(void)
 
 facade_certification_mode_t facade_node_get_certification_mode(void)
 {
+#ifdef CERTIF_FORCE_MODE
+    /* ST-Link-only cert bench: boot straight into a fixed certification mode without
+     * needing the USER_2 button. Bypasses the button-selection sequence entirely. */
+    return (facade_certification_mode_t)CERTIF_FORCE_MODE;
+#endif
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* If button 2 is not pressed, the application runs normally without entering any certification mode. */
         return FACADE_CERTIF_NONE;
@@ -642,6 +652,27 @@ uint8_t facade_read_battery_level_pct(void)
  *
  *  @param[in] blink_count  The number of times to blink the LED.
  */
+void facade_certification_led_toggle(void)
+{
+    /* Non-blocking single toggle -- caller supplies the cadence. Keeps a visible LED
+     * blinking the whole time the board runs in certification mode.
+     *
+     * On U535 the visible status LED is the RGB (blue), driven through the RGB API --
+     * same as facade_notify_pairing_successful(). The raw QUASAR_LED_USER_1 (PB4, RGB
+     * green channel) is the tx-activity indicator and is not the populated status LED
+     * on the U535 dongle, so a raw GPIO toggle there produces no visible blink. */
+#ifdef QUASAR_U535
+    static bool configured;
+    if (!configured) {
+        quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+        configured = true;
+    }
+    quasar_rgb_toggle();
+#else
+    quasar_led_toggle(QUASAR_LED_USER_1);
+#endif
+}
+
 static void led1_blink(uint8_t blink_count)
 {
     quasar_led_clear(QUASAR_LED_USER_1);

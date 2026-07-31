@@ -58,6 +58,9 @@
 #define ERROR_MESSAGE_BUFFER_SIZE 160
 /* Interval to print statistics in ms. */
 #define PRINT_INTERVAL_MS 2000
+/* Certification-mode heartbeat: status LED toggles every this many ms (~2 Hz blink,
+ * deliberately faster than the pairing patterns so cert mode is visually distinct). */
+#define CERTIF_LED_TOGGLE_MS 250
 
 /* **** Link watch ****
  * Lightweight diagnostic that polls the RX-audio connection and prints a one-line
@@ -520,6 +523,17 @@ int main(void)
         app_init();
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
+            /* Certification heartbeat: blink LED_USER_1 at ~1 Hz so it is visually
+             * obvious the board is running in certification mode. Non-blocking (unlike
+             * the button-selection blink), so it never stalls stats/link_watch or TX. */
+            {
+                static uint32_t cert_led_tick;
+                uint32_t now = facade_get_tick_ms();
+                if ((now - cert_led_tick) >= CERTIF_LED_TOGGLE_MS) {
+                    cert_led_tick = now;
+                    facade_certification_led_toggle();
+                }
+            }
             /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
             if (should_print_stats()) {
                 print_stats();

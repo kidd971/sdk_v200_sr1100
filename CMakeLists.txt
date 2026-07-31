@@ -29,6 +29,16 @@ if (NOT BUILD_TESTS)
     message("SWC_SINGLE_RADIO_ID = ${SWC_SINGLE_RADIO_ID}")
     add_compile_definitions(SWC_SINGLE_RADIO_ID=${SWC_SINGLE_RADIO_ID})
 
+    # Force the app into a fixed certification mode at boot, without the USER_2 button
+    # (for ST-Link-only cert benches). When defined, facade_*_get_certification_mode()
+    # returns this enum value directly, bypassing the button selection:
+    #   1=96k24  2=48k24  3=48k16  4=ADPCM  5=DATA  (0=NONE i.e. normal, never forced).
+    # Leave undefined for normal/shipping builds -> button selection is unchanged.
+    if (DEFINED CERTIF_FORCE_MODE)
+        message("CERTIF_FORCE_MODE = ${CERTIF_FORCE_MODE}")
+        add_compile_definitions(CERTIF_FORCE_MODE=${CERTIF_FORCE_MODE})
+    endif()
+
     if (TRANSCEIVER STREQUAL "SR1100")
         add_compile_definitions(SR1100=1)
         add_compile_definitions(SR1000=0)
