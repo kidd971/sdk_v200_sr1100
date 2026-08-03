@@ -2379,6 +2379,7 @@ static void enter_pairing_mode(void)
 
     /* Set the pairing state. */
     device_pairing_state = DEVICE_PAIRING;
+    at_cmd_core_notify_pairing_started();
 
     facade_notify_enter_pairing();
 
@@ -2417,6 +2418,7 @@ static void enter_pairing_mode(void)
          * only costs the auto-reconnect on the next boot, not this session. */
         reconnect_store_save(&pairing_assigned_address);
 
+        at_cmd_core_notify_pairing_result(true);
         break;
     case PAIRING_EVENT_TIMEOUT:
     case PAIRING_EVENT_INVALID_APP_CODE:
@@ -2425,6 +2427,8 @@ static void enter_pairing_mode(void)
         /* Indicate that the pairing process was unsuccessful. */
         facade_notify_not_paired();
         device_pairing_state = DEVICE_UNPAIRED;
+
+        at_cmd_core_notify_pairing_result(false);
         break;
     }
 }
@@ -2525,7 +2529,7 @@ static boot_reconnect_result_t try_boot_reconnect(void)
      * AT+UWB_DISCONNECT; the flash record is intentionally kept so the reset
      * reconnects to the same peer. */
     facade_notify_reconnect_failed();
-    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
+    at_cmd_core_notify_standby();
     facade_enter_standby(); /* does not return */
     return BOOT_RECONNECT_IDLE; /* unreachable: keeps the non-void return type happy */
 }
@@ -2839,7 +2843,7 @@ static void app_teardown(void)
  */
 static void at_start_disconnect(void)
 {
-    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
+    at_cmd_core_notify_standby();
 
     facade_enter_standby(); /* does not return */
 }

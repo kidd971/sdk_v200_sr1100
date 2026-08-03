@@ -228,6 +228,33 @@ void at_cmd_core_notify_uwb_ready(void)
     facade_expansion_uart_write("+EVENT: UWB_READY\r\n");
 }
 
+void at_cmd_core_notify_pairing_started(void)
+{
+    /* Puts the status machine on hold: link polling is meaningless while the wireless core is
+     * torn down for pairing, and without this the poll reported a dropped link and emitted a
+     * spurious UWB_DISCONNECTED on the way in. */
+    s_uwb_conn_status = AT_UWB_CONN_STATUS_PAIRING;
+}
+
+void at_cmd_core_notify_pairing_result(bool success)
+{
+    /* Leave PAIRING either way, otherwise the status machine stays parked for good. Success
+     * hands over to STANDBY rather than claiming CONNECTED: the addresses are assigned but the
+     * link still has to come up, and the poll emits UWB_CONNECTED once it really does. */
+    s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
+    facade_expansion_uart_write(success ? "+EVENT: UWB_PAIRED\r\n" : "+EVENT: UWB_PAIR_FAIL\r\n");
+}
+
+void at_cmd_core_notify_standby(void)
+{
+    /* The status machine in at_cmd_core_process() is what normally emits this, but every
+     * caller powers the MCU down on the next line and never comes back, so the event has to
+     * be sent from here. facade_expansion_uart_write() blocks until the transmission is
+     * complete, so the bytes are on the wire before the module loses power. */
+    s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
+    facade_expansion_uart_write("+EVENT: UWB_DISCONNECTED\r\n");
+}
+
 void at_cmd_core_register_pair_cb(void (*cb)(void))
 {
     s_pair_cb = cb;
@@ -235,6 +262,15 @@ void at_cmd_core_register_pair_cb(void (*cb)(void))
 
 void at_cmd_core_set_uwb_conn_status(at_uwb_conn_status_t status)
 {
+    /* Stamp the start of every connecting window, not just the one AT+UWB_CONNECT opens.
+     * The boot auto-reconnect path sets CONNECTING directly, so s_connect_start_tick used to
+     * stay at 0 and the timeout below compared against the time since boot -- CONNECT_FAIL
+     * then fired a fixed AT_UWB_CONNECT_TIMEOUT_MS after power-on rather than after the
+     * attempt actually started. */
+    if ((status == AT_UWB_CONN_STATUS_CONNECTING) && (s_uwb_conn_status != AT_UWB_CONN_STATUS_CONNECTING)) {
+        s_connect_start_tick = facade_get_tick_ms();
+    }
+
     s_uwb_conn_status = status;
 }
 

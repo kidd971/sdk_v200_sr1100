@@ -33,7 +33,18 @@
 （`1=Pairing` 現在**只**由 `AT+UWB_PAIR`、pairing 按鍵、或首次開機無配對記錄進入;reconnect 逾時**不再**自動轉 Pairing。）
 
 **非同步事件**(module 主動吐給 SoC):
-`+EVENT: UWB_CONNECTED` / `+EVENT: UWB_DISCONNECTED` / `+EVENT: UWB_CONNECT_FAIL`。
+
+| 事件 | 什麼時候吐 |
+|---|---|
+| `+EVENT: UWB_READY` | SWC 初始化完成、可以連線或接受配對 |
+| `+EVENT: UWB_CONNECTED` | link 真的建立(狀態輪詢偵測到) |
+| `+EVENT: UWB_DISCONNECTED` | link 掉了;**以及進 Standby 斷電前的最後一句**(`AT+UWB_DISCONNECT`、`AT+UWB_SHUTDOWN`、HS 回連逾時) |
+| `+EVENT: UWB_CONNECT_FAIL` | 連線嘗試視窗逾時(`AT_UWB_CONNECT_TIMEOUT_MS`,與 app 的 `RECONNECT_TIMEOUT_MS` 對齊) |
+| `+EVENT: UWB_PAIRED` | 配對成功(位址已分配並寫入 flash;link 還沒起來,起來時另有 `UWB_CONNECTED`) |
+| `+EVENT: UWB_PAIR_FAIL` | 配對逾時 / 被中止 / 失敗 |
+| `+EVENT: UWB_QUALITY:WEAK` `:GOOD` | link margin 跨過門檻 |
+
+HS 開機回連失敗時 SoC 會**連續收到兩句**:`UWB_CONNECT_FAIL`(嘗試視窗到期)緊接著 `UWB_DISCONNECTED`(app 放棄、關機前)。之後 UART 靜默,要靠 NRST 喚醒。
 
 ---
 

@@ -48,12 +48,18 @@ typedef enum {
     AT_UWB_CONN_STATUS_CONNECTING = 3, /*!< Connection attempt in progress (after AT+UWB_CONNECT). */
 } at_uwb_conn_status_t;
 
-/** @brief Timeout for UWB connection attempts triggered by AT+UWB_CONNECT.
+/** @brief Timeout for a UWB connection attempt, whoever opened it.
  *
- *  If the link is not established within this many milliseconds after
- *  AT+UWB_CONNECT, a +EVENT: UWB_CONNECT_FAIL notification is sent.
+ *  If the link is not established within this many milliseconds of the status going to
+ *  CONNECTING, a +EVENT: UWB_CONNECT_FAIL notification is sent.
+ *
+ *  Kept equal to the applications' RECONNECT_TIMEOUT_MS: both AT+UWB_CONNECT (which resets
+ *  the MCU into boot auto-reconnect) and a plain boot land in the same reconnect window, and
+ *  a shorter value here made the host see CONNECT_FAIL while the application was still
+ *  trying. The status is stamped just before the window opens, so CONNECT_FAIL is still
+ *  reported before the application gives up and powers down with UWB_DISCONNECTED.
  */
-#define AT_UWB_CONNECT_TIMEOUT_MS  5000
+#define AT_UWB_CONNECT_TIMEOUT_MS  10000
 
 /** @brief Link margin threshold (dB) below which +EVENT: UWB_QUALITY:WEAK is sent. */
 #define AT_UWB_LINK_QUALITY_WEAK_THRESHOLD_DB   5
@@ -123,6 +129,35 @@ void at_cmd_core_set_device_role(at_device_role_t role);
  * to connect or accept pairing.
  */
 void at_cmd_core_notify_uwb_ready(void);
+
+/**
+ * @brief Move the status to Pairing for the duration of the pairing procedure.
+ *
+ * Call when entering pairing. Link polling is suspended while the status is Pairing, so the
+ * torn-down wireless core is not misreported as a dropped link. Always pair this with
+ * at_cmd_core_notify_pairing_result(), which is what releases the status again.
+ */
+void at_cmd_core_notify_pairing_started(void);
+
+/**
+ * @brief Report the outcome of pairing and release the status.
+ *
+ * Sends +EVENT: UWB_PAIRED or +EVENT: UWB_PAIR_FAIL and returns the status to Standby. On
+ * success the link still has to come up; the usual poll reports that with UWB_CONNECTED.
+ *
+ * @param[in] success  true if the peer was paired, false on timeout / abort / failure.
+ */
+void at_cmd_core_notify_pairing_result(bool success);
+
+/**
+ * @brief Set the status to Standby and send +EVENT: UWB_DISCONNECTED to the external MCU.
+ *
+ * Call immediately before powering the module down (facade_enter_standby()). The normal
+ * status machine cannot report this: entering Standby does not return, so at_cmd_core_process()
+ * never runs again and the host would only see the UART fall silent, which is
+ * indistinguishable from a crash.
+ */
+void at_cmd_core_notify_standby(void);
 
 /**
  * @brief Register a connection status getter polled by at_cmd_core_process().
