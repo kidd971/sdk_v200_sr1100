@@ -64,6 +64,9 @@ UART_HandleTypeDef uart_handle_usart6 = {
 };
 #endif
 
+/*! Depth of the USART/LPUART hardware RX FIFO, used to bound the drain loop in the handler. */
+#define QUASAR_UART_HW_FIFO_DEPTH 8
+
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void uart_enable_clock(quasar_uart_selection_t uart_selection);
 static void uart_disable_clock(quasar_uart_selection_t uart_selection);
@@ -486,6 +489,14 @@ static void uart_configure_protocol(USART_TypeDef *uart_instance, quasar_uart_co
     /* Configure the oversampling mode at 16 bits */
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_OVER8_Msk);
 
+    /* Enable the 8-byte hardware RX/TX FIFO. Without it the handler has to move every byte
+     * out of RDR within one byte-time (~87 us at 115200) or the byte is lost to an overrun.
+     * The AT/expansion UART sits at NVIC priority 15 so radio and audio work preempts it at
+     * will, and back-to-back input (a pasted command) was losing about a third of its
+     * characters. The FIFO turns that deadline into eight byte-times. FIFOEN may only be
+     * written while UE is cleared, which is the case here. */
+    QUASAR_SET_BIT(uart_instance->CR1, USART_CR1_FIFOEN_Msk);
+
     /* Configure the wordlength at 8 */
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_M0_Msk);
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_M1_Msk);
@@ -626,9 +637,15 @@ static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UAR
     uint32_t count = 0;
     uint8_t new_data = 0;
 
-    /* In case of RDR is not empty a reception occurs. */
-    if (((uart_handle->Instance->ISR & USART_ISR_RXNE) == USART_ISR_RXNE) &&
-        ((uart_handle->Instance->CR3 & USART_CR3_DMAR) != USART_CR3_DMAR)) {
+    /* In case of RDR is not empty a reception occurs. Drain the whole hardware FIFO in one
+     * entry: the flag stays asserted while bytes remain, and emptying it here is what buys
+     * the tolerance to a late interrupt. The iteration cap means a flag that somehow never
+     * clears cannot storm this handler. */
+    for (uint32_t fifo_slot = 0;
+         (fifo_slot < QUASAR_UART_HW_FIFO_DEPTH) &&
+         ((uart_handle->Instance->ISR & USART_ISR_RXNE) == USART_ISR_RXNE) &&
+         ((uart_handle->Instance->CR3 & USART_CR3_DMAR) != USART_CR3_DMAR);
+         fifo_slot++) {
         /* Transfer the contents of RDR into the associated FIFO buffer. */
         uint8_t rx_byte = (uint8_t)uart_handle->Instance->RDR;
         quasar_fifo_push(&quasar_uart_fifo_rx[uart_selection], rx_byte);
