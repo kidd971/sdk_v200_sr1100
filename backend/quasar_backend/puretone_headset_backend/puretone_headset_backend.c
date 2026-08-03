@@ -21,6 +21,48 @@
 /* CONSTANTS ******************************************************************/
 #define EXPANSION_UART_TX_TIMEOUT_MS                  1000
 
+/*
+ * AT console routing.
+ *
+ *   0 (default) - expansion UART, the port the product uses to talk to the BT SoC:
+ *                 u535  LPUART1  TX=PA3 RX=PA2  (AF8)   <- note: swapped versus the u5a5
+ *                 u5a5  USART2   TX=PA2 RX=PA3  (AF7)
+ *   1           - ST-Link VCP (UART4, TX=PC10 RX=PC11, AF8), wired through the on-board
+ *                 debugger and therefore always usable.
+ *
+ * Bench boards frequently cannot use the expansion pads -- unpopulated on some u535 units,
+ * and on the u535 DG the LPUART1 output was never reaching anything -- so the console has to
+ * move to the ST-Link port to test anything at all. Override per build without editing this
+ * file: add -DAT_CONSOLE_ON_STLINK=1 to the preset's compile definitions.
+ *
+ * At 1 on the u535, facade_stats_write() goes silent: stats / LINK_WATCH / crash-dump share
+ * UART4, and interleaving them with AT replies would garble the console and pollute any RX
+ * corruption measurement. The u5a5 keeps its stats on the USB CDC either way.
+ */
+#ifndef AT_CONSOLE_ON_STLINK
+#define AT_CONSOLE_ON_STLINK 0
+#endif
+
+#if AT_CONSOLE_ON_STLINK
+#define AT_CONSOLE_UART_SELECTION QUASAR_DEF_UART_SELECTION_DEBUG
+#define AT_CONSOLE_UART_TX_PORT   QUASAR_DEF_STLINK_UART_TX_PORT
+#define AT_CONSOLE_UART_TX_PIN    QUASAR_DEF_STLINK_UART_TX_PIN
+#define AT_CONSOLE_UART_RX_PORT   QUASAR_DEF_STLINK_UART_RX_PORT
+#define AT_CONSOLE_UART_RX_PIN    QUASAR_DEF_STLINK_UART_RX_PIN
+#define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF8  /* UART4 on PC10/PC11 */
+#elif defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
+#define AT_CONSOLE_UART_SELECTION QUASAR_DEF_UART_SELECTION_EXPANSION
+#define AT_CONSOLE_UART_TX_PORT   QUASAR_DEF_EXPANSION_UART_TX_PORT
+#define AT_CONSOLE_UART_TX_PIN    QUASAR_DEF_EXPANSION_UART_TX_PIN
+#define AT_CONSOLE_UART_RX_PORT   QUASAR_DEF_EXPANSION_UART_RX_PORT
+#define AT_CONSOLE_UART_RX_PIN    QUASAR_DEF_EXPANSION_UART_RX_PIN
+#ifdef QUASAR_U535
+#define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF8  /* LPUART1 on u535 */
+#else
+#define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF7  /* USART2 on u5a5 */
+#endif
+#endif
+
 #define IRQ_PRIORITY_TIMER_MAIN_CHANNEL_AUDIO_PROCESS QUASAR_IRQ_PRIORITY_13
 #define IRQ_PRIORITY_TIMER_BACK_CHANNEL_AUDIO_PROCESS QUASAR_IRQ_PRIORITY_14
 #define IRQ_PRIORITY_TIMER_DATA                       QUASAR_IRQ_PRIORITY_15
@@ -360,44 +402,40 @@ void facade_notify_reconnect_failed(void)
 
 void facade_expansion_uart_init(uint32_t baud_rate)
 {
-#if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
+#if defined(AT_CONSOLE_UART_SELECTION)
     quasar_gpio_config_t gpio_tx = {
-        .port      = QUASAR_DEF_EXPANSION_UART_TX_PORT,
-        .pin       = QUASAR_DEF_EXPANSION_UART_TX_PIN,
+        .port      = AT_CONSOLE_UART_TX_PORT,
+        .pin       = AT_CONSOLE_UART_TX_PIN,
         .mode      = QUASAR_GPIO_MODE_ALTERNATE,
         .type      = QUASAR_GPIO_TYPE_PP,
         .pull      = QUASAR_GPIO_PULL_UP,
         .speed     = QUASAR_GPIO_SPEED_LOW,
-#ifdef QUASAR_U535
-        .alternate = QUASAR_GPIO_ALTERNATE_AF8,  /* LPUART1 on u535 */
-#else
-        .alternate = QUASAR_GPIO_ALTERNATE_AF7,  /* USART2 on u5a5 */
-#endif
+        .alternate = AT_CONSOLE_UART_GPIO_AF,
     };
     quasar_gpio_config_t gpio_rx = {
-        .port      = QUASAR_DEF_EXPANSION_UART_RX_PORT,
-        .pin       = QUASAR_DEF_EXPANSION_UART_RX_PIN,
+        .port      = AT_CONSOLE_UART_RX_PORT,
+        .pin       = AT_CONSOLE_UART_RX_PIN,
         .mode      = QUASAR_GPIO_MODE_ALTERNATE,
         .type      = QUASAR_GPIO_TYPE_OD,
         .pull      = QUASAR_GPIO_PULL_UP,
         .speed     = QUASAR_GPIO_SPEED_LOW,
-#ifdef QUASAR_U535
-        .alternate = QUASAR_GPIO_ALTERNATE_AF8,  /* LPUART1 on u535 */
-#else
-        .alternate = QUASAR_GPIO_ALTERNATE_AF7,  /* USART2 on u5a5 */
-#endif
+        .alternate = AT_CONSOLE_UART_GPIO_AF,
     };
     quasar_uart_config_t uart_cfg = {
-        .uart_selection = QUASAR_DEF_UART_SELECTION_EXPANSION,
+        .uart_selection = AT_CONSOLE_UART_SELECTION,
         .baud_rate      = baud_rate,
         .parity         = QUASAR_UART_PARITY_NONE,
         .stop           = QUASAR_UART_STOP_BITS_1B,
-        /* Lowest NVIC priority (15): a floating/failed RX pad can storm RXNE/ORE.
-         * At the old prio 5 that storm preempted audio-process (13/14) and the SWC
-         * data timer (15), starving them and dropping audio. At 15 it can no longer
-         * preempt them. NOTE: mitigation only — the real fix is the RX pad hardware
-         * (PA2) / disabling the receiver on boards where RX is unusable. */
-        .irq_priority   = QUASAR_IRQ_PRIORITY_15,
+        /* Above the audio-process timers (13/14) and the SWC data timer (15), still well
+         * below the radio. This used to sit at 15 because a floating RX pad could storm
+         * RXNE/ORE and starve audio -- but that storm was the overrun handler writing the
+         * ICR mask into CR1, so ORE was never cleared and the interrupt re-fired forever.
+         * With ORE now cleared through ICR and the RX branch bounded to one hardware-FIFO
+         * depth, the handler is a few register reads into a software FIFO and cannot storm.
+         * Sitting under the audio timers cost real bytes: their callbacks run long enough to
+         * exhaust the 8-byte FIFO's slack, which showed up as the tail of a pasted command
+         * being dropped. */
+        .irq_priority   = QUASAR_IRQ_PRIORITY_12,
         .gpio_config_tx = gpio_tx,
         .gpio_config_rx = gpio_rx,
     };
@@ -409,10 +447,10 @@ void facade_expansion_uart_init(uint32_t baud_rate)
 
 void facade_expansion_uart_write(char *string)
 {
-#if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
+#if defined(AT_CONSOLE_UART_SELECTION)
     quasar_bsp_status_t err;
 
-    quasar_uart_transmit_blocking(QUASAR_DEF_UART_SELECTION_EXPANSION,
+    quasar_uart_transmit_blocking(AT_CONSOLE_UART_SELECTION,
                                   (uint8_t *)string, strlen(string),
                                   EXPANSION_UART_TX_TIMEOUT_MS, &err);
 #else
@@ -422,7 +460,11 @@ void facade_expansion_uart_write(char *string)
 
 void facade_stats_write(char *string)
 {
-#ifdef QUASAR_U535
+#if AT_CONSOLE_ON_STLINK && defined(QUASAR_U535)
+    /* The AT console has taken over the ST-Link VCP, which is where these would go. Staying
+     * quiet keeps the console readable and keeps stats bursts out of any RX measurement. */
+    (void)string;
+#elif defined(QUASAR_U535)
     /* Route stats / LINK_WATCH / crash-dump to the ST-Link VCP (UART4 on PC10=TX / PC11=RX),
      * which is reliably wired through the on-board ST-Link. This is separate from the LPUART1
      * AT console (PA3/PA2), which is deliberately left untouched (its PA2 RX pad is unreliable
@@ -474,8 +516,8 @@ void facade_stats_write(char *string)
 
 uint8_t facade_expansion_uart_read_byte(void)
 {
-#if defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
-    return quasar_uart_receive_irq(QUASAR_DEF_UART_SELECTION_EXPANSION);
+#if defined(AT_CONSOLE_UART_SELECTION)
+    return quasar_uart_receive_irq(AT_CONSOLE_UART_SELECTION);
 #else
     return 0;  /* Expansion UART not available on this board variant. */
 #endif
