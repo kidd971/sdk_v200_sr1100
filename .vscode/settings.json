@@ -135,7 +135,7 @@
             "projectStatusVisibility": "visible"
         },
         "configurePreset": {
-            "statusBarVisibility": "visible"
+            "statusBarVisibility": "hidden"
         },
         "kit": {
             "statusBarVisibility": "compact"
