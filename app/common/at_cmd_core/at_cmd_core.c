@@ -223,6 +223,21 @@ void at_cmd_core_register_shutdown_cb(void (*cb)(void))
     s_shutdown_cb = cb;
 }
 
+void at_cmd_core_notify_build(const char *build_id)
+{
+    /* Holds "+EVENT: BUILD: " + AT_CMD_CORE_BUILD_ID (version + __DATE__ + __TIME__, ~27
+     * chars) + " role=DG\r\n", with room to spare if the version string grows. */
+    char buf[96];
+
+    if (build_id == NULL) {
+        return;
+    }
+
+    snprintf(buf, sizeof(buf), "+EVENT: BUILD: %s role=%s\r\n", build_id,
+             (s_device_role == AT_DEVICE_ROLE_NODE) ? "HS" : "DG");
+    facade_expansion_uart_write(buf);
+}
+
 void at_cmd_core_notify_uwb_ready(void)
 {
     facade_expansion_uart_write("+EVENT: UWB_READY\r\n");

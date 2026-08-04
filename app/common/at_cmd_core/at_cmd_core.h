@@ -40,6 +40,17 @@ extern "C" {
  */
 #define AT_CMD_CORE_SDK_VERSION  "v2.3.1"
 
+/** @brief Version + compile timestamp identifying the exact binary.
+ *
+ *  Deliberately a macro rather than a string built inside at_cmd_core.c: __DATE__/__TIME__
+ *  expand at the CALL site, so the timestamp comes from the application's translation unit
+ *  (puretone_dongle.c / puretone_headset.c). An incremental build that recompiles only the
+ *  application would otherwise leave at_cmd_core.o -- and therefore the reported timestamp --
+ *  stale, which defeats the whole point of printing it. Expanding at the call site also keeps
+ *  it identical to the HS crash-dump build line, which uses the same two macros.
+ */
+#define AT_CMD_CORE_BUILD_ID  AT_CMD_CORE_SDK_VERSION " " __DATE__ " " __TIME__
+
 /** @brief UWB connection status codes reported by AT+UWB_CONN_STATUS?. */
 typedef enum {
     AT_UWB_CONN_STATUS_STANDBY    = 0, /*!< Idle, not yet started. */
@@ -121,6 +132,25 @@ void at_cmd_core_set_device_address(uint8_t addr);
  * @param[in] role  Device role.
  */
 void at_cmd_core_set_device_role(at_device_role_t role);
+
+/**
+ * @brief Send +EVENT: BUILD: <version> <date> <time> role=<DG|HS> to the external MCU.
+ *
+ * Boot banner. Call once immediately before at_cmd_core_notify_uwb_ready(), after
+ * at_cmd_core_set_device_role() so the role is already known.
+ *
+ * Two things it buys on a customer board where no ST-Link is wired: the host can confirm
+ * which binary is actually running (a mismatched timestamp means the wrong image was
+ * flashed), and a line that repeats every ~10 s means the module is resetting rather than
+ * sitting in the boot-reconnect idle state -- the two are otherwise indistinguishable over
+ * the AT port, since a reconnect timeout on the DG is silent.
+ *
+ * Deliberately a separate line from UWB_READY, which stays byte-for-byte as it was so a
+ * host matching that line exactly keeps working.
+ *
+ * @param[in] build_id  Build identifier, normally AT_CMD_CORE_BUILD_ID. NULL is ignored.
+ */
+void at_cmd_core_notify_build(const char *build_id);
 
 /**
  * @brief Send +EVENT: UWB_READY to the external MCU.

@@ -438,6 +438,13 @@ int main(void)
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
     at_cmd_core_register_vol_cb(at_set_vol);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
+    /* Boot banner, ahead of UWB_READY. The DG has no periodic crash dump and its LINK_WATCH
+     * output goes to the ST-Link VCP (UART4), which a customer board does not necessarily
+     * wire out -- so on the AT port this pair of lines is the only evidence of a boot. A
+     * BUILD line that reappears every ~10 s means the module is resetting; a single one
+     * followed by silence means boot reconnect timed out and the coordinator is sitting in
+     * BOOT_RECONNECT_IDLE, which is otherwise indistinguishable over this port. */
+    at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
     at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */

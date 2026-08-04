@@ -507,6 +507,11 @@ int main(void)
     at_cmd_core_register_pre_track_cb(at_pre_track);
     at_cmd_core_register_battery_cb(facade_read_battery_level_pct);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
+    /* Boot banner, ahead of UWB_READY. Same timestamp as the crash-dump build line (both
+     * expand AT_CMD_CORE_BUILD_ID / __DATE__ from this translation unit). It matters more
+     * here than on the DG: a reconnect timeout puts the HS into Standby, so the host sees a
+     * BUILD line only when something actually reset the MCU. */
+    at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
     at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */
@@ -2948,7 +2953,7 @@ static void emit_crash_dump(void)
     /* Version + compile timestamp so the dump self-identifies the exact binary: __DATE__/
      * __TIME__ change on every rebuild, which is the quick way to confirm the board is
      * running the build you think it is (a hardcoded label cannot). */
-    snprintf(buf, sizeof(buf), " build=" AT_CMD_CORE_SDK_VERSION " " __DATE__ " " __TIME__ " role=HS paired=%d\r\n",
+    snprintf(buf, sizeof(buf), " build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d\r\n",
              (device_pairing_state == DEVICE_PAIRED) ? 1 : 0);
     facade_stats_write(buf);
 
