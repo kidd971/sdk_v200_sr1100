@@ -278,6 +278,20 @@ static sac_mute_on_underflow_instance_t main_channel_mute_on_underflow_instance;
 static sac_processing_t *main_channel_mute_on_underflow_processing;
 static src_cmsis_instance_t main_channel_upsampling_instance;
 static sac_processing_t *main_channel_upsampling_processing;
+/* 4x counterpart for the 24 kHz rung. Must mirror the dongle's 1:4 decimation exactly: the
+ * interpolation path validates its input against pipeline->_internal.current_sample_count and
+ * rejects anything else with SAC_ERR_INVALID_PACKET_SIZE (sac_src_cmsis.c:479). That check is
+ * also why this cannot be two chained 2x stages -- current_sample_count is set once per packet
+ * by the fallback stage and is never updated between stages, so a second stage would always see
+ * twice what the check expects. */
+static src_cmsis_instance_t main_channel_upsampling4_instance;
+static sac_processing_t *main_channel_upsampling4_processing;
+/* 24k spike probe: packets the SRC refused because their sample count did not match the current
+ * fallback mode. Non-zero means the dongle and this side disagree about how many samples a mode 3
+ * packet carries -- the first thing to look at is whether both were built from the same commit.
+ * Stays zero on a healthy link at any mode. Reported on the LINK_WATCH line as src_bad=. */
+static volatile uint32_t dbg_src_bad_size_count;
+static volatile uint8_t dbg_src_bad_size_at_mode = 0xFF;
 static sac_mute_packet_instance_t main_channel_mute_packet_instance;
 static sac_processing_t *main_channel_mute_packet_processing;
 static sac_packing_instance_t main_channel_fbk_unpacking_instance;
@@ -1229,6 +1243,23 @@ static void app_audio_core_init(void)
     main_channel_upsampling_instance.cfg.input_sample_format = MAIN_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT;
     main_channel_upsampling_instance.cfg.output_sample_format = MAIN_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT;
     main_channel_upsampling_instance.cfg.channel_count = MAIN_CHANNEL_CHANNEL_COUNT;
+    /* 24kHz -> 96kHz for fallback mode 3. Same derivation as the 2x instance above, so the
+     * payload_size lands on the 23 samples/ch that mode 3 actually carries. */
+    main_channel_upsampling4_instance.cfg.multiply_ratio = SAC_SRC_FOUR;
+    main_channel_upsampling4_instance.cfg.divide_ratio = SAC_SRC_ONE;
+    main_channel_upsampling4_instance.cfg.payload_size = MAIN_CHANNEL_SWC_PAYLOAD_SIZE *
+                                                         main_channel_upsampling4_instance.cfg.divide_ratio /
+                                                         main_channel_upsampling4_instance.cfg.multiply_ratio;
+    main_channel_upsampling4_instance.cfg.payload_size =
+        (main_channel_upsampling4_instance.cfg.payload_size * MAIN_CHANNEL_MAX_ACC_MUL) / MAIN_CHANNEL_MAX_ACC_DIV;
+    main_channel_upsampling4_instance.cfg.input_sample_format = MAIN_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT;
+    main_channel_upsampling4_instance.cfg.output_sample_format = MAIN_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT;
+    main_channel_upsampling4_instance.cfg.channel_count = MAIN_CHANNEL_CHANNEL_COUNT;
+    main_channel_upsampling4_processing = sac_processing_stage_init((void *)&main_channel_upsampling4_instance,
+                                                                    "Audio Upsampling 4x",
+                                                                    main_channel_upsampling_iface, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
     main_channel_upsampling_processing = sac_processing_stage_init((void *)&main_channel_upsampling_instance,
                                                                    "Audio Upsampling", main_channel_upsampling_iface,
                                                                    &sac_status);
@@ -1348,6 +1379,9 @@ static void app_audio_core_init(void)
     /* SRC. */
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_upsampling_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+    /* Alternative to the 2x stage, gated to mode 3 where the 2x one does not run. */
+    sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_upsampling4_processing, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
 
     /* Audio pipeline setup. */
     sac_pipeline_setup(main_channel_sac_pipeline, &sac_status);
@@ -1393,9 +1427,10 @@ static void app_audio_core_init(void)
 
     /* Fallback mode 3 configuration. */
     mode_cfg.sample_count = MAIN_CHANNEL_FBK_3_SAMPLE_COUNT;
-    mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "48kHz ADPCM", mode_cfg, &sac_status);
+    mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "24kHz ADPCM", mode_cfg, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_upsampling_processing,
+    /* 4x, mirroring the dongle's 1:4 on this same mode index. */
+    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_upsampling4_processing,
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_decompression_processing,
@@ -1964,6 +1999,18 @@ static void audio_process_main_channel_callback(void)
     }
 
     sac_pipeline_process(main_channel_sac_pipeline, &sac_status);
+    /* 24k spike probe. The interpolation path rejects any packet whose sample count is not the
+     * current fallback mode's sample_count (sac_src_cmsis.c:479), and sac_api.c:867 turns that
+     * into a dropped packet plus an error status -- which ASSERT_SAC_STATUS would escalate to
+     * sac_error_handler() and a dead board. That is the wrong behaviour for a bench experiment:
+     * it stops the run at the first bad packet and tells us nothing about how often, or whether
+     * it is only the mode 2->3 transition packet that fails. Count it and keep the link up
+     * instead; everything else still asserts as before. */
+    if (sac_status == SAC_ERR_INVALID_PACKET_SIZE) {
+        dbg_src_bad_size_count++;
+        dbg_src_bad_size_at_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, NULL);
+        sac_status = SAC_OK;
+    }
     ASSERT_SAC_STATUS(sac_status);
 
     while (sac_pipeline_get_producer_buffer_load(main_channel_accumulator_pipeline, &sac_status) > 0) {
@@ -2140,14 +2187,16 @@ static void link_watch(void)
 
     int n = snprintf(line, sizeof(line),
              "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
-             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)",
+             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu) "
+             "src_bad=%lu@%u",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
              (unsigned)info.link_margin, (unsigned)fb_mode,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
              (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
              (unsigned long)rx_rej,
-             (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
+             (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count,
+             (unsigned long)dbg_src_bad_size_count, (unsigned)dbg_src_bad_size_at_mode);
     if (have_hw && n > 0 && n < (int)sizeof(line)) {
         snprintf(line + n, sizeof(line) - n,
                  " r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",

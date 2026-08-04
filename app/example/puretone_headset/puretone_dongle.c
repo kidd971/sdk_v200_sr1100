@@ -242,6 +242,14 @@ static sac_processing_t *main_channel_sample_accumulator_processing;
 static src_cmsis_instance_t main_channel_downsampling_instance;
 static sac_processing_t *main_channel_downsampling_processing;
 static sac_processing_t *main_channel_downsampling_discard_processing;
+/* Second, independent SRC for the 24 kHz rung. A ratio is fixed at init, so the 96->48 kHz
+ * instance above cannot be reused; and it must be a single 1:4 rather than two chained 1:2,
+ * because the discard handover is a TX/RX contract -- the decimator sends half the FIR
+ * correction over the air and the interpolator expects exactly (FIR_NUMTAPS / ratio *
+ * channel_count) / 2 extra samples, which only lines up when divide_ratio on this side
+ * equals multiply_ratio on the headset. See sac_src_cmsis.c:479 and :583. */
+static src_cmsis_instance_t main_channel_downsampling4_instance;
+static sac_processing_t *main_channel_downsampling4_processing;
 static sac_mute_packet_instance_t main_channel_mute_packet_instance;
 static sac_processing_t *main_channel_mute_packet_processing;
 
@@ -1186,6 +1194,27 @@ static void app_audio_core_init(void)
     main_channel_downsampling_instance.cfg.input_sample_format = MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT;
     main_channel_downsampling_instance.cfg.output_sample_format = MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT;
     main_channel_downsampling_instance.cfg.channel_count = MAIN_CHANNEL_CHANNEL_COUNT;
+    /* Processing stage that downsamples the audio samples from 96kHz to 24kHz (fallback mode 3).
+     * Takes the same input as the 1:2 instance -- the accumulator output at 96 kHz -- so it is
+     * configured identically apart from the ratio; the two are alternatives at the same point in
+     * the chain, never chained.
+     *
+     * No discard variant is registered for this instance on purpose. Without one, discard_active
+     * never becomes true here, so this stage always emits exactly sample_count_out samples and
+     * the headset always sees the size it expects -- the transition into mode 3 costs a cold-FIR
+     * transient instead of risking the oversized-transition-packet path that would hard-fail with
+     * SAC_ERR_INVALID_PACKET_SIZE. Warm-up can be added once the plain path is proven on a bench. */
+    main_channel_downsampling4_instance.cfg.multiply_ratio = SAC_SRC_ONE;
+    main_channel_downsampling4_instance.cfg.divide_ratio = SAC_SRC_FOUR;
+    main_channel_downsampling4_instance.cfg.payload_size = main_channel_downsampling_instance.cfg.payload_size;
+    main_channel_downsampling4_instance.cfg.input_sample_format = MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT;
+    main_channel_downsampling4_instance.cfg.output_sample_format = MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT;
+    main_channel_downsampling4_instance.cfg.channel_count = MAIN_CHANNEL_CHANNEL_COUNT;
+    main_channel_downsampling4_processing = sac_processing_stage_init((void *)&main_channel_downsampling4_instance,
+                                                                      "Audio Downsampling 4x",
+                                                                      main_channel_downsampling_iface, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
     main_channel_downsampling_processing = sac_processing_stage_init((void *)&main_channel_downsampling_instance,
                                                                      "Audio Downsampling",
                                                                      main_channel_downsampling_iface, &sac_status);
@@ -1266,6 +1295,9 @@ static void app_audio_core_init(void)
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_downsampling_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_downsampling_discard_processing, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    /* Sits in the same slot as the 1:2 stages -- gated to mode 3, where none of them run. */
+    sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_downsampling4_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 #if !USB_AUDIO_ENABLED
     /* When using I2S, packing is required to convert 24-bit audio aligned on 32-bit words. */
@@ -1366,12 +1398,14 @@ static void app_audio_core_init(void)
     mode_cfg.link_margin_threshold = 40;
     mode_cfg.link_margin_good_time_sec = 2;
     mode_cfg.sample_count = MAIN_CHANNEL_FBK_3_SAMPLE_COUNT;
-    mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "48kHz ADPCM", mode_cfg, &sac_status);
+    mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "24kHz ADPCM", mode_cfg, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index,
                                      main_channel_sample_accumulator_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_downsampling_processing,
+    /* 1:4 instead of the 1:2 used by modes 1 and 2. Must stay mirrored by the headset's 4x
+     * upsampling on this same mode index, which is carried in the SAC header. */
+    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_downsampling4_processing,
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_compression_processing,
