@@ -2622,6 +2622,19 @@ static void app_init(void)
     facade_data_timer_start();
 }
 
+/** @brief AT+UWB_PAIR -- re-pair: drop the current pairing (if any), then enter pairing.
+ *
+ *  Unlike pairing_button_callback(), which is a three-way toggle (press once to unpair,
+ *  press again to pair), the AT command is a single action: the host asks for "re-pair"
+ *  once and expects the module to end up discoverable. Falling through from
+ *  unpair_device() -- which also erases the persisted address via reconnect_store_clear()
+ *  -- to enter_pairing_mode() is what makes that one command enough.
+ *
+ *  Note the link being down does NOT clear device_pairing_state: a device whose peer went
+ *  away still reads DEVICE_PAIRED, so this fall-through is the common case, not the rare
+ *  one. Re-sending while already DEVICE_PAIRING stays a no-op, so a host that repeats the
+ *  command cannot restart the pairing window.
+ */
 static void at_start_pairing(void)
 {
     /* See pairing_button_callback(): during boot auto-reconnect the teardown is
@@ -2635,7 +2648,6 @@ static void at_start_pairing(void)
     }
     if (device_pairing_state == DEVICE_PAIRED) {
         unpair_device();
-        return;
     }
     enter_pairing_mode();
 }
