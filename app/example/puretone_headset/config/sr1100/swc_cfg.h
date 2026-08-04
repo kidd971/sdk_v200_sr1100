@@ -17,6 +17,19 @@
 /* Pulse count for SR1100. */
 #define SR1100_PULSE_COUNT 1
 
+/* Inter-symbol interference mitigation level, applied to both roles through swc_node_cfg_t.
+ *
+ * Shipping value is SWC_ISI_MITIG_0, which is also what the zero-initialised node_cfg used to
+ * give implicitly; naming it here makes it a knob instead of an accident. Higher levels insert
+ * pauses between symbols and lengthen the preamble accordingly (swc_api.c:510), so they cost
+ * airtime -- the same budget that already refused FEC 2.00 inside a 250 us timeslot. A level
+ * that does not fit shows up as an assert during init, i.e. red LED at boot, not as degraded
+ * audio.
+ *
+ * Must be identical on the dongle and the headset: it changes the preamble both ends use to
+ * find each other. */
+#define NODE_ISI_MITIG SWC_ISI_MITIG_0
+
 /* Specifies the schedule configuration. */
 // clang-format off
 #define SCHEDULE                 \
