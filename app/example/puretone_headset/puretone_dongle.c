@@ -1369,9 +1369,30 @@ static void app_audio_core_init(void)
 
     /* Fallback mode 2 configuration. */
     mode_cfg = sac_fallback_mode_get_defaults();
-    mode_cfg.cca_bad_fail_count_threshold_perc = 60;
+    /* EXPERIMENT: leave mode 2 earlier than the shipping thresholds (60 / 48) did.
+     *
+     * Mode 2 is where the close-range dropouts are observed, and it is the thinnest rung on the
+     * ladder for retransmission: at an accumulator ratio of 1.7x each packet covers 0.71 ms, so
+     * against the coordinator's 7 slots per 2.25 ms cycle it gets only ~2.2 send opportunities --
+     * and it shares those slots with the data connection. Two collisions and the packet is gone.
+     * Mode 3 accumulates 2.3x and gets ~3.0.
+     *
+     * Buying more headroom inside mode 2 is not possible: it is uncompressed 48 kHz 16-bit, so a
+     * larger accumulator makes the payload larger in direct proportion, and the SWC fallback
+     * thresholds must stay in descending order (swc_api.c rejects otherwise, which is a red LED
+     * at init, not a degradation). Retransmission headroom in this architecture is bought with
+     * compression, not with accumulation -- which is exactly why SPARK's answer to the same
+     * problem was a mono rung rather than a bigger one.
+     *
+     * So instead of making mode 2 stronger, leave it sooner and let mode 3 absorb the congestion.
+     * Recovery thresholds are untouched, and mode 3 requires 10 s of good CCA plus 2 s of good
+     * link margin before climbing back, so this should not oscillate.
+     *
+     * Only the coordinator matters here -- trigger thresholds are computed under is_tx_device in
+     * sac_fallback_add_mode(), so the headset's copy of these numbers is inert. */
+    mode_cfg.cca_bad_fail_count_threshold_perc = 30;
     mode_cfg.cca_bad_time_sec = 0.1;
-    mode_cfg.consumer_buffer_load_threshold_tenths = 48;
+    mode_cfg.consumer_buffer_load_threshold_tenths = 25;
     mode_cfg.cca_good_fail_count_threshold_perc = 60;
     mode_cfg.cca_good_time_sec = 30;
     mode_cfg.link_margin_threshold = 40;
