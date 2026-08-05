@@ -225,8 +225,8 @@ void at_cmd_core_register_shutdown_cb(void (*cb)(void))
 
 void at_cmd_core_notify_build(const char *build_id)
 {
-    /* Holds "+EVENT: BUILD: " + AT_CMD_CORE_BUILD_ID (version + __DATE__ + __TIME__, ~27
-     * chars) + " role=DG\r\n", with room to spare if the version string grows. */
+    /* Holds "+EVENT: BUILD: " + AT_CMD_CORE_BUILD_ID (version + release tag + __DATE__ +
+     * __TIME__, ~32 chars) + " role=DG\r\n", with room to spare if the strings grow. */
     char buf[96];
 
     if (build_id == NULL) {

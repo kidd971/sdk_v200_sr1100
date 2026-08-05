@@ -40,6 +40,23 @@ extern "C" {
  */
 #define AT_CMD_CORE_SDK_VERSION  "v2.3.1"
 
+/** @brief Release / package tag for this binary, e.g. the ODM release candidate it belongs to.
+ *
+ *  Separate from AT_CMD_CORE_SDK_VERSION on purpose: that one names the SPARK SDK the
+ *  firmware is built from and is what AT+VER and AT+FW_VERSION answer, so an ODM package
+ *  label does not belong in it. This appears only in the BUILD banner and the crash-dump
+ *  build line -- the two places whose job is "which binary am I looking at".
+ *
+ *  Bump when cutting a package, and keep it equal to the bin/<tag>/ directory name so the
+ *  banner, the MANIFEST and the folder all agree. It is a convenience label and can go
+ *  stale: the __DATE__/__TIME__ next to it is what actually identifies a binary, and the
+ *  MANIFEST's git commit is what actually identifies the source. Overridable per build
+ *  (-DAT_CMD_CORE_RELEASE_TAG=\"rc08\") so a preset can stamp it without editing this file.
+ */
+#ifndef AT_CMD_CORE_RELEASE_TAG
+#define AT_CMD_CORE_RELEASE_TAG  "rc07"
+#endif
+
 /** @brief Version + compile timestamp identifying the exact binary.
  *
  *  Deliberately a macro rather than a string built inside at_cmd_core.c: __DATE__/__TIME__
@@ -49,7 +66,7 @@ extern "C" {
  *  stale, which defeats the whole point of printing it. Expanding at the call site also keeps
  *  it identical to the HS crash-dump build line, which uses the same two macros.
  */
-#define AT_CMD_CORE_BUILD_ID  AT_CMD_CORE_SDK_VERSION " " __DATE__ " " __TIME__
+#define AT_CMD_CORE_BUILD_ID  AT_CMD_CORE_SDK_VERSION " " AT_CMD_CORE_RELEASE_TAG " " __DATE__ " " __TIME__
 
 /** @brief UWB connection status codes reported by AT+UWB_CONN_STATUS?. */
 typedef enum {
