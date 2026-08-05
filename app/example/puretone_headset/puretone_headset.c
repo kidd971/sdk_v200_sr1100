@@ -13,7 +13,7 @@
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
 #include "at_cmd_core.h"
-#include "at_cmd_core_facade.h"  /* facade_expansion_uart_write: route link_watch to the AT UART pin */
+#include "at_cmd_core_facade.h"  /* facade_get_tick_ms, facade_system_reset */
 #include "pairing_api.h"
 #include "pairing_cfg.h"
 #include "puretone_headset_facade.h"
@@ -2268,7 +2268,8 @@ static void print_stats(void)
                                                  sizeof(stats_string) - string_length, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    /* Board-dependent routing: u535 -> AT/expansion UART (LPUART1); u5a5 EVK & others -> USB CDC. */
+    /* Board-dependent routing: u535 -> ST-Link VCP (UART4); u5a5 EVK & others -> USB CDC.
+     * Never the AT UART -- see emit_crash_dump() for why that distinction matters. */
     facade_stats_write(stats_string);
 
     /* ** APP Statistics ** */
@@ -2703,7 +2704,26 @@ static void app_init(void)
     ASSERT_SWC_STATUS(swc_err);
 
     at_cmd_core_set_device_address(pairing_assigned_address.node_address);
-    at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_CONNECTED);
+
+    /* Deliberately does NOT touch the AT connection status. swc_connect() only asks the
+     * Wireless Core to start; the link is not up yet, and whether it ever comes up is
+     * exactly what the caller is about to wait for. Claiming CONNECTED here silently --
+     * at_cmd_core_set_uwb_conn_status() writes the variable without emitting anything --
+     * stole the transition the status machine reports on, and both directions broke:
+     *
+     *   peer present: the reconnect poll saw the link the moment it came up and broke out
+     *     before at_cmd_core_process() ever ran, so the first poll found CONNECTED already
+     *     set and the link genuinely up. No transition, no UWB_CONNECTED. The host got
+     *     silence from a module that was streaming audio.
+     *   peer absent: the first poll found CONNECTED set and the link down, so it announced
+     *     UWB_DISCONNECTED for a link that had never connected -- and because the status was
+     *     no longer CONNECTING, the window that produces UWB_CONNECT_FAIL was gone too.
+     *
+     * The callers own the status instead: try_boot_reconnect() sets CONNECTING before
+     * calling us, and pairing hands over to STANDBY in at_cmd_core_notify_pairing_result()
+     * -- which carries a comment making the same point, so this lesson was already learned
+     * once on the pairing path and missed here. Either way the poll owns the transition
+     * into CONNECTED and the event that goes with it. */
 
     /* Initialize Audio Core. */
     app_audio_core_init();
@@ -3004,7 +3024,15 @@ static void emit_crash_dump(void)
     char buf[288];
 
     /* Board-dependent routing (same channel as print_stats via facade_stats_write):
-     * u535 -> AT/expansion UART (LPUART1); u5a5 EVK & others -> USB CDC. */
+     * u535 -> ST-Link VCP (UART4, PC10/PC11); u5a5 EVK & others -> USB CDC. This is a
+     * DIFFERENT peripheral from the AT console (u535 LPUART1 PA3/PA2, u5a5 USART2 PA2/PA3),
+     * which goes through facade_expansion_uart_write().
+     *
+     * Worth stating because the two are easy to conflate while debugging, and the wrong
+     * conclusion is the tempting one: seeing these dumps proves only that the main loop is
+     * alive -- at_cmd_core_process() runs in the same loop -- and says nothing about
+     * whether the AT UART can transmit. To answer that, look for +EVENT: BUILD: and
+     * UWB_READY on the AT port at boot. */
     facade_stats_write("\r\n+CRASH_DUMP:\r\n");
 
     /* Version + compile timestamp so the dump self-identifies the exact binary: __DATE__/
