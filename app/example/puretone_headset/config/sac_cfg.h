@@ -87,8 +87,27 @@
             MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE,                                            \
     }
 
-/* Accumulator settings. */
-#define MAIN_CHANNEL_MAX_ACC_MUL 23
+/* Accumulator settings.
+ *
+ * The accumulator sits BEFORE the resampler, so it is the only stage that changes how often a
+ * packet leaves: it releases one once it has collected N x 40 samples/ch at 96 kHz, whatever the
+ * resampler downstream turns those into. That makes it the only control over packet rate, and
+ * packet rate is what buys retransmission headroom -- the schedule hands the coordinator a fixed
+ * 7 slots per 2.25 ms cycle, one frame per slot under stop-and-wait ARQ, so attempts per packet
+ * is simply slots/s divided by packets/s.
+ *
+ * Mode 3 doubled from 23/10 to 46/10 for that reason. It is the same trick as folding two packets
+ * into one, and it lands the payload at exactly the 54 B it already was: the extra samples are
+ * paid for by carrying one header and one pair of ADPCM states instead of two. The SWC fallback
+ * thresholds therefore do not move.
+ *
+ *   mode 3 before:  92 samples/ch @96k -> 0.96 ms per packet -> 1043 pkt/s -> 3.0 attempts
+ *   mode 3 after:  184 samples/ch @96k -> 1.92 ms per packet ->  522 pkt/s -> 6.0 attempts
+ *
+ * This is the knob every earlier attempt missed. Dropping the rung to 24 kHz, raising FEC and
+ * raising ISI all changed how likely a single transmission is to survive; none of them changed
+ * how many transmissions a packet gets, which is what a sudden obstruction actually consumes. */
+#define MAIN_CHANNEL_MAX_ACC_MUL 46
 #define MAIN_CHANNEL_MAX_ACC_DIV 10
 
 #define MAIN_CHANNEL_ACC_MUL \
@@ -96,7 +115,7 @@
         1,                   \
         17,                  \
         17,                  \
-        23,                  \
+        46,                  \
     }
 #define MAIN_CHANNEL_ACC_DIV \
     {                        \

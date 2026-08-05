@@ -41,7 +41,7 @@
 
 /* CONSTANTS ******************************************************************/
 /* Total memory needed for the Audio Core. */
-#define SAC_MEM_POOL_SIZE 52000
+#define SAC_MEM_POOL_SIZE 68000
 /* Total memory needed for the Wireless Core. */
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
