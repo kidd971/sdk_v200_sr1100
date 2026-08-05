@@ -161,11 +161,28 @@ void at_cmd_core_notify_build(const char *build_id);
 void at_cmd_core_notify_uwb_ready(void);
 
 /**
- * @brief Move the status to Pairing for the duration of the pairing procedure.
+ * @brief Send +EVENT: UWB_UNPAIRED to the external MCU.
+ *
+ * Call from the application's unpair path, after the persisted pairing address has been
+ * erased. Tells the host the difference the link events cannot express: UWB_DISCONNECTED
+ * means the peer is unreachable but still remembered, so AT+UWB_CONNECT is worth sending;
+ * UWB_UNPAIRED means the stored address is gone, so only AT+UWB_PAIR can get the link back.
+ *
+ * Additive: the status is left alone, so the normal poll still emits UWB_DISCONNECTED
+ * afterwards and a host that only knows that event is unaffected.
+ */
+void at_cmd_core_notify_unpaired(void);
+
+/**
+ * @brief Send +EVENT: UWB_PAIRING and move the status to Pairing for the procedure.
  *
  * Call when entering pairing. Link polling is suspended while the status is Pairing, so the
  * torn-down wireless core is not misreported as a dropped link. Always pair this with
  * at_cmd_core_notify_pairing_result(), which is what releases the status again.
+ *
+ * The event is what lets the host show a pairing indication: the pairing call blocks for the
+ * whole window with the status parked, so UWB_PAIRING and the eventual UWB_PAIRED /
+ * UWB_PAIR_FAIL are the only two things the host hears about the procedure.
  */
 void at_cmd_core_notify_pairing_started(void);
 

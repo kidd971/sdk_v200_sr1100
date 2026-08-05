@@ -2487,6 +2487,10 @@ static void unpair_device(void)
 
     facade_audio_deinit();
 
+    /* Tell the host the record is gone, not just the link. Sent here rather than from the
+     * callers so both of them -- the pairing button and AT+UWB_PAIR -- report it. */
+    at_cmd_core_notify_unpaired();
+
     /* Indicate that the device is unpaired. */
     facade_led_all_off();
     facade_notify_not_paired();

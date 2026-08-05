@@ -243,12 +243,29 @@ void at_cmd_core_notify_uwb_ready(void)
     facade_expansion_uart_write("+EVENT: UWB_READY\r\n");
 }
 
+void at_cmd_core_notify_unpaired(void)
+{
+    /* Deliberately does NOT touch s_uwb_conn_status. The link really is going down, so the
+     * poll should still emit its UWB_DISCONNECTED as it always did -- a host that only knows
+     * the old event keeps working. This line is the extra bit of information on top: the
+     * peer was not merely unreachable, the stored address is gone, so reconnecting is not
+     * something AT+UWB_CONNECT can do. Only AT+UWB_PAIR can. */
+    facade_expansion_uart_write("+EVENT: UWB_UNPAIRED\r\n");
+}
+
 void at_cmd_core_notify_pairing_started(void)
 {
     /* Puts the status machine on hold: link polling is meaningless while the wireless core is
      * torn down for pairing, and without this the poll reported a dropped link and emitted a
      * spurious UWB_DISCONNECTED on the way in. */
     s_uwb_conn_status = AT_UWB_CONN_STATUS_PAIRING;
+
+    /* Announce the window. pairing_node_start() / pairing_coordinator_start() block for up to
+     * PAIRING_TIMEOUT_IN_SECONDS, and the status is parked at PAIRING for all of it, so
+     * without this line the host sees nothing at all between the command and the result --
+     * no way to light a "pairing" indication for the one state where the user is waiting and
+     * watching. Sent before the blocking call so it is on the wire when the window opens. */
+    facade_expansion_uart_write("+EVENT: UWB_PAIRING\r\n");
 }
 
 void at_cmd_core_notify_pairing_result(bool success)
