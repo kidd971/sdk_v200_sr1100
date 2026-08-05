@@ -2895,7 +2895,29 @@ static void at_start_shutdown(void)
 
 static bool at_get_link_status(void)
 {
-    return device_pairing_state == DEVICE_PAIRED;
+    swc_error_t swc_err = SWC_ERR_NONE;
+
+    /* device_pairing_state alone only says "the app believes it is paired" -- it is set
+     * unconditionally right after app_init(), so it reported a link that may never have
+     * come up. Ask the Wireless Core instead. Non-asserting read, like link_watch(), so a
+     * status poll during a drop cannot itself trap.
+     *
+     * Returning the app's belief did not merely report the wrong value once, it silenced
+     * the whole status machine: it went true the instant try_boot_reconnect() marked the
+     * device paired, so the poll left CONNECTING immediately and emitted UWB_CONNECTED a
+     * few hundred ms after boot whether or not a peer existed -- and then, because it
+     * stayed true for as long as the device was paired, no transition was ever detected
+     * again. UWB_DISCONNECTED could not fire at all, and UWB_CONNECT_FAIL never got the
+     * chance to. The host saw one bogus connect and then silence.
+     *
+     * The main audio connection is the one to ask: it runs with ACKs, so its status is
+     * driven by real over-the-air traffic (bad frames for 20 ms -> disconnected, one good
+     * frame -> connected). rx_audio_conn is the node's side of it, and is the same handle
+     * try_boot_reconnect() already polls. */
+    if (device_pairing_state != DEVICE_PAIRED || rx_audio_conn == NULL) {
+        return false;
+    }
+    return swc_connection_get_connect_status(rx_audio_conn, &swc_err);
 }
 
 static int32_t at_get_link_margin(void)
