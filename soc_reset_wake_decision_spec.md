@@ -35,7 +35,7 @@ SoC 心裡維護一個 module 狀態機:
 
 | SoC 眼中的狀態 | 意義 | 進入條件 |
 |---|---|---|
-| `ASLEEP` | module 在 Standby,UART 死,只有 NRST 能叫醒 | 送過 DISCONNECT、或 module reconnect 逾時自己睡、或收到 CONNECT_FAIL 後轉靜默 |
+| `ASLEEP` | module 在 Standby,UART 死,只有 NRST 能叫醒 | **收到 `+EVENT: UWB_STANDBY`**(明確宣告,不用再靠靜默推斷);送過 DISCONNECT、或 module reconnect 逾時自己睡都會發這行 |
 | `WAKING` | 剛拉 NRST,等 module 開機 | 拉 NRST 後 |
 | `SEARCHING` | module 醒著、正在 reconnect | 收到開機 banner / `+EVENT: UWB_READY`,尚未 CONNECTED |
 | `CONNECTED` | link 真的起來、在串流 | 收到 `+EVENT: UWB_CONNECTED` |
@@ -47,7 +47,11 @@ SoC 心裡維護一個 module 狀態機:
 
 三個來源交叉判斷:
 
-1. **AT 事件**(module 主動吐):`+EVENT: UWB_READY`(開機就緒)/ `UWB_CONNECTED` / `UWB_DISCONNECTED` / `UWB_CONNECT_FAIL` / `UWB_QUALITY:WEAK|GOOD` / `UWB_UNPAIRED` / `UWB_PAIRING` / `UWB_PAIRED` / `UWB_PAIR_FAIL`。
+1. **AT 事件**(module 主動吐):`+EVENT: UWB_READY`(開機就緒)/ `UWB_CONNECTED` / `UWB_DISCONNECTED` / `UWB_STANDBY` / `UWB_CONNECT_FAIL` / `UWB_QUALITY:WEAK|GOOD` / `UWB_UNPAIRED` / `UWB_PAIRING` / `UWB_PAIRED` / `UWB_PAIR_FAIL`。
+   - ⚠️ **`UWB_DISCONNECTED` 後面有沒有跟一行 `UWB_STANDBY`,決定 SoC 該不該繼續講話**:
+     - 只有 `UWB_DISCONNECTED` → 對端不在,但 **module 還醒著**,SWC 會自己 re-sync。SoC 照常下 AT,等它自己 `UWB_CONNECTED` 回來,**不要 NRST**。
+     - `UWB_DISCONNECTED` + `UWB_STANDBY` → module **下一行就斷電**,UART 即將沒有回應,只有 NRST 叫得醒。SoC 這時才進 `ASLEEP` 狀態、開始跑 §5 的重試迴圈。
+     - 兩行都是 blocking TX,保證在斷電前送完。
    - ⚠️ **`UWB_DISCONNECTED` 跟 `UWB_UNPAIRED` 不一樣,SoC 的處置相反**:前者是「對端不在,但 flash 還記得它」→ 重試迴圈(NRST / `AT+UWB_CONNECT`)有意義;後者是「配對記錄已被抹掉」→ 再怎麼重試都連不上,只有 `AT+UWB_PAIR` 有用。收到 `UWB_UNPAIRED` 就該**停掉重試迴圈**並顯示未配對。
    - `UWB_UNPAIRED` **只在記錄真的被抹掉時**才發,也就是按鍵單押解除配對那條路;`AT+UWB_PAIR` 不會發(它保留舊記錄,見 §6)。順序是 `UWB_UNPAIRED` 在前、`UWB_DISCONNECTED` 在後(後者由既有的 link 輪詢發出)。只認得舊事件的 host 不受影響。
 2. **AT 查詢**:`AT+UWB_CONN_STATUS?` → `0=Standby / 1=Pairing / 2=Connected / 3=Connecting`;`AT+CONN_LM?` → link margin。

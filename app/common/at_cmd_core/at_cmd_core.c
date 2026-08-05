@@ -285,6 +285,14 @@ void at_cmd_core_notify_standby(void)
      * complete, so the bytes are on the wire before the module loses power. */
     s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
     facade_expansion_uart_write("+EVENT: UWB_DISCONNECTED\r\n");
+
+    /* Then say which kind of disconnect this is. UWB_DISCONNECTED alone used to imply the
+     * power-down, because it was the only path that could emit it on the node -- the link
+     * poll was reading the application's own "am I paired" flag and so never saw a drop.
+     * With the poll fixed, a peer walking away emits the same line while the module stays
+     * up and re-syncs by itself, which is the opposite of what the host should do here:
+     * this UART is about to stop answering, and only a reset brings it back. */
+    facade_expansion_uart_write("+EVENT: UWB_STANDBY\r\n");
 }
 
 void at_cmd_core_register_pair_cb(void (*cb)(void))

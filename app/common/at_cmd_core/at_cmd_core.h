@@ -197,12 +197,19 @@ void at_cmd_core_notify_pairing_started(void);
 void at_cmd_core_notify_pairing_result(bool success);
 
 /**
- * @brief Set the status to Standby and send +EVENT: UWB_DISCONNECTED to the external MCU.
+ * @brief Set the status to Standby and send +EVENT: UWB_DISCONNECTED then +EVENT: UWB_STANDBY.
  *
- * Call immediately before powering the module down (facade_enter_standby()). The normal
- * status machine cannot report this: entering Standby does not return, so at_cmd_core_process()
- * never runs again and the host would only see the UART fall silent, which is
- * indistinguishable from a crash.
+ * Call immediately before powering the module down (facade_enter_standby()), and only there.
+ * The normal status machine cannot report this: entering Standby does not return, so
+ * at_cmd_core_process() never runs again and the host would only see the UART fall silent,
+ * which is indistinguishable from a crash.
+ *
+ * UWB_STANDBY is what separates this from an ordinary drop. UWB_DISCONNECTED on its own
+ * comes from the link poll and means the peer is gone while the module stays up and
+ * re-syncs by itself, so the host should keep talking to it. Here it means the opposite:
+ * this UART stops answering on the next line, and only a reset (SoC NRST, or a WKUP button)
+ * brings it back. Both writes block until the bytes are on the wire, so they survive the
+ * power-down that follows.
  */
 void at_cmd_core_notify_standby(void);
 
