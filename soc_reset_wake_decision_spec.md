@@ -127,7 +127,7 @@ loop while 使用者仍想要 UWB 且未 CONNECTED:
   ```
   SoC : AT+UWB_PAIR
   MCU : OK
-  MCU : +EVENT: UWB_PAIRING      ← 配對窗開始,10s;SoC 在這裡點配對燈效
+  MCU : +EVENT: UWB_PAIRING      ← 配對窗開始(見 §9);SoC 在這裡點配對燈效
   MCU : +EVENT: UWB_PAIRED       ← 成功,新配對已寫入 flash
         或 +EVENT: UWB_PAIR_FAIL ← 逾時/中止,舊配對原封不動還在
   ```
@@ -189,6 +189,7 @@ SoC : 拉 NRST → 重跑 reconnect
 | `AT_UWB_CONNECT_TIMEOUT_MS` | 5000 | `+EVENT: UWB_CONNECT_FAIL` 送出時機(比整輪早,別當成「這輪結束」) |
 | module 開機到 `UWB_READY` | ~數百 ms(實測為準) | `WAKING` 逾時 `T_boot` 抓 ~2s |
 | 一輪總長 | ≈ 開機 + 10s | SoC backoff 節奏的基準 |
+| `PAIRING_TIMEOUT_IN_SECONDS` | **12(開發值)** | `UWB_PAIRING` 到 `UWB_PAIRED`/`UWB_PAIR_FAIL` 的窗長。⚠️ **出貨要改 30**:兩端是人手一前一後觸發,光按壓就吃掉一大半,12s 是板上開發用的值,不是給終端使用者的。改 `pairing_cfg.h` 或 preset 給 `-DPAIRING_TIMEOUT_IN_SECONDS=30` |
 
 ---
 
