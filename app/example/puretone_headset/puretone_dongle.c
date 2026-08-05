@@ -376,7 +376,7 @@ typedef enum {
 
 /* **** Button Actions **** */
 static void enter_pairing_mode(void);
-static void unpair_device(void);
+static void unpair_device(bool forget_peer);
 static boot_reconnect_result_t try_boot_reconnect(void);
 static void abort_pairing_procedure(void);
 
@@ -2262,7 +2262,9 @@ static void pairing_button_callback(void)
 
     switch (device_pairing_state) {
     case DEVICE_PAIRED:
-        unpair_device();
+        /* A deliberate "forget this peer": the press means the user is removing the
+         * device, so the record goes with it. Contrast at_start_pairing(). */
+        unpair_device(true);
         break;
     case DEVICE_PAIRING:
         abort_pairing_procedure();
@@ -2442,8 +2444,13 @@ static boot_reconnect_result_t try_boot_reconnect(void)
 }
 
 /** @brief Unpair the device. This will reset its discovery list.
+ *
+ *  @param[in] forget_peer  true to also erase the persisted pairing address, so the next
+ *                          boot does not reconnect to the peer that was just dropped.
+ *                          false to tear the link down but keep the record, which is what
+ *                          re-pairing wants: see at_start_pairing().
  */
-static void unpair_device(void)
+static void unpair_device(bool forget_peer)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
@@ -2467,9 +2474,11 @@ static void unpair_device(void)
     /* Reset the pairing discovery list. */
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
 
-    /* Erase the persisted pairing address so the next boot does not reconnect
-     * to the device the user just removed (boot auto-reconnect). */
-    reconnect_store_clear();
+    if (forget_peer) {
+        /* Erase the persisted pairing address so the next boot does not reconnect
+         * to the device the user just removed (boot auto-reconnect). */
+        reconnect_store_clear();
+    }
 
     /* Stop the main channel audio pipeline. */
     sac_pipeline_stop(main_channel_sac_pipeline, &sac_status);
@@ -2487,9 +2496,12 @@ static void unpair_device(void)
 
     facade_audio_deinit();
 
-    /* Tell the host the record is gone, not just the link. Sent here rather than from the
-     * callers so both of them -- the pairing button and AT+UWB_PAIR -- report it. */
-    at_cmd_core_notify_unpaired();
+    if (forget_peer) {
+        /* Tell the host the record is gone, not just the link -- the two call for opposite
+         * handling. Reported from here so it tracks the erase itself: a teardown that keeps
+         * the record must not claim the device was unpaired. */
+        at_cmd_core_notify_unpaired();
+    }
 
     /* Indicate that the device is unpaired. */
     facade_led_all_off();
@@ -2631,13 +2643,22 @@ static void app_init(void)
  *  Unlike pairing_button_callback(), which is a three-way toggle (press once to unpair,
  *  press again to pair), the AT command is a single action: the host asks for "re-pair"
  *  once and expects the module to end up discoverable. Falling through from
- *  unpair_device() -- which also erases the persisted address via reconnect_store_clear()
- *  -- to enter_pairing_mode() is what makes that one command enough.
+ *  unpair_device() to enter_pairing_mode() is what makes that one command enough.
  *
  *  Note the link being down does NOT clear device_pairing_state: a device whose peer went
  *  away still reads DEVICE_PAIRED, so this fall-through is the common case, not the rare
  *  one. Re-sending while already DEVICE_PAIRING stays a no-op, so a host that repeats the
  *  command cannot restart the pairing window.
+ *
+ *  The teardown passes forget_peer=false, so re-pairing is a replace rather than an
+ *  erase-then-hope: the old record survives until enter_pairing_mode() overwrites it on
+ *  success. Pairing needs BOTH ends inside the same window (UWB is the only channel
+ *  between them, so with the link down neither can tell the other to re-pair), which makes
+ *  a mistimed attempt the normal kind of failure, not an exotic one -- and erasing up front
+ *  would turn every one of them into a permanently lost pairing. On PAIR_FAIL the module is
+ *  simply back where it started, and AT+UWB_CONNECT resets it into boot auto-reconnect,
+ *  which reloads the kept record. Same policy as try_boot_reconnect(): a peer that cannot
+ *  be reached is not a reason to forget it.
  */
 static void at_start_pairing(void)
 {
@@ -2651,7 +2672,7 @@ static void at_start_pairing(void)
         return;
     }
     if (device_pairing_state == DEVICE_PAIRED) {
-        unpair_device();
+        unpair_device(false); /* keep the record until the new pairing replaces it */
     }
     enter_pairing_mode();
 }

@@ -49,7 +49,7 @@ SoC 心裡維護一個 module 狀態機:
 
 1. **AT 事件**(module 主動吐):`+EVENT: UWB_READY`(開機就緒)/ `UWB_CONNECTED` / `UWB_DISCONNECTED` / `UWB_CONNECT_FAIL` / `UWB_QUALITY:WEAK|GOOD` / `UWB_UNPAIRED` / `UWB_PAIRING` / `UWB_PAIRED` / `UWB_PAIR_FAIL`。
    - ⚠️ **`UWB_DISCONNECTED` 跟 `UWB_UNPAIRED` 不一樣,SoC 的處置相反**:前者是「對端不在,但 flash 還記得它」→ 重試迴圈(NRST / `AT+UWB_CONNECT`)有意義;後者是「配對記錄已被抹掉」→ 再怎麼重試都連不上,只有 `AT+UWB_PAIR` 有用。收到 `UWB_UNPAIRED` 就該**停掉重試迴圈**並顯示未配對。
-   - 解除配對(按鍵單押 或 `AT+UWB_PAIR`)兩件事都會發生,順序是 `UWB_UNPAIRED` 在前、`UWB_DISCONNECTED` 在後(後者由既有的 link 輪詢發出)。只認得舊事件的 host 不受影響。
+   - `UWB_UNPAIRED` **只在記錄真的被抹掉時**才發,也就是按鍵單押解除配對那條路;`AT+UWB_PAIR` 不會發(它保留舊記錄,見 §6)。順序是 `UWB_UNPAIRED` 在前、`UWB_DISCONNECTED` 在後(後者由既有的 link 輪詢發出)。只認得舊事件的 host 不受影響。
 2. **AT 查詢**:`AT+UWB_CONN_STATUS?` → `0=Standby / 1=Pairing / 2=Connected / 3=Connecting`;`AT+CONN_LM?` → link margin。
    - ⚠️ `2=Connected` **不等於 link 健康**(scheduler 有 silent wedge 盲區),要交叉「有沒有真的在收音訊」判斷(見 `uwb_disconnect_decision_spec.md` §4)。
 3. **SoC 自己的記帳**:我有沒有叫它睡、我剛剛有沒有拉 NRST。用來區分「預期中的睡」vs「異常掛掉」。
@@ -122,17 +122,20 @@ loop while 使用者仍想要 UWB 且未 CONNECTED:
   1. 若 module 在 Standby → 先拉 NRST 叫醒 → 等 `UWB_READY` → 再送 `AT+UWB_PAIR`;
   2. 或(若有 strap)reset 期間拉一支 strap GPIO 讓 module 開機時判定進 pairing。目前 module 端無此 strap,走 (1)。
 - **切回 BT / 不用 UWB**:送 `AT+UWB_DISCONNECT` 讓 module 自己進 Standby(不是 NRST)。
-- **`AT+UWB_PAIR` 是單一動作**:一條指令就會「解除舊配對(抹掉 flash 記錄)+ 進入配對窗」,不用送兩次。序列固定是:
+- **`AT+UWB_PAIR` 是單一動作**:一條指令就會「拆掉現有連線 + 進入配對窗」,不用送兩次。序列固定是:
 
   ```
   SoC : AT+UWB_PAIR
   MCU : OK
-  MCU : +EVENT: UWB_UNPAIRED     ← 舊記錄沒了(本來就沒配對過則不會有這行)
   MCU : +EVENT: UWB_PAIRING      ← 配對窗開始,10s;SoC 在這裡點配對燈效
-  MCU : +EVENT: UWB_PAIRED       ← 成功;或 UWB_PAIR_FAIL(逾時/中止)
+  MCU : +EVENT: UWB_PAIRED       ← 成功,新配對已寫入 flash
+        或 +EVENT: UWB_PAIR_FAIL ← 逾時/中止,舊配對原封不動還在
   ```
 
   配對窗期間 `AT+UWB_CONN_STATUS?` 回 `1=Pairing`,重複送 `AT+UWB_PAIR` 是 no-op(**不會**把窗重新計時)。
+- **重配對是「取代」不是「先清掉再賭」**:`AT+UWB_PAIR` **不會**預先抹掉舊記錄,舊記錄一直留到新配對成功才被覆寫。所以配對失敗不會損失既有配對——這很重要,因為配對需要兩端同時進窗,配失敗是**常態**而非例外。
+  - 收到 `UWB_PAIR_FAIL` 後 SoC 有兩條路:再試一次 `AT+UWB_PAIR`(記得叫使用者同時操作另一端),或送 `AT+UWB_CONNECT` 放棄重配、回到原本的對象(module 會 reset 進 boot auto-reconnect,重新讀回保留的記錄)。
+  - 這跟 §5 重試迴圈的政策一致:連不上不等於要忘記。**唯一會真的抹掉記錄的是按鍵單押解除配對**,那時才會收到 `UWB_UNPAIRED`。
 - **兩端都要各自進配對**:HS 與 DG 之間唯一的通道就是 UWB 本身,沒連線時一端無法通知另一端。所以重配對必須兩邊分別觸發(HS 按鍵/AT、DG 按鍵/AT),並落在同一個配對窗內——跟藍牙配對一樣的心智模型。單邊送 `AT+UWB_PAIR` 只會等到 `UWB_PAIR_FAIL`。
 
 ---
