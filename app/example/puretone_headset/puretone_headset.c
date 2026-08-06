@@ -85,6 +85,18 @@
 #define CRASH_DUMP_PERIODIC_MS 2000
 #endif
 
+/* The four extra lines the dump can carry -- hw:, sched:, tim4:, fault: -- exist for the
+ * dual-radio wedge hunt: radio IRQ/DMA liveness, whether the scheduler timer is still
+ * ticking, the raw TIM4 registers behind a park, and the last HardFault snapshot. None of
+ * them move during audio work, and at one dump every CRASH_DUMP_PERIODIC_MS they bury the
+ * one line that does. Off by default; set to 1 when chasing a wedge or a fault again.
+ *
+ * The build= and swc=/conn= lines are never gated -- the first identifies which binary is
+ * running, the second is the counters worth watching. */
+#ifndef CRASH_DUMP_HW_DETAIL
+#define CRASH_DUMP_HW_DETAIL 0
+#endif
+
 /* Periodic print_stats() dump. Turned OFF by default on this debug branch so the
  * CDC log is quiet enough to watch the crash-dump / assert-trap lines. print_stats()
  * is also one of the assert-trap sources (see ASSERT_SWC/SAC_STATUS inside it), so
@@ -99,12 +111,16 @@
  * printing) so the polled buttons are still serviced — as long as you DON'T press the
  * pairing button (USER_1), which traps in unpair_device()->swc_disconnect. So we
  * repurpose the two volume buttons as non-trapping recovery tests you can press WHILE
- * wedged, to fill in the recovery matrix without pulling board power:
- *   USER_3 (vol+) -> dbg_soft_reset(): MCU reset only, radio stays powered.
- *   USER_4 (vol-) -> dbg_radio_por():  assert both radios' shutdown pins + hold + MCU reset.
- * Outcome tells us whether the SR1100 latch clears on a plain reboot, only after an
- * explicit radio power-down, or only after real board-power removal (deep POR).
- * Set to 0 to restore normal volume buttons. */
+ * wedged, to fill in the recovery matrix without pulling board power. Outcome tells us
+ * whether the SR1100 latch clears on a plain reboot, only after an explicit radio
+ * power-down, or only after real board-power removal (deep POR).
+ *
+ * That matrix is filled in, so only one button stays borrowed:
+ *   USER_3 (vol+) -> normal volume up.
+ *   USER_4 (vol-) -> dbg_soft_reset(): MCU reset only, radio stays powered.
+ * dbg_radio_por() (shutdown pins + hold + MCU reset) is still in the file; swap it onto
+ * USER_4 when a wedge session needs it again.
+ * Set to 0 to restore both volume buttons. */
 #ifndef LATCH_TEST_HOOKS
 #define LATCH_TEST_HOOKS 1
 #endif
@@ -407,7 +423,7 @@ static void change_fallback_state(void);
 /* Unreferenced while STANDBY_TEST_HOOKS owns USER_3; kept so setting that flag to 0 hands
  * the button back to LATCH_TEST_HOOKS unchanged. */
 static void dbg_soft_reset(void) __attribute__((unused));
-static void dbg_radio_por(void);
+static void dbg_radio_por(void) __attribute__((unused));
 #endif
 
 /* **** Processing Stages **** */
@@ -495,9 +511,13 @@ int main(void)
         .volume_up_callback = at_start_disconnect,
         .volume_down_callback = dbg_radio_por,
 #elif LATCH_TEST_HOOKS
-        /* Volume buttons repurposed as latch-recovery tests (see LATCH_TEST_HOOKS). */
-        .volume_up_callback = dbg_soft_reset,
-        .volume_down_callback = dbg_radio_por,
+        /* Only USER_4 stays repurposed, as a plain MCU reset. The wedge matrix this pair was
+         * built for is filled in, and during audio work the cost of holding both volume keys
+         * outweighs it -- USER_3 goes back to being volume up. Reset sits on the last button
+         * so a reach for volume cannot land on it by accident. dbg_radio_por() is left in the
+         * file for the next wedge session; put it back on this button to use it. */
+        .volume_up_callback = volume_up,
+        .volume_down_callback = dbg_soft_reset,
 #else
         .volume_up_callback = volume_up,
         .volume_down_callback = volume_down,
@@ -3047,6 +3067,7 @@ static void emit_crash_dump(void)
     }
     facade_stats_write(buf);
 
+#if CRASH_DUMP_HW_DETAIL
     /* Dual-radio HW liveness counters (u535 & u5a5 dual-radio BSPs). */
     uint32_t r1_irq, r2_irq, r1_dma, r2_dma;
     if (facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma)) {
@@ -3095,6 +3116,7 @@ static void emit_crash_dump(void)
         snprintf(buf, sizeof(buf), " fault: N/A\r\n");
     }
     facade_stats_write(buf);
+#endif /* CRASH_DUMP_HW_DETAIL */
 }
 
 static void at_play(void)
