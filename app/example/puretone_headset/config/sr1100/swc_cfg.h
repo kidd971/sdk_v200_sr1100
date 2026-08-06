@@ -22,13 +22,27 @@
  * Shipping value is SWC_ISI_MITIG_0, which is also what the zero-initialised node_cfg used to
  * give implicitly; naming it here makes it a knob instead of an accident. Higher levels insert
  * pauses between symbols and lengthen the preamble accordingly (swc_api.c:510), so they cost
- * airtime -- the same budget that already refused FEC 2.00 inside a 250 us timeslot. A level
- * that does not fit shows up as an assert during init, i.e. red LED at boot, not as degraded
- * audio.
+ * airtime -- the same budget that already refused FEC 2.00 inside a 250 us timeslot.
+ *
+ * Level 2 is what close-range obstruction wanted. Obstruction is a non-line-of-sight case: the
+ * direct path is gone and what arrives is reflections, so packets land corrupted rather than not
+ * at all -- rx_rej climbing while rx_ok holds is the signature -- and that is precisely what ISI
+ * mitigation is for. Level 1, which is what SPARK's reference demo ships, was not enough.
+ *
+ * Level 3 does not work here, and not by a small margin: it crackles with no obstruction at all.
+ * The preamble belongs to the connection, not to a fallback mode, so it has to fit the largest
+ * payload on the ladder -- mode 0's 242 B -- inside a 250 us slot. At level 3 it no longer
+ * reliably does. Note the failure is audible corruption at the TOP of the ladder, not the red
+ * LED at init that an unaffordable FEC gave: this one fits well enough to boot and link.
+ *
+ * Level 2 only pays off alongside the 4.6x accumulator on mode 3. Either one alone left the
+ * dropouts unchanged: ISI raises the odds of decoding a single attempt through multipath, the
+ * accumulator supplies enough attempts for those odds to cash in. Three attempts at good odds
+ * and six attempts at bad odds both lose.
  *
  * Must be identical on the dongle and the headset: it changes the preamble both ends use to
  * find each other. */
-#define NODE_ISI_MITIG SWC_ISI_MITIG_1
+#define NODE_ISI_MITIG SWC_ISI_MITIG_2
 
 /* Specifies the schedule configuration. */
 // clang-format off
