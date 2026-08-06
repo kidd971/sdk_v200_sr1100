@@ -42,10 +42,16 @@
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
 #define MAIN_CHANNEL_FBK_2_SAMPLE_COUNT 34
-/* Mode 3 is 24 kHz: the accumulator produces 2.3 x 40 = 92 samples/ch at 96 kHz, and 92 / 4 = 23
- * divides exactly. At 4 bit/sample that puts 23 B + 8 B of header on the air against the 54 B the
- * 48 kHz rung used, so the SWC fallback thresholds stay in descending order (206 / 138 / 31). */
-#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT 23
+/* Mode 3 is 24 kHz at a 4.6x accumulator: 4.6 x 40 = 184 samples/ch at 96 kHz, and 184 / 4 = 46
+ * divides exactly. At 4 bit/sample that is 46 B of audio plus 8 B of header = the same 54 B the
+ * 48 kHz rung used, so the SWC fallback thresholds stay put at 206 / 138 / 54.
+ *
+ * This has to track MAIN_CHANNEL_ACC_MUL. The fallback stage copies it into
+ * pipeline->_internal.current_sample_count once per packet, and the headset's interpolator
+ * rejects any packet that does not match (sac_src_cmsis.c:479) -- so a stale value here is not a
+ * glitch, it is every mode 3 packet dropped and total silence on that rung, with src_bad on the
+ * LINK_WATCH line counting them. */
+#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT 46
 
 /* A header is added to audio samples during fallback. */
 #define MAIN_CHANNEL_FALLBACK_HEADER_SIZE sizeof(sac_header_t)
