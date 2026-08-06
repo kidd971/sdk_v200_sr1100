@@ -32,11 +32,19 @@
 #define MAIN_CHANNEL_CHANNEL_COUNT  2
 #define MAIN_CHANNEL_BIT_DEPTH      24
 /* Maximum Latency. */
+/* Caps every per-mode latency below, because the consumer endpoint queue is sized from it --
+ * raising a mode past this value asks for a target the queue cannot physically hold. */
 #define MAIN_CHANNEL_MAX_LATENCY_MS 15
 /* Fallback modes Latency. */
 #define MAIN_CHANNEL_FBK_0_LATENCY_MS 5
 #define MAIN_CHANNEL_FBK_1_LATENCY_MS 7
 #define MAIN_CHANNEL_FBK_2_LATENCY_MS 10
+/* Buffer depth is how long an outage the rung can ride out: once the consumer queue drains,
+ * no amount of retransmission helps because the retried packet misses its playback deadline.
+ * A hand or body blocking the path lasts hundreds of ms, against which 15 ms of buffer was
+ * never going to be enough -- which is the piece the accumulator and ISI work did not address.
+ * SPARK's ladder widens the same way on the way down (5 / 7 / 10 / 15 / 20 for their mono
+ * rung), and the cost is only paid on the rung the link falls to, never in normal playback. */
 #define MAIN_CHANNEL_FBK_3_LATENCY_MS 15
 /* Fallback modes sample count. */
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40

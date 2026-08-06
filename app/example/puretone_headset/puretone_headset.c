@@ -308,6 +308,16 @@ static sac_processing_t *main_channel_upsampling4_processing;
  * Stays zero on a healthy link at any mode. Reported on the LINK_WATCH line as src_bad=. */
 static volatile uint32_t dbg_src_bad_size_count;
 static volatile uint8_t dbg_src_bad_size_at_mode = 0xFF;
+/* Low-water mark of the consumer queue that feeds the codec, sampled on every audio DMA
+ * completion and reset each time LINK_WATCH prints it.
+ *
+ * This is what a dropout is actually made of: the queue reaching 0 is the audible break, and
+ * everything upstream -- retransmission attempts, ISI level, buffer depth -- only matters through
+ * its effect on this number. It is also far more sensitive than listening, now that obstruction
+ * costs one or two breaks a run: qmin falling from 20 to 3 says a change helped even when nothing
+ * was audible either way, and qmin still touching 0 says it did not, whatever the ear reports.
+ * UINT32_MAX means not sampled yet. */
+static volatile uint32_t dbg_q_min = UINT32_MAX;
 static sac_mute_packet_instance_t main_channel_mute_packet_instance;
 static sac_processing_t *main_channel_mute_packet_processing;
 static sac_packing_instance_t main_channel_fbk_unpacking_instance;
@@ -1987,6 +1997,15 @@ static void main_channel_audio_tx_complete_callback(void)
     facade_app_audio_cdc_set_target_queue_size(main_channel_accumulator_pipeline, target_queue_size, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
+    /* Sample the queue before consuming from it -- this is the every-DMA sampling that makes
+     * dbg_q_min meaningful. Reading it only in link_watch() at 2 Hz would miss the dip entirely,
+     * since an obstruction empties and refills the queue well inside one print interval. */
+    uint32_t q_load = sac_pipeline_get_consumer_buffer_load(main_channel_accumulator_pipeline, &sac_status);
+
+    if (q_load < dbg_q_min) {
+        dbg_q_min = q_load;
+    }
+
     sac_pipeline_consume(main_channel_accumulator_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 }
@@ -2143,6 +2162,7 @@ static void link_watch(void)
     static bool initialized;
     static bool prev_connected;
     static uint32_t rxmiss_prev;
+    static uint32_t rxrej_prev;
     static uint32_t rxmiss_prev_tick;
     static bool rxmiss_prev_valid;
 
@@ -2178,14 +2198,29 @@ static void link_watch(void)
      * axis: a high miss/s that tracks the DG being healthy (prod~2400) means the empties are the
      * fallback-mode slot occupancy, not starvation. Normalized to /s over the real interval. */
     uint32_t rxmiss_rate = 0;
+    /* rx_rej is the one that moves under obstruction: a blocked direct path leaves reflections, so
+     * frames arrive but fail to decode. Cumulative totals hide that -- as a rate it is the direct
+     * read on whether an ISI level is helping the multipath case. */
+    uint32_t rxrej_rate = 0;
+
     if (rxmiss_prev_valid) {
         uint32_t dms = now - rxmiss_prev_tick;
+
         if (dms > 0) {
             rxmiss_rate = (uint32_t)(((uint64_t)(rx_miss - rxmiss_prev) * 1000U) / dms);
+            rxrej_rate = (uint32_t)(((uint64_t)(rx_rej - rxrej_prev) * 1000U) / dms);
         }
     }
     rxmiss_prev = rx_miss;
+    rxrej_prev = rx_rej;
     rxmiss_prev_tick = now;
+
+    /* Audible-dropout counter: how many times the codec ran out of audio to play. Unlike the RF
+     * counters this needs no interpretation -- it only moves when something was actually heard. */
+    uint32_t uflow = sac_pipeline_get_consumer_buffer_underflow_count(main_channel_accumulator_pipeline, &fb_status);
+    uint32_t q_min = dbg_q_min;
+
+    dbg_q_min = UINT32_MAX;
     rxmiss_prev_valid = true;
 
     /* Dual-radio HW liveness: if one of these freezes while the LW seq keeps
@@ -2208,16 +2243,17 @@ static void link_watch(void)
 
     int n = snprintf(line, sizeof(line),
              "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
-             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu) "
-             "src_bad=%lu@%u",
+             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu rej/s=%lu err=%d/%d send_err=%d(%lu) "
+             "src_bad=%lu@%u uflow=%lu qmin=%lu",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
              (unsigned)info.link_margin, (unsigned)fb_mode,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
              (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
-             (unsigned long)rx_rej,
+             (unsigned long)rx_rej, (unsigned long)rxrej_rate,
              (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count,
-             (unsigned long)dbg_src_bad_size_count, (unsigned)dbg_src_bad_size_at_mode);
+             (unsigned long)dbg_src_bad_size_count, (unsigned)dbg_src_bad_size_at_mode,
+             (unsigned long)uflow, (unsigned long)((q_min == UINT32_MAX) ? 0 : q_min));
     if (have_hw && n > 0 && n < (int)sizeof(line)) {
         snprintf(line + n, sizeof(line) - n,
                  " r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",
