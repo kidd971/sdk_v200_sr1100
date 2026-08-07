@@ -1460,9 +1460,16 @@ static void app_audio_core_init(void)
     mode_cfg.sample_count = MAIN_CHANNEL_FBK_3_SAMPLE_COUNT;
     mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "24kHz ADPCM", mode_cfg, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+#if FBK3_RUNG_24K
     /* 4x, mirroring the dongle's 1:4 on this same mode index. */
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_upsampling4_processing,
                                      &sac_status);
+#else
+    /* 2x, mirroring the dongle's 1:2 -- the ratios have to match or the discard handover sizes
+     * disagree and the interpolator rejects the transition packet. */
+    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_upsampling_processing,
+                                     &sac_status);
+#endif
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_decompression_processing,
                                      &sac_status);

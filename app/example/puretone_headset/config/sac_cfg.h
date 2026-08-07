@@ -50,16 +50,44 @@
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
 #define MAIN_CHANNEL_FBK_2_SAMPLE_COUNT 34
-/* Mode 3 is 24 kHz at a 4.6x accumulator: 4.6 x 40 = 184 samples/ch at 96 kHz, and 184 / 4 = 46
- * divides exactly. At 4 bit/sample that is 46 B of audio plus 8 B of header = the same 54 B the
- * 48 kHz rung used, so the SWC fallback thresholds stay put at 206 / 138 / 54.
+/* **** Mode 3 (bottom rung) knobs -- the three factors under comparison **** */
+
+/* 1 puts the rung at 24 kHz (1:4 resampler), 0 leaves it at 48 kHz (the 1:2 the rest of the
+ * ladder already uses).
  *
- * This has to track MAIN_CHANNEL_ACC_MUL. The fallback stage copies it into
- * pipeline->_internal.current_sample_count once per packet, and the headset's interpolator
- * rejects any packet that does not match (sac_src_cmsis.c:479) -- so a stale value here is not a
- * glitch, it is every mode 3 packet dropped and total silence on that rung, with src_bad on the
- * LINK_WATCH line counting them. */
-#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT 46
+ * Worth knowing before reaching for this: 24 kHz does NOT buy retransmission headroom. Slots are
+ * spent per packet, not per byte, so a smaller payload changes nothing about how many attempts a
+ * packet gets -- only the accumulator does that, and it does it at either rate. What 24 kHz buys
+ * is bitrate, 192 vs 384 kbps, which is a range argument rather than an obstruction one. What it
+ * costs is a resampler swap at the 2<->3 boundary, which is audible as a soft pop because neither
+ * new SRC instance has a discard stage warming it, and an anti-alias cutoff near 7 kHz that makes
+ * the rung sound dull. */
+#ifndef FBK3_RUNG_24K
+#define FBK3_RUNG_24K 1
+#endif
+
+/* Accumulator ratio for mode 3, as mul/div. This is the retransmission-headroom knob: the
+ * accumulator sits before the resampler, so it alone decides how often a packet leaves, and
+ * attempts per packet is just the coordinator's 3111 slots/s divided by the packet rate.
+ *   23/10 -> 0.96 ms per packet -> 1043 pkt/s -> 3.0 attempts
+ *   46/10 -> 1.92 ms per packet ->  522 pkt/s -> 6.0 attempts */
+#ifndef MAIN_CHANNEL_FBK_3_ACC_MUL
+#define MAIN_CHANNEL_FBK_3_ACC_MUL 46
+#endif
+#define MAIN_CHANNEL_FBK_3_ACC_DIV 10
+
+/* Derived, never hand-written. The fallback stage copies this into
+ * pipeline->_internal.current_sample_count once per packet and the headset's interpolator rejects
+ * anything that does not match (sac_src_cmsis.c:479), so a value that has drifted out of step with
+ * the accumulator is not a glitch -- it is every mode 3 packet dropped and total silence on that
+ * rung. That bug has already been written once by hand; deriving it makes it unwritable.
+ *
+ * Both divisions come out exact for the ratios above: 40 x 46/10 = 184, and 184 is divisible by
+ * both 2 and 4. Check that still holds if the accumulator ratio changes. */
+#define MAIN_CHANNEL_FBK_3_RUNG_DIV (FBK3_RUNG_24K ? 4 : 2)
+#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT                                                          \
+    (((MAIN_CHANNEL_SAMPLE_COUNT * MAIN_CHANNEL_FBK_3_ACC_MUL) / MAIN_CHANNEL_FBK_3_ACC_DIV) /   \
+     MAIN_CHANNEL_FBK_3_RUNG_DIV)
 
 /* A header is added to audio samples during fallback. */
 #define MAIN_CHANNEL_FALLBACK_HEADER_SIZE sizeof(sac_header_t)
@@ -121,22 +149,23 @@
  * This is the knob every earlier attempt missed. Dropping the rung to 24 kHz, raising FEC and
  * raising ISI all changed how likely a single transmission is to survive; none of them changed
  * how many transmissions a packet gets, which is what a sudden obstruction actually consumes. */
-#define MAIN_CHANNEL_MAX_ACC_MUL 46
-#define MAIN_CHANNEL_MAX_ACC_DIV 10
+/* Mode 3 is the largest ratio on the ladder, so it also sets the cap the buffers are sized from. */
+#define MAIN_CHANNEL_MAX_ACC_MUL MAIN_CHANNEL_FBK_3_ACC_MUL
+#define MAIN_CHANNEL_MAX_ACC_DIV MAIN_CHANNEL_FBK_3_ACC_DIV
 
-#define MAIN_CHANNEL_ACC_MUL \
-    {                        \
-        1,                   \
-        17,                  \
-        17,                  \
-        46,                  \
+#define MAIN_CHANNEL_ACC_MUL          \
+    {                                 \
+        1,                            \
+        17,                           \
+        17,                           \
+        MAIN_CHANNEL_FBK_3_ACC_MUL,   \
     }
-#define MAIN_CHANNEL_ACC_DIV \
-    {                        \
-        1,                   \
-        10,                  \
-        10,                  \
-        10,                  \
+#define MAIN_CHANNEL_ACC_DIV          \
+    {                                 \
+        1,                            \
+        10,                           \
+        10,                           \
+        MAIN_CHANNEL_FBK_3_ACC_DIV,   \
     }
 
 /* Fallback latency. */

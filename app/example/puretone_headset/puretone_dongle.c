@@ -1425,10 +1425,17 @@ static void app_audio_core_init(void)
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index,
                                      main_channel_sample_accumulator_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+#if FBK3_RUNG_24K
     /* 1:4 instead of the 1:2 used by modes 1 and 2. Must stay mirrored by the headset's 4x
      * upsampling on this same mode index, which is carried in the SAC header. */
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_downsampling4_processing,
                                      &sac_status);
+#else
+    /* Same 1:2 the rest of the ladder uses, so the resampler runs unbroken across 2<->3 and the
+     * boundary has no seam. The accumulator still supplies the retransmission headroom either way. */
+    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_downsampling_processing,
+                                     &sac_status);
+#endif
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_compression_processing,
                                      &sac_status);
