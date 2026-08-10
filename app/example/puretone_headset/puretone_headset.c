@@ -74,6 +74,16 @@
 #define LINK_WATCH 1  /* ON for dual-radio crash-log collection: prints every LINK_WATCH_INTERVAL_MS
                        * on the AT/expansion UART (LPUART1 TX). Set to 0 for release. */
 #endif
+
+/* Second LINK_WATCH line: cumulative RF totals, error codes and dual-radio liveness counters.
+ * Off by default. rx_miss in particular reads as alarming and is not -- it mostly counts receive
+ * slots the coordinator had nothing to send in, so it runs high on a perfectly healthy link, and
+ * leaving it in view during an obstruction run invites reading it as loss. Turn this on when the
+ * question is a stall rather than a dropout: r*_irq or r*_dma frozen while the LW sequence keeps
+ * advancing is that radio's IRQ/DMA path having died. */
+#ifndef LINK_WATCH_HS_DETAIL
+#define LINK_WATCH_HS_DETAIL 0
+#endif
 /* Poll/print cadence for the link watch in ms. */
 #define LINK_WATCH_INTERVAL_MS 2000
 
@@ -2248,19 +2258,38 @@ static void link_watch(void)
         prev_connected = connected;
     }
 
-    int n = snprintf(line, sizeof(line),
-             "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
-             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu rej/s=%lu err=%d/%d send_err=%d(%lu) "
-             "src_bad=%lu@%u uflow=%lu qmin=%lu",
+    /* Line 1 -- what an obstruction run needs, and nothing else.
+     *   fb        the rung, which must stay where it was pinned
+     *   lm        proof the obstruction actually happened; it collapses from ~245 to under 120
+     *   qmin      lowest queue level since the last print; the sensitive one, higher is better
+     *   uflow     the queue ran dry, i.e. the audible break, counted
+     *   rej/s     corrupted frames per second, the direct read on whether ISI is earning its keep
+     *   src_bad   sanity: anything but 0@255 means the two boards are on different builds */
+    snprintf(line, sizeof(line),
+             "[LW %lu t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u\r\n",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
-             (unsigned)info.link_margin, (unsigned)fb_mode,
-             (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
-             (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
-             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
-             (unsigned long)rx_rej, (unsigned long)rxrej_rate,
-             (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count,
-             (unsigned long)dbg_src_bad_size_count, (unsigned)dbg_src_bad_size_at_mode,
-             (unsigned long)uflow, (unsigned long)((q_min == UINT32_MAX) ? 0 : q_min));
+             (unsigned)fb_mode, (unsigned)info.link_margin,
+             (unsigned long)((q_min == UINT32_MAX) ? 0 : q_min),
+             (unsigned long)uflow, (unsigned long)rxrej_rate,
+             (unsigned long)dbg_src_bad_size_count, (unsigned)dbg_src_bad_size_at_mode);
+    facade_stats_write(line);
+
+#if LINK_WATCH_HS_DETAIL
+    /* Line 2 -- cumulative RF totals, error codes and the dual-radio liveness counters. Off by
+     * default: rx_miss in particular reads as alarming and is not, since it mostly counts receive
+     * slots the coordinator had nothing to send in, so it runs high on a perfectly healthy link.
+     * Turn it on when the question is a stall rather than a dropout: an r*_irq or r*_dma frozen
+     * while the LW sequence keeps advancing is that radio's IRQ/DMA path having died, which is the
+     * dual-radio failure mode and looks nothing like an obstruction. */
+    int n = snprintf(line, sizeof(line),
+                     "         swc=%s cca_fail=%lu tx_drop=%lu rx_ok=%lu rx_miss=%lu miss/s=%lu "
+                     "rx_rej=%lu err=%d/%d send_err=%d(%lu)",
+                     (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
+                     (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
+                     (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
+                     (unsigned long)rx_rej,
+                     (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
+
     if (have_hw && n > 0 && n < (int)sizeof(line)) {
         snprintf(line + n, sizeof(line) - n,
                  " r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",
@@ -2270,6 +2299,20 @@ static void link_watch(void)
         snprintf(line + n, sizeof(line) - n, "\r\n");
     }
     facade_stats_write(line);
+#else
+    (void)swc_state;
+    (void)rx_ok;
+    (void)rx_miss;
+    (void)rxmiss_rate;
+    (void)rx_rej;
+    (void)conn_err;
+    (void)stat_err;
+    (void)have_hw;
+    (void)r1_irq;
+    (void)r2_irq;
+    (void)r1_dma;
+    (void)r2_dma;
+#endif
 }
 #endif /* LINK_WATCH */
 
