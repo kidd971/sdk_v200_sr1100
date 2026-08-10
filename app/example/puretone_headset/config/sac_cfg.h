@@ -89,6 +89,29 @@
     (((MAIN_CHANNEL_SAMPLE_COUNT * MAIN_CHANNEL_FBK_3_ACC_MUL) / MAIN_CHANNEL_FBK_3_ACC_DIV) /   \
      MAIN_CHANNEL_FBK_3_RUNG_DIV)
 
+/* Compact identifier for mode 3's configuration, printed on both LINK_WATCH lines as cfg=.
+ *
+ * A comparison run flashes twenty pairs of images and nothing else in the log says which arm a
+ * board is running. Only some mismatches announce themselves: a wrong ISI never links and a wrong
+ * accumulator shows up as src_bad, but a wrong buffer depth has no symptom at all and would
+ * quietly contaminate the numbers. With this on both lines, a mismatched pair is visible in the
+ * first second of log.
+ *
+ * Reads as rung/accumulator/buffer, e.g. 48k/46/30ms. ISI lives in swc_cfg.h and is appended by
+ * the callers, which have both headers in scope. */
+#define SAC_CFG_STRINGIFY_(x) #x
+#define SAC_CFG_STRINGIFY(x)  SAC_CFG_STRINGIFY_(x)
+
+#if FBK3_RUNG_24K
+#define MAIN_CHANNEL_FBK_3_RUNG_STR "24k"
+#else
+#define MAIN_CHANNEL_FBK_3_RUNG_STR "48k"
+#endif
+
+#define MAIN_CHANNEL_FBK_3_CFG_TAG                                                        \
+    MAIN_CHANNEL_FBK_3_RUNG_STR "/" SAC_CFG_STRINGIFY(MAIN_CHANNEL_FBK_3_ACC_MUL) "/"     \
+    SAC_CFG_STRINGIFY(MAIN_CHANNEL_FBK_3_LATENCY_MS) "ms"
+
 /* A header is added to audio samples during fallback. */
 #define MAIN_CHANNEL_FALLBACK_HEADER_SIZE sizeof(sac_header_t)
 /* A header is added to compressed audio samples during fallback. */

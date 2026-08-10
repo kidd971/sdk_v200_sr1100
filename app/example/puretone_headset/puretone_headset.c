@@ -2270,7 +2270,8 @@ static void link_watch(void)
      *   rej/s     corrupted frames per second, the direct read on whether ISI is earning its keep
      *   src_bad   sanity: anything but 0@255 means the two boards are on different builds */
     snprintf(line, sizeof(line),
-             "[HS] [t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u\r\n",
+             "[HS] [t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u"
+             " cfg=" MAIN_CHANNEL_FBK_3_CFG_TAG "/i" NODE_ISI_MITIG_STR "\r\n",
              (unsigned long)now,
              connected ? "Connected   " : "Disconnected",
              (unsigned)fb_mode, (unsigned)info.link_margin,

@@ -2189,7 +2189,9 @@ static void link_watch(void)
      *   tx_drop  packets the coordinator gave up on; expected to stay 0
      *   prod     audio production rate; expected 2400/s, below that is a starved producer
      *   send     frames on air per second; expected well above the packet rate if retries happen */
-    snprintf(line, sizeof(line), "[DG] [t=%lu] %s fb=%u tx_drop=%lu prod=%lu/s send=%lu/s\r\n",
+    snprintf(line, sizeof(line),
+             "[DG] [t=%lu] %s fb=%u tx_drop=%lu prod=%lu/s send=%lu/s"
+             " cfg=" MAIN_CHANNEL_FBK_3_CFG_TAG "/i" NODE_ISI_MITIG_STR "\r\n",
              (unsigned long)now,
              connected ? "Connected   " : "Disconnected",
              (unsigned)fb_mode, (unsigned long)tx_drop,

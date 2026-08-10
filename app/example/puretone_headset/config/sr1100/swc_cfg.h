@@ -43,6 +43,10 @@
  * Must be identical on the dongle and the headset: it changes the preamble both ends use to
  * find each other. */
 #define NODE_ISI_MITIG SWC_ISI_MITIG_1
+/* Digit form of the line above, for the cfg= tag both LINK_WATCH lines print. The sed that builds
+ * the comparison arms rewrites both, so they cannot drift apart there -- but if this is edited by
+ * hand, keep them in step or the log will describe a build that is not running. */
+#define NODE_ISI_MITIG_STR "1"
 
 /* Specifies the schedule configuration. */
 // clang-format off
