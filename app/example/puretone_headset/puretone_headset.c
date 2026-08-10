@@ -91,8 +91,13 @@
  * WITHOUT waiting for a stall or any command (the AT-UART RX pad is unusable on this
  * board, so the log is grabbed automatically). Output goes to LPUART1 TX. Set to 0
  * to disable. */
+/* Off now that LINK_WATCH covers the same ground on the same port. It was auto-emitting because
+ * the AT-UART RX was unusable on that bench and the dump could not be asked for, but every field
+ * it still carried is now either on the LINK_WATCH line or on its detail line, and the build
+ * identity comes out once at boot as +EVENT: BUILD:. Three lines every two seconds around one
+ * line of actual data was the worst ratio in the log. Set back to 2000 to restore it. */
 #ifndef CRASH_DUMP_PERIODIC_MS
-#define CRASH_DUMP_PERIODIC_MS 2000
+#define CRASH_DUMP_PERIODIC_MS 0
 #endif
 
 /* The four extra lines the dump can carry -- hw:, sched:, tim4:, fault: -- exist for the
@@ -498,7 +503,7 @@ static void at_start_shutdown(void);
 static void app_teardown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
-static void emit_crash_dump(void);
+static void emit_crash_dump(void) __attribute__((unused));
 static void at_play(void);
 static void at_stop(void);
 static void at_set_vol(uint8_t vol);
@@ -2252,7 +2257,7 @@ static void link_watch(void)
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[HS] [LW EVENT t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
@@ -2266,8 +2271,9 @@ static void link_watch(void)
      *   rej/s     corrupted frames per second, the direct read on whether ISI is earning its keep
      *   src_bad   sanity: anything but 0@255 means the two boards are on different builds */
     snprintf(line, sizeof(line),
-             "[LW %lu t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u\r\n",
-             (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
+             "[HS] [LW %lu t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u\r\n",
+             (unsigned long)seq++, (unsigned long)now,
+             connected ? "Connected   " : "Disconnected",
              (unsigned)fb_mode, (unsigned)info.link_margin,
              (unsigned long)((q_min == UINT32_MAX) ? 0 : q_min),
              (unsigned long)uflow, (unsigned long)rxrej_rate,

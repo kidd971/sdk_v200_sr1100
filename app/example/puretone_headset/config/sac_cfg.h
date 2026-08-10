@@ -34,7 +34,7 @@
 /* Maximum Latency. */
 /* Caps every per-mode latency below, because the consumer endpoint queue is sized from it --
  * raising a mode past this value asks for a target the queue cannot physically hold. */
-#define MAIN_CHANNEL_MAX_LATENCY_MS 30
+#define MAIN_CHANNEL_MAX_LATENCY_MS 15
 /* Fallback modes Latency. */
 #define MAIN_CHANNEL_FBK_0_LATENCY_MS 5
 #define MAIN_CHANNEL_FBK_1_LATENCY_MS 7
@@ -45,7 +45,7 @@
  * never going to be enough -- which is the piece the accumulator and ISI work did not address.
  * SPARK's ladder widens the same way on the way down (5 / 7 / 10 / 15 / 20 for their mono
  * rung), and the cost is only paid on the rung the link falls to, never in normal playback. */
-#define MAIN_CHANNEL_FBK_3_LATENCY_MS 30
+#define MAIN_CHANNEL_FBK_3_LATENCY_MS 15
 /* Fallback modes sample count. */
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
@@ -63,7 +63,7 @@
  * new SRC instance has a discard stage warming it, and an anti-alias cutoff near 7 kHz that makes
  * the rung sound dull. */
 #ifndef FBK3_RUNG_24K
-#define FBK3_RUNG_24K 1
+#define FBK3_RUNG_24K 0
 #endif
 
 /* Accumulator ratio for mode 3, as mul/div. This is the retransmission-headroom knob: the

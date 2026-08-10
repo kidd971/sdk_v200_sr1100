@@ -42,7 +42,7 @@
  *
  * Must be identical on the dongle and the headset: it changes the preamble both ends use to
  * find each other. */
-#define NODE_ISI_MITIG SWC_ISI_MITIG_2
+#define NODE_ISI_MITIG SWC_ISI_MITIG_1
 
 /* Specifies the schedule configuration. */
 // clang-format off
