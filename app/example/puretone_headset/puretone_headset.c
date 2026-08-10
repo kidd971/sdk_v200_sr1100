@@ -85,7 +85,7 @@
 #define LINK_WATCH_HS_DETAIL 0
 #endif
 /* Poll/print cadence for the link watch in ms. */
-#define LINK_WATCH_INTERVAL_MS 2000
+#define LINK_WATCH_INTERVAL_MS 1000
 
 /* Periodic on-board crash/stall snapshot: emit the consolidated dump every N ms,
  * WITHOUT waiting for a stall or any command (the AT-UART RX pad is unusable on this
@@ -2180,7 +2180,6 @@ static bool should_print_stats(void)
 static void link_watch(void)
 {
     static uint32_t tick_start;
-    static uint32_t seq;
     static bool initialized;
     static bool prev_connected;
     static uint32_t rxmiss_prev;
@@ -2257,7 +2256,7 @@ static void link_watch(void)
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[HS] [LW EVENT t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[HS] [t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
@@ -2271,8 +2270,8 @@ static void link_watch(void)
      *   rej/s     corrupted frames per second, the direct read on whether ISI is earning its keep
      *   src_bad   sanity: anything but 0@255 means the two boards are on different builds */
     snprintf(line, sizeof(line),
-             "[HS] [LW %lu t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u\r\n",
-             (unsigned long)seq++, (unsigned long)now,
+             "[HS] [t=%lu] %s fb=%u lm=%u qmin=%lu uflow=%lu rej/s=%lu src_bad=%lu@%u\r\n",
+             (unsigned long)now,
              connected ? "Connected   " : "Disconnected",
              (unsigned)fb_mode, (unsigned)info.link_margin,
              (unsigned long)((q_min == UINT32_MAX) ? 0 : q_min),

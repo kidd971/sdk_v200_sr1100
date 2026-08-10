@@ -89,7 +89,7 @@
 #define LINK_WATCH_DG_DETAIL 0
 #endif
 /* Poll/print cadence for the link watch in ms. */
-#define LINK_WATCH_INTERVAL_MS 500
+#define LINK_WATCH_INTERVAL_MS 1000
 /* Temporarily silence the per-second statistics dump so the CDC port only shows the
  * link watch. Set back to 1 to restore the normal stats print. */
 #define STATS_PRINT_ENABLED 0
@@ -2099,7 +2099,6 @@ static bool should_print_stats(void)
 static void link_watch(void)
 {
     static uint32_t tick_start;
-    static uint32_t seq;
     static bool initialized;
     static bool prev_connected;
     static uint32_t produce_prev;
@@ -2160,7 +2159,7 @@ static void link_watch(void)
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[DG] [LW EVENT t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[DG] [t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
@@ -2190,8 +2189,8 @@ static void link_watch(void)
      *   tx_drop  packets the coordinator gave up on; expected to stay 0
      *   prod     audio production rate; expected 2400/s, below that is a starved producer
      *   send     frames on air per second; expected well above the packet rate if retries happen */
-    snprintf(line, sizeof(line), "[DG] [LW %lu t=%lu] %s fb=%u tx_drop=%lu prod=%lu/s send=%lu/s\r\n",
-             (unsigned long)seq++, (unsigned long)now,
+    snprintf(line, sizeof(line), "[DG] [t=%lu] %s fb=%u tx_drop=%lu prod=%lu/s send=%lu/s\r\n",
+             (unsigned long)now,
              connected ? "Connected   " : "Disconnected",
              (unsigned)fb_mode, (unsigned long)tx_drop,
              (unsigned long)prod_rate, (unsigned long)send_rate);
