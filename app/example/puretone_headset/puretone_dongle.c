@@ -79,6 +79,15 @@
 #ifndef LINK_WATCH
 #define LINK_WATCH 1
 #endif
+
+/* Second LINK_WATCH line, carrying the back-channel counters and the raw slot accounting.
+ * Off by default: none of it moves during an obstruction run, and at 2 Hz it doubles the log
+ * around the four numbers that do. Turn it on when the question is why the DG believes what it
+ * believes -- node_lm stuck low while the headset reports lm=255 means the HS->DG report path is
+ * dead and the fallback ladder is being driven by stale information. */
+#ifndef LINK_WATCH_DG_DETAIL
+#define LINK_WATCH_DG_DETAIL 0
+#endif
 /* Poll/print cadence for the link watch in ms. */
 #define LINK_WATCH_INTERVAL_MS 500
 /* Temporarily silence the per-second statistics dump so the CDC port only shows the
@@ -2096,10 +2105,14 @@ static void link_watch(void)
     static uint32_t produce_prev;
     static uint32_t produce_prev_tick;
     static bool produce_prev_valid;
+    static uint32_t sent_prev;
+    static uint32_t produce_prev_tick_for_send;
+    static bool sent_prev_valid;
 
     if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
         initialized = false;
         produce_prev_valid = false;
+        sent_prev_valid = false;
         return;
     }
 
@@ -2153,17 +2166,54 @@ static void link_watch(void)
         prev_connected = connected;
     }
 
-    snprintf(line, sizeof(line),
-             "[LW %lu t=%lu] %s fb=%u node_lm=%u bk_ok=%lu bk_miss=%lu "
-             "tx_slot=%lu tx_noframe=%lu tx_drop=%lu prod=%lu/s swc=%s send_err=%d(%lu)\r\n",
+    /* Frames actually put on air per second: slots that carried something, as a rate. Against
+     * prod/s this is the coordinator-side read on retransmission -- the audio packet rate is
+     * prod/s divided by the current accumulator ratio, so send/s well above that is the spare
+     * slots being spent on retries, which is the whole point of widening the accumulator. */
+    uint32_t sent_now = tx_slot - tx_noframe;
+    uint32_t send_rate = 0;
+
+    if (sent_prev_valid) {
+        uint32_t dms = now - produce_prev_tick_for_send;
+
+        if (dms > 0) {
+            send_rate = (uint32_t)(((uint64_t)(sent_now - sent_prev) * 1000U) / dms);
+        }
+    }
+    sent_prev = sent_now;
+    produce_prev_tick_for_send = now;
+    sent_prev_valid = true;
+
+    /* Line 1 -- what an obstruction run needs, and nothing else. Each has an expected value, so a
+     * glance is enough to say the coordinator is not the problem:
+     *   fb       the rung, which must stay where it was pinned
+     *   tx_drop  packets the coordinator gave up on; expected to stay 0
+     *   prod     audio production rate; expected 2400/s, below that is a starved producer
+     *   send     frames on air per second; expected well above the packet rate if retries happen */
+    snprintf(line, sizeof(line), "[LW %lu t=%lu] %s fb=%u tx_drop=%lu prod=%lu/s send=%lu/s\r\n",
              (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
-             (unsigned)fb_mode, (unsigned)s_node_rx_lm,
-             (unsigned long)bk_ok, (unsigned long)bk_miss,
-             (unsigned long)tx_slot, (unsigned long)tx_noframe, (unsigned long)tx_drop,
-             (unsigned long)prod_rate,
+             (unsigned)fb_mode, (unsigned long)tx_drop,
+             (unsigned long)prod_rate, (unsigned long)send_rate);
+    facade_stats_write(line);
+
+#if LINK_WATCH_DG_DETAIL
+    /* Line 2 -- the back-channel and slot-accounting detail. Off by default: none of it moves
+     * during an obstruction run, and at 2 Hz it doubles the log for nothing. Turn it on when the
+     * question is why the DG believes what it believes -- node_lm stuck low while the headset
+     * reports lm=255 means the HS->DG report path is dead and the ladder is being driven by stale
+     * information, which bk_ok/bk_miss then confirms. */
+    snprintf(line, sizeof(line),
+             "         node_lm=%u bk_ok=%lu bk_miss=%lu tx_slot=%lu tx_noframe=%lu swc=%s send_err=%d(%lu)\r\n",
+             (unsigned)s_node_rx_lm, (unsigned long)bk_ok, (unsigned long)bk_miss,
+             (unsigned long)tx_slot, (unsigned long)tx_noframe,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (int)s_last_send_err, (unsigned long)s_send_err_count);
     facade_stats_write(line);
+#else
+    (void)bk_ok;
+    (void)bk_miss;
+    (void)swc_state;
+#endif
 }
 #endif /* LINK_WATCH */
 
