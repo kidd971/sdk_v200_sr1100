@@ -1,4 +1,4 @@
-message("Application: ${APP}")
+message(STATUS "Application: ${APP}")
 
 add_subdirectory(example)
 add_subdirectory(tool)

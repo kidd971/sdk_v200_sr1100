@@ -29,7 +29,7 @@ extern "C" {
 /** @brief The Quasar's system clock selection.
  */
 typedef enum quasar_clk_freq {
-    /*! System clock at 160 MHz */
+    /*! System clock at 160 MHz. */
     QUASAR_CLK_160MHZ = 160000000,
 } quasar_clk_freq_t;
 
@@ -49,7 +49,7 @@ uint32_t quasar_clock_get_system_clock_freq(void);
 
 /** @brief Set PLL2 FRACN coefficient.
  *
- *  @param fracn The coefficient to set.
+ *  @param[in] fracn  The coefficient to set.
  */
 void quasar_clock_set_pll2_fracn(uint32_t fracn);
 

@@ -18,9 +18,14 @@
 #include "quasar_uart.h"
 
 /* TYPES **********************************************************************/
-/* Typedef is used to avoid a checkpath error due to unrecognized "DMA_HandleTypeDef" type. */
+/** @brief Typedef is used to avoid a checkpath error due to unrecognized "DMA_HandleTypeDef" type.
+ */
 typedef DMA_HandleTypeDef DMA_HandleTypeDef_t;
+/** @brief Typedef is used to avoid a checkpath error due to unrecognized "UART_HandleTypeDef" type.
+ */
 typedef UART_HandleTypeDef UART_HandleTypeDef_t;
+/** @brief Typedef is used to avoid a checkpath error due to unrecognized "SPI_HandleTypeDef" type.
+ */
 typedef SPI_HandleTypeDef SPI_HandleTypeDef_t;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
@@ -427,8 +432,8 @@ static IRQn_Type dma_get_selected_irq(quasar_dma_selection_t dma_selection)
     return dma_irq;
 }
 
-/** @brief Configure the DMA instances, initialize them and associate them with the corresponding
- *         peripheral for DMA transfer.
+/** @brief Configure the DMA instances, initialize them and associate them with the corresponding peripheral for DMA
+ *         transfer.
  *
  *  @param[in]  dma_selection_tx      Selected DMA instance for transmission.
  *  @param[in]  dma_selection_rx      Selected DMA instance for reception.
@@ -463,7 +468,7 @@ static void dma_configure_init_and_link(quasar_dma_selection_t dma_selection_tx,
         QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
         break;
     case QUASAR_DMA_PERIPHERAL_QSPI:
-        /* There is only one QSPI DMA handle. (See in struct OSPI_HandleTypeDef) */
+        /* There is only one QSPI DMA handle. (See in struct OSPI_HandleTypeDef). */
         if (dma_handle_rx == NULL) {
             dma_configure_request_with_qspi(dma_handle_tx, peripheral_selection);
             dma_init_and_link_with_qspi_tx(dma_handle_tx, peripheral_selection);
@@ -481,13 +486,13 @@ static void dma_configure_init_and_link(quasar_dma_selection_t dma_selection_tx,
     }
 }
 
-/** @brief Configure the DMA instances, initialize them and associate them with the corresponding
- *         peripheral for DMA transfer.
+/** @brief Configure the DMA instances, initialize them and associate them with the corresponding peripheral for DMA
+ *         transfer.
  *
  *  @param[in]  dma_handle_tx   Selected DMA handle for transmission.
  *  @param[in]  dma_handle_rx   Selected DMA handle for reception.
  *  @param[in]  uart_selection  Selected peripheral to be associated with DMA transfer.
- *  @param[out] err              Error status output.
+ *  @param[out] err             Error status output.
  */
 static void dma_init_and_link_with_uart(DMA_HandleTypeDef *dma_handle_tx, DMA_HandleTypeDef *dma_handle_rx,
                                         quasar_uart_selection_t uart_selection, quasar_bsp_status_t *err)
@@ -540,9 +545,9 @@ static void dma_init_and_link_with_uart(DMA_HandleTypeDef *dma_handle_tx, DMA_Ha
 
 /** @brief Based on UART selection, this function configures the DMA request for transmission and reception.
  *
- *  @param[in] dma_selection_tx  Selected DMA instance for transmission.
- *  @param[in] dma_selection_rx  Selected DMA instance for reception.
- *  @param[in] uart_selection    Selected UART to be associated with DMA transfer.
+ *  @param[in] dma_handle_tx   Selected DMA handle for transmission.
+ *  @param[in] dma_handle_rx   Selected DMA handle for reception.
+ *  @param[in] uart_selection  Selected UART to be associated with DMA transfer.
  */
 static void dma_configure_request_with_uart(DMA_HandleTypeDef *dma_handle_tx, DMA_HandleTypeDef *dma_handle_rx,
                                             quasar_uart_selection_t uart_selection)
@@ -602,8 +607,8 @@ static void dma_configure_request_with_uart(DMA_HandleTypeDef *dma_handle_tx, DM
     }
 }
 
-/** @brief Configure the DMA instances, initialize them and associate them with the corresponding
- *         peripheral for DMA transfer.
+/** @brief Configure the DMA instances, initialize them and associate them with the corresponding peripheral for DMA
+ *         transfer.
  *
  *  @param[in]  dma_handle_tx  Selected DMA handle for transmission.
  *  @param[in]  dma_handle_rx  Selected DMA handle for reception.
@@ -660,9 +665,9 @@ static void dma_init_and_link_with_spi(DMA_HandleTypeDef *dma_handle_tx, DMA_Han
 
 /** @brief Based on SPI selection, this function configure the DMA request for transmisson and reception.
  *
- *  @param[in] dma_selection_tx  Selected DMA instance for transmission.
- *  @param[in] dma_selection_rx  Selected DMA instance for reception.
- *  @param[in] spi_selection     Selected SPI to be associated with DMA transfer.
+ *  @param[in] dma_handle_tx  Selected DMA handle for transmission.
+ *  @param[in] dma_handle_rx  Selected DMA handle for reception.
+ *  @param[in] spi_selection  Selected SPI to be associated with DMA transfer.
  */
 static void dma_configure_request_with_spi(DMA_HandleTypeDef *dma_handle_tx, DMA_HandleTypeDef *dma_handle_rx,
                                            quasar_spi_selection_t spi_selection)
@@ -698,8 +703,8 @@ static void dma_configure_request_with_spi(DMA_HandleTypeDef *dma_handle_tx, DMA
     }
 }
 
-/** @brief Configure the DMA instance, initialize and associate it with the corresponding
- *         peripheral for DMA transmission.
+/** @brief Configure the DMA instance, initialize and associate it with the corresponding peripheral for DMA
+ *         transmission.
  *
  *  @param[in] dma_handle_tx   Selected DMA handle for transmission.
  *  @param[in] qspi_selection  Selected peripheral to be associated with DMA transfer.
@@ -714,14 +719,13 @@ static void dma_init_and_link_with_qspi_tx(DMA_HandleTypeDef *dma_handle_tx, qua
 
     qspi_handle->State = HAL_OSPI_STATE_READY;
     if (dma_handle_tx != NULL) {
-        /* Handle should be pre populated at init */
+        /* Handle should be pre populated at init. */
         qspi_tx_dma_init(dma_handle_tx);
         __HAL_LINKDMA(qspi_handle, hdma, *dma_handle_tx);
     }
 }
 
-/** @brief Configure the DMA instance, initialize and associate it with the corresponding
- *         peripheral for DMA reception.
+/** @brief Configure the DMA instance, initialize and associate it with the corresponding peripheral for DMA reception.
  *
  *  @param[in] dma_handle_rx   Selected DMA handle for reception.
  *  @param[in] qspi_selection  Selected peripheral to be associated with DMA transfer.
@@ -736,7 +740,7 @@ static void dma_init_and_link_with_qspi_rx(DMA_HandleTypeDef *dma_handle_rx, qua
 
     qspi_handle->State = HAL_OSPI_STATE_READY;
     if (dma_handle_rx != NULL) {
-        /* Handle should be pre populated at init */
+        /* Handle should be pre populated at init. */
         qspi_rx_dma_init(dma_handle_rx);
         __HAL_LINKDMA(qspi_handle, hdma, *dma_handle_rx);
 
@@ -775,123 +779,133 @@ static void default_irq_callback(void)
     return;
 }
 
+/** @brief Configure the DMA instance for QSPI reception, initialize and associate it with the corresponding peripheral
+ *         for DMA transfer.
+ *
+ *  @param[in] hdma  Selected DMA handle for reception.
+ */
 static void qspi_rx_dma_init(DMA_HandleTypeDef *const hdma)
 {
     uint32_t tmpreg;
 
-    /* Allocate lock resource */
+    /* Allocate lock resource. */
     __HAL_UNLOCK(hdma);
 
-    /* Update the DMA channel state */
+    /* Update the DMA channel state. */
     hdma->State = HAL_DMA_STATE_BUSY;
 
-    /* Disable the DMA channel */
+    /* Disable the DMA channel. */
     __HAL_DMA_DISABLE(hdma);
 
-    /* Check if the DMA channel is effectively disabled */
+    /* Check if the DMA channel is effectively disabled. */
     while ((hdma->Instance->CCR & DMA_CCR_EN) != 0U) {};
 
-    /* Prepare DMA Channel Control Register (CCR) value */
+    /* Prepare DMA Channel Control Register (CCR) value. */
     tmpreg = hdma->Init.Priority;
 
-    /* Write DMA Channel Control Register (CCR) */
+    /* Write DMA Channel Control Register (CCR). */
     MODIFY_REG(hdma->Instance->CCR, DMA_CCR_PRIO | DMA_CCR_LAP | DMA_CCR_LSM, tmpreg);
 
-    /* Prepare DMA Channel Transfer Register (CTR1) value */
+    /* Prepare DMA Channel Transfer Register (CTR1) value. */
     tmpreg = hdma->Init.DestInc | hdma->Init.DestDataWidth | hdma->Init.SrcInc | hdma->Init.SrcDataWidth;
 
     tmpreg |= (hdma->Init.TransferAllocatedPort |
                (((hdma->Init.DestBurstLength - 1U) << DMA_CTR1_DBL_1_Pos) & DMA_CTR1_DBL_1) |
                (((hdma->Init.SrcBurstLength - 1U) << DMA_CTR1_SBL_1_Pos) & DMA_CTR1_SBL_1));
 
-    /* Write DMA Channel Transfer Register 1 (CTR1) */
+    /* Write DMA Channel Transfer Register 1 (CTR1). */
     MODIFY_REG(hdma->Instance->CTR1, ~(DMA_CTR1_SSEC | DMA_CTR1_DSEC), tmpreg);
 
-    /* Prepare DMA Channel Transfer Register 2 (CTR2) value */
+    /* Prepare DMA Channel Transfer Register 2 (CTR2) value. */
     tmpreg = hdma->Init.BlkHWRequest | (hdma->Init.Request & DMA_CTR2_REQSEL) | hdma->Init.TransferEventMode;
 
-    /* Memory to Peripheral Transfer */
+    /* Memory to Peripheral Transfer. */
     tmpreg |= DMA_CTR2_DREQ;
-    /* Write DMA Channel Transfer Register 2 (CTR2) */
+    /* Write DMA Channel Transfer Register 2 (CTR2). */
     MODIFY_REG(hdma->Instance->CTR2,
                (DMA_CTR2_TCEM | DMA_CTR2_TRIGPOL | DMA_CTR2_TRIGSEL | DMA_CTR2_TRIGM | DMA_CTR2_BREQ | DMA_CTR2_DREQ |
                 DMA_CTR2_SWREQ | DMA_CTR2_REQSEL),
                tmpreg);
 
-    /* Write DMA Channel Block Register 1 (CBR1) */
+    /* Write DMA Channel Block Register 1 (CBR1). */
     WRITE_REG(hdma->Instance->CBR1, 0U);
 
-    /* Write DMA Channel linked-list address register (CLLR) */
+    /* Write DMA Channel linked-list address register (CLLR). */
     WRITE_REG(hdma->Instance->CLLR, 0U);
 
-    /* Update DMA channel operation mode */
+    /* Update DMA channel operation mode. */
     hdma->Mode = hdma->Init.Mode;
 
-    /* Update the DMA channel error code */
+    /* Update the DMA channel error code. */
     hdma->ErrorCode = HAL_DMA_ERROR_NONE;
 
-    /* Update the DMA channel state */
+    /* Update the DMA channel state. */
     hdma->State = HAL_DMA_STATE_READY;
 }
 
+/** @brief Configure the DMA instance for QSPI transmission, initialize and associate it with the corresponding
+ *         peripheral for DMA transfer.
+ *
+ *  @param[in] hdma  Selected DMA handle for transmission.
+ */
 static void qspi_tx_dma_init(DMA_HandleTypeDef *const hdma)
 {
     uint32_t tmpreg;
 
-    /* Allocate lock resource */
+    /* Allocate lock resource. */
     __HAL_UNLOCK(hdma);
 
-    /* Update the DMA channel state */
+    /* Update the DMA channel state. */
     hdma->State = HAL_DMA_STATE_BUSY;
 
-    /* Disable the DMA channel */
+    /* Disable the DMA channel. */
     __HAL_DMA_DISABLE(hdma);
 
-    /* Check if the DMA channel is effectively disabled */
+    /* Check if the DMA channel is effectively disabled. */
     while ((hdma->Instance->CCR & DMA_CCR_EN) != 0U) {};
 
-    /* Prepare DMA Channel Control Register (CCR) value */
+    /* Prepare DMA Channel Control Register (CCR) value. */
     tmpreg = hdma->Init.Priority;
 
-    /* Write DMA Channel Control Register (CCR) */
+    /* Write DMA Channel Control Register (CCR). */
     MODIFY_REG(hdma->Instance->CCR, DMA_CCR_PRIO | DMA_CCR_LAP | DMA_CCR_LSM, tmpreg);
 
-    /* Prepare DMA Channel Transfer Register (CTR1) value */
+    /* Prepare DMA Channel Transfer Register (CTR1) value. */
     tmpreg = hdma->Init.DestInc | hdma->Init.DestDataWidth | hdma->Init.SrcInc | hdma->Init.SrcDataWidth;
 
     tmpreg |= (hdma->Init.TransferAllocatedPort |
                (((hdma->Init.DestBurstLength - 1U) << DMA_CTR1_DBL_1_Pos) & DMA_CTR1_DBL_1) |
                (((hdma->Init.SrcBurstLength - 1U) << DMA_CTR1_SBL_1_Pos) & DMA_CTR1_SBL_1));
 
-    /* Write DMA Channel Transfer Register 1 (CTR1) */
+    /* Write DMA Channel Transfer Register 1 (CTR1). */
     MODIFY_REG(hdma->Instance->CTR1, ~(DMA_CTR1_SSEC | DMA_CTR1_DSEC), tmpreg);
 
-    /* Prepare DMA Channel Transfer Register 2 (CTR2) value */
+    /* Prepare DMA Channel Transfer Register 2 (CTR2) value. */
     tmpreg = hdma->Init.BlkHWRequest | (hdma->Init.Request & DMA_CTR2_REQSEL) | hdma->Init.TransferEventMode;
 
-    /* Write DMA Channel Transfer Register 2 (CTR2) */
+    /* Write DMA Channel Transfer Register 2 (CTR2). */
     MODIFY_REG(hdma->Instance->CTR2,
                (DMA_CTR2_TCEM | DMA_CTR2_TRIGPOL | DMA_CTR2_TRIGSEL | DMA_CTR2_TRIGM | DMA_CTR2_BREQ | DMA_CTR2_DREQ |
                 DMA_CTR2_SWREQ | DMA_CTR2_REQSEL),
                tmpreg);
 
-    /* Write DMA Channel Block Register 1 (CBR1) */
+    /* Write DMA Channel Block Register 1 (CBR1). */
     WRITE_REG(hdma->Instance->CBR1, 0U);
 
-    /* Write DMA Channel linked-list address register (CLLR) */
+    /* Write DMA Channel linked-list address register (CLLR). */
     WRITE_REG(hdma->Instance->CLLR, 0U);
 
-    /* Update DMA channel operation mode */
+    /* Update DMA channel operation mode. */
     hdma->Mode = hdma->Init.Mode;
 
-    /* Update the DMA channel error code */
+    /* Update the DMA channel error code. */
     hdma->ErrorCode = HAL_DMA_ERROR_NONE;
 
-    /* Update the DMA channel state */
+    /* Update the DMA channel state. */
     hdma->State = HAL_DMA_STATE_READY;
 }
 
-/* ST HAL FUNCTIONS IMPLEMENTATION ********************************************/
+/* ST HAL WEAK FUNCTIONS IMPLEMENTATION ********************************************/
 /** @brief This function handles interrupt for channel 0 of GPDMA1.
  */
 void GPDMA1_Channel0_IRQHandler(void)
@@ -910,8 +924,7 @@ void GPDMA1_Channel1_IRQHandler(void)
 
 /** @brief This function handles interrupt for channel 2 of GPDMA1.
  *
- *  TODO : Find a way to keep this IRQ Handler generic.
- *
+ *  @note TODO : Find a way to keep this IRQ Handler generic.
  */
 void GPDMA1_Channel2_IRQHandler(void)
 {
@@ -925,7 +938,7 @@ void GPDMA1_Channel2_IRQHandler(void)
     /* Handle SPI peripheral registers. */
 
     SPI_HandleTypeDef *spi_handle = QUASAR_SPI_GET_SELECTED_HANDLE(QUASAR_DEF_SPI_SELECTION_RADIO_1);
-    /* Change the DMA state */
+    /* Change the DMA state. */
     gpdma_handle_channel2.State = HAL_DMA_STATE_READY;
     spi_handle->State = HAL_SPI_STATE_READY;
 
@@ -934,19 +947,19 @@ void GPDMA1_Channel2_IRQHandler(void)
 
     __HAL_SPI_DISABLE(spi_handle);
 
-    /* Disable Tx DMA Request */
+    /* Disable Tx DMA Request. */
     CLEAR_BIT(spi_handle->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
 #endif
     /* Handle generic DMA registers. */
 
-    /* Clear the transfer complete flag */
+    /* Clear the transfer complete flag. */
     __HAL_DMA_CLEAR_FLAG(&gpdma_handle_channel2,
                          DMA_FLAG_TC | DMA_FLAG_DTE | DMA_FLAG_ULE | DMA_FLAG_USE | DMA_FLAG_TO);
 
-    /* Process Unlocked */
+    /* Process Unlocked. */
     __HAL_UNLOCK(&gpdma_handle_channel2);
 
-    /* Handle callbacks */
+    /* Handle callbacks. */
 #if RADIO_QSPI_ENABLED
     OSPI_HandleTypeDef *qspi_handle = QUASAR_QSPI_GET_SELECTED_HANDLE(QUASAR_QSPI_SELECTION_OSPI1);
 
@@ -988,10 +1001,8 @@ void GPDMA1_Channel5_IRQHandler(void)
 
 /** @brief This function handles interrupt for channel 6 of GPDMA1.
  *
- *  TO DO : Find a way to keep this IRQ Handler generic. When dual
- *  radio will be done, this IRQ handler will be exactly like GPDMA1
- *  channel 2.
- *
+ *  @note TO DO : Find a way to keep this IRQ Handler generic. When dual radio will be done, this IRQ handler will be
+ *        exactly like GPDMA1 channel 2.
  */
 void GPDMA1_Channel6_IRQHandler(void)
 {
@@ -1005,7 +1016,7 @@ void GPDMA1_Channel6_IRQHandler(void)
     /* Handle SPI peripheral registers. */
 
     SPI_HandleTypeDef *spi_handle = QUASAR_SPI_GET_SELECTED_HANDLE(QUASAR_DEF_SPI_SELECTION_RADIO_2);
-    /* Change the DMA state */
+    /* Change the DMA state. */
     gpdma_handle_channel6.State = HAL_DMA_STATE_READY;
     spi_handle->State = HAL_SPI_STATE_READY;
 
@@ -1014,19 +1025,19 @@ void GPDMA1_Channel6_IRQHandler(void)
 
     __HAL_SPI_DISABLE(spi_handle);
 
-    /* Disable Tx DMA Request */
+    /* Disable Tx DMA Request. */
     CLEAR_BIT(spi_handle->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
 #endif
     /* Handle generic DMA registers. */
 
-    /* Clear the transfer complete flag */
+    /* Clear the transfer complete flag. */
     __HAL_DMA_CLEAR_FLAG(&gpdma_handle_channel6,
                          DMA_FLAG_TC | DMA_FLAG_DTE | DMA_FLAG_ULE | DMA_FLAG_USE | DMA_FLAG_TO);
 
-    /* Process Unlocked */
+    /* Process Unlocked. */
     __HAL_UNLOCK(&gpdma_handle_channel6);
 
-    /* Handle callbacks */
+    /* Handle callbacks. */
 #if RADIO_QSPI_ENABLED
 
     OSPI_HandleTypeDef *qspi_handle = QUASAR_QSPI_GET_SELECTED_HANDLE(QUASAR_QSPI_SELECTION_OSPI2);
@@ -1049,11 +1060,12 @@ void GPDMA1_Channel6_IRQHandler(void)
  *  with this DMA driver back into the audio files. Once this is
  *  done, interrupts of all channels will be included here.
  */
-// void GPDMA1_Channel7_IRQHandler(void)
-// {
-//     HAL_DMA_IRQHandler(&gpdma_handle_channel7);
-//     gpdma1_channel7_callback();
-// }
+/* void GPDMA1_Channel7_IRQHandler(void)
+ * {
+ * HAL_DMA_IRQHandler(&gpdma_handle_channel7);
+ * gpdma1_channel7_callback();
+ * }
+ */
 
 /** @brief This function handles interrupt for channel 8 of GPDMA1.
  *
@@ -1061,11 +1073,12 @@ void GPDMA1_Channel6_IRQHandler(void)
  *  with this DMA driver back into the audio files. Once this is
  *  done, interrupts of all channels will be included here.
  */
-// void GPDMA1_Channel8_IRQHandler(void)
-// {
-//     HAL_DMA_IRQHandler(&gpdma_handle_channel8);
-//     gpdma1_channel8_callback();
-// }
+/* void GPDMA1_Channel8_IRQHandler(void)
+ * {
+ * HAL_DMA_IRQHandler(&gpdma_handle_channel8);
+ * gpdma1_channel8_callback();
+ * }
+ */
 
 /** @brief This function handles interrupt for channel 9 of GPDMA1.
  */

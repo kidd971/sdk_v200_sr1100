@@ -26,7 +26,9 @@
 /** @brief Structure tracking a button's state.
  */
 typedef struct button_handle {
+    /*! The ID of the button. */
     quasar_button_selection_t button_id;
+    /*! Indicates whether the button is active. */
     bool active;
 } button_handle_t;
 
@@ -125,7 +127,7 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
     } else {
         /* If the button is active (pressed), do nothing for now, it remains pressed. */
         if (!quasar_button_read_state(button_handle->button_id)) {
-            /* The button is released, desactivate the button. */
+            /* The button is released, deactivate the button. */
             button_handle->active = false;
         }
     }

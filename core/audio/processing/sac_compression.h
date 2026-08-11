@@ -95,6 +95,7 @@ void sac_compression_init(void *instance, const char *name, sac_pipeline_t *pipe
 /** @brief SPARK Audio Core compression control function.
  *
  *  @param[in]  instance  Compression instance.
+ *  @param[in]  pipeline  Pipeline instance.
  *  @param[in]  cmd       Control command.
  *  @param[in]  arg       Control argument.
  *  @param[out] status    Status code.
@@ -105,27 +106,30 @@ uint32_t sac_compression_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t 
 
 /** @brief Process audio samples compression.
  *
- *  @param[in]  instance     Compression instance.
- *  @param[in]  header       SPARK Audio Core header.
- *  @param[in]  data_in      Data in to be processed.
- *  @param[in]  bytes_count  Number of bytes to process.
- *  @param[out] data_out     Processed data out.
- *  @param[out] status       Status code.
+ *  @param[in]  instance  Compression instance.
+ *  @param[in]  pipeline  Pipeline instance.
+ *  @param[in]  header    SPARK Audio Core header.
+ *  @param[in]  data_in   Data in to be processed.
+ *  @param[in]  size      Size in bytes of the input data.
+ *  @param[out] data_out  Processed data out.
+ *  @param[out] status    Status code.
  *  @return Number of bytes processed.
  */
 uint16_t sac_compression_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,
                                  uint16_t size, uint8_t *data_out, sac_status_t *status);
 
 /** @brief Process the last audio samples to maintain the sample history. Thus, any subsequent switch to
- *         sac_compression_process will provide a clean audio output. Output is discarded and
- *         the function returns 0. Only valid for packing.
+ *         sac_compression_process will provide a clean audio output. Output is discarded and the function returns 0.
  *
- *  @param[in]  instance     Compression instance.
- *  @param[in]  header       SPARK Audio Core header.
- *  @param[in]  data_in      Data in to be processed.
- *  @param[in]  bytes_count  Number of bytes to process.
- *  @param[out] data_out     Processed data out.
- *  @param[out] status       Status code.
+ *  @note Only valid for packing.
+ *
+ *  @param[in]  instance  Compression instance.
+ *  @param[in]  pipeline  Pipeline instance.
+ *  @param[in]  header    SPARK Audio Core header.
+ *  @param[in]  data_in   Data in to be processed.
+ *  @param[in]  size      Size in bytes of the input data.
+ *  @param[out] data_out  Processed data out.
+ *  @param[out] status    Status code.
  *  @return 0.
  */
 uint16_t sac_compression_process_discard(void *instance, sac_pipeline_t *pipeline, sac_header_t *header,

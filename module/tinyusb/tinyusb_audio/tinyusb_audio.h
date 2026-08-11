@@ -50,7 +50,7 @@ uint32_t tinyusb_audio_get_epin_fifo_size(void);
  *  @param[in] size     Length of the data to write.
  *  @return Number of bytes writen.
  */
-uint16_t tinyusb_audio_write(void *data_in, uint16_t size);
+uint16_t tinyusb_audio_write(const void *data_in, uint16_t size);
 
 /** @brief Read audio data from the USB audio output endpoint.
  *

@@ -172,6 +172,31 @@
             }
         },
         {
+            "name": "puretone-unidirectional-quasar",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone unidirectional example for SR11xx with Quasar",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "puretone-unidirectional-quasar-usb_audio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone unidirectional example for SR11xx with Quasar USB AUDIO",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "USB_AUDIO_ENABLED": "ON"
+            }
+        },
+        {
             "name": "star-network-quasar",
             "description": "Star Network example for SR11xx with Quasar",
             "hidden": false,

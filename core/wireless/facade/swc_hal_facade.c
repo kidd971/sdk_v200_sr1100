@@ -130,7 +130,7 @@ __attribute__((weak)) void swc_hal_radio_1_set_access_mode_qspi(void)
     while (1);
 }
 
-/* Dual Radio Timer Management */
+/* Dual Radio Timer Management. */
 __attribute__((weak)) void swc_hal_multi_radio_timer_init(void)
 {
     return;

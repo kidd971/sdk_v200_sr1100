@@ -20,33 +20,31 @@ extern "C" {
 /* TYPES **********************************************************************/
 /** @brief Available channel for a timer.
  *
- *  Refer to the reference manual to ensure that the channel
- *  is available for the selected timer.
+ *  @note Refer to the reference manual to ensure that the channel is available for the selected timer.
  */
 typedef enum quasar_pwm_channel {
-    /*! Timer channel 1 */
+    /*! Timer channel 1. */
     QUASAR_PWM_CHANNEL_1 = 1,
-    /*! Timer channel 2 */
+    /*! Timer channel 2. */
     QUASAR_PWM_CHANNEL_2 = 2,
-    /*! Timer channel 3 */
+    /*! Timer channel 3. */
     QUASAR_PWM_CHANNEL_3 = 3,
-    /*! Timer channel 4 */
+    /*! Timer channel 4. */
     QUASAR_PWM_CHANNEL_4 = 4
 } quasar_pwm_channel_t;
 
 /** @brief Configuration settings for a PWM.
  *
- *  Refer to the reference manual to ensure that the timer
- *  can generate PWM.
+ *  @note Refer to the reference manual to ensure that the timer can generate PWM.
  */
 typedef struct quasar_pwm_config {
     /*! Configuration of the timer used for PWM. */
     quasar_timer_config_t timer_config;
-    /*! Timer channel used for the PWM ouput. */
+    /*! Timer channel used for the PWM output. */
     quasar_pwm_channel_t timer_channel;
     /*! PWM output's duty cycle percentage (0 - 100). */
     uint8_t duty_cycle;
-    /*! GPIO used for the PWM ouput. */
+    /*! GPIO used for the PWM output. */
     quasar_gpio_config_t gpio_config;
 } quasar_pwm_config_t;
 
@@ -65,8 +63,8 @@ void quasar_pwm_deinit(quasar_pwm_config_t pwm_config);
 
 /** @brief Configure the duty cycle of the PWM.
  *
- *  @param[in] pwm_config               Configuration of the PWM.
- *  @param[in] new_duty_cycle_percent   Duty cycle to set.
+ *  @param[in] pwm_config              Configuration of the PWM.
+ *  @param[in] new_duty_cycle_percent  Duty cycle to set.
  */
 void quasar_pwm_set_duty_cycle(quasar_pwm_config_t *pwm_config, uint8_t new_duty_cycle_percent);
 

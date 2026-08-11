@@ -27,37 +27,37 @@ extern "C" {
 /** @brief Quasar BSP GPIO pin selection.
  */
 typedef enum quasar_gpio_pin {
-    /*! GPIO pin 0 */
+    /*! GPIO pin 0. */
     QUASAR_GPIO_PIN_0 = 0,
-    /*! GPIO pin 1 */
+    /*! GPIO pin 1. */
     QUASAR_GPIO_PIN_1 = 1,
-    /*! GPIO pin 2 */
+    /*! GPIO pin 2. */
     QUASAR_GPIO_PIN_2 = 2,
-    /*! GPIO pin 3 */
+    /*! GPIO pin 3. */
     QUASAR_GPIO_PIN_3 = 3,
-    /*! GPIO pin 4 */
+    /*! GPIO pin 4. */
     QUASAR_GPIO_PIN_4 = 4,
-    /*! GPIO pin 5 */
+    /*! GPIO pin 5. */
     QUASAR_GPIO_PIN_5 = 5,
-    /*! GPIO pin 6 */
+    /*! GPIO pin 6. */
     QUASAR_GPIO_PIN_6 = 6,
-    /*! GPIO pin 7 */
+    /*! GPIO pin 7. */
     QUASAR_GPIO_PIN_7 = 7,
-    /*! GPIO pin 8 */
+    /*! GPIO pin 8. */
     QUASAR_GPIO_PIN_8 = 8,
-    /*! GPIO pin 9 */
+    /*! GPIO pin 9. */
     QUASAR_GPIO_PIN_9 = 9,
-    /*! GPIO pin 10 */
+    /*! GPIO pin 10. */
     QUASAR_GPIO_PIN_10 = 10,
-    /*! GPIO pin 11 */
+    /*! GPIO pin 11. */
     QUASAR_GPIO_PIN_11 = 11,
-    /*! GPIO pin 12 */
+    /*! GPIO pin 12. */
     QUASAR_GPIO_PIN_12 = 12,
-    /*! GPIO pin 13 */
+    /*! GPIO pin 13. */
     QUASAR_GPIO_PIN_13 = 13,
-    /*! GPIO pin 14 */
+    /*! GPIO pin 14. */
     QUASAR_GPIO_PIN_14 = 14,
-    /*! GPIO pin 15 */
+    /*! GPIO pin 15. */
     QUASAR_GPIO_PIN_15 = 15,
 } quasar_gpio_pin_t;
 
@@ -118,35 +118,35 @@ typedef enum quasar_gpio_alternate_function {
     QUASAR_GPIO_ALTERNATE_NONE = 0,
     /*! GPIO alternate function 0. */
     QUASAR_GPIO_ALTERNATE_AF0 = 0,
-    /*! GPIO alternate function 1 */
+    /*! GPIO alternate function 1. */
     QUASAR_GPIO_ALTERNATE_AF1 = 1,
-    /*! GPIO alternate function 2 */
+    /*! GPIO alternate function 2. */
     QUASAR_GPIO_ALTERNATE_AF2 = 2,
-    /*! GPIO alternate function 3 */
+    /*! GPIO alternate function 3. */
     QUASAR_GPIO_ALTERNATE_AF3 = 3,
-    /*! GPIO alternate function 4 */
+    /*! GPIO alternate function 4. */
     QUASAR_GPIO_ALTERNATE_AF4 = 4,
-    /*! GPIO alternate function 5 */
+    /*! GPIO alternate function 5. */
     QUASAR_GPIO_ALTERNATE_AF5 = 5,
-    /*! GPIO alternate function 6 */
+    /*! GPIO alternate function 6. */
     QUASAR_GPIO_ALTERNATE_AF6 = 6,
-    /*! GPIO alternate function 7 */
+    /*! GPIO alternate function 7. */
     QUASAR_GPIO_ALTERNATE_AF7 = 7,
-    /*! GPIO alternate function 8 */
+    /*! GPIO alternate function 8. */
     QUASAR_GPIO_ALTERNATE_AF8 = 8,
-    /*! GPIO alternate function 9 */
+    /*! GPIO alternate function 9. */
     QUASAR_GPIO_ALTERNATE_AF9 = 9,
-    /*! GPIO alternate function 10 */
+    /*! GPIO alternate function 10. */
     QUASAR_GPIO_ALTERNATE_AF10 = 10,
-    /*! GPIO alternate function 11 */
+    /*! GPIO alternate function 11. */
     QUASAR_GPIO_ALTERNATE_AF11 = 11,
-    /*! GPIO alternate function 12 */
+    /*! GPIO alternate function 12. */
     QUASAR_GPIO_ALTERNATE_AF12 = 12,
-    /*! GPIO alternate function 13 */
+    /*! GPIO alternate function 13. */
     QUASAR_GPIO_ALTERNATE_AF13 = 13,
-    /*! GPIO alternate function 14 */
+    /*! GPIO alternate function 14. */
     QUASAR_GPIO_ALTERNATE_AF14 = 14,
-    /*! GPIO alternate function 15 */
+    /*! GPIO alternate function 15. */
     QUASAR_GPIO_ALTERNATE_AF15 = 15,
 } quasar_gpio_alternate_t;
 
@@ -155,7 +155,7 @@ typedef enum quasar_gpio_alternate_function {
 typedef struct quasar_gpio_config {
     /*! The reference HAL's GPIO port selection. */
     GPIO_TypeDef *port;
-    /* GPIO pin selection. */
+    /*! GPIO pin selection. */
     quasar_gpio_pin_t pin;
     /*! GPIO mode selection. */
     quasar_gpio_mode_t mode;
@@ -178,8 +178,8 @@ void quasar_gpio_init(quasar_gpio_config_t gpio_config);
 
 /** @brief Deinitialize GPIO peripheral.
  *
- *  @param[in] gpio_port     The reference GPIO port of the HAL to be deinitialized.
- *  @param[in] gpio_pin      Selected GPIO pin.
+ *  @param[in] gpio_port  The reference GPIO port of the HAL to be deinitialized.
+ *  @param[in] gpio_pin   Selected GPIO pin.
  */
 void quasar_gpio_deinit(GPIO_TypeDef *gpio_port, quasar_gpio_pin_t gpio_pin);
 
@@ -220,12 +220,21 @@ void quasar_gpio_enable_irq(quasar_gpio_pin_t gpio_pin);
  */
 void quasar_gpio_disable_irq(quasar_gpio_pin_t gpio_pin);
 
+/** @brief Clear the EXTI port selection for a given pin.
+ *
+ *  @note Use this before configuring a new EXTI port mapping when the EXTI line was previously assigned to a different
+ *        port.
+ *
+ *  @param[in] gpio_pin  Selected GPIO pin.
+ */
+void quasar_gpio_clear_exti_port_selection(quasar_gpio_pin_t gpio_pin);
+
 /** @brief Set the specified GPIO pin's interrupt as pending.
  *
- *  This function manually forces an interrupt to enter the pending state for a specified GPIO pin.
+ *  @note This function manually forces an interrupt to enter the pending state for a specified GPIO pin.
  *
- *  @note This function doesn't configure the interrupt itself; the interrupt for the specified GPIO
- *        pin should be already configured properly before calling this function.
+ *  @note This function doesn't configure the interrupt itself; the interrupt for the specified GPIO pin should be
+ *        already configured properly before calling this function.
  *
  *  @param[in] gpio_pin  Selected GPIO pin.
  */

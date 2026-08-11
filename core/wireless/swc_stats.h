@@ -19,10 +19,8 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Update connection statistics.
  *
- *  After calling this function, the statistics inside the
- *  connection handle will be updated. The function also
- *  returns a reference to these internal statistics so they
- *  can be used by the caller.
+ *  @note After calling this function, the statistics inside the connection handle will be updated. The function also
+ *        returns a reference to these internal statistics so they can be used by the caller.
  *
  *  @param[in]  conn  Connection handle.
  *  @param[out] err   Wireless Core error code.
@@ -44,10 +42,8 @@ int swc_connection_format_stats(const swc_connection_t *const conn, char *const 
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
 /** @brief Update connection statistics on a per channel basis.
  *
- *  After calling this function, the statistics inside the
- *  connection handle will be updated. The function also
- *  returns a reference to these internal statistics so they
- *  can be used by the caller.
+ *  @note After calling this function, the statistics inside the connection handle will be updated. The function also
+ *        returns a reference to these internal statistics so they can be used by the caller.
  *
  *  @param[in] conn            Connection handle.
  *  @param[in] channel_number  Target channel.
@@ -57,10 +53,8 @@ swc_statistics_t *swc_connection_update_stats_per_channel(swc_connection_t *cons
 
 /** @brief Update connection QOS indicators on a per channel basis.
  *
- *  After calling this function, the QOS indicators inside the
- *  connection handle will be updated. The function also
- *  returns a reference to these internal indicators so they
- *  can be used by the caller.
+ *  @note After calling this function, the QOS indicators inside the connection handle will be updated. The function
+ *        also returns a reference to these internal indicators so they can be used by the caller.
  *
  *  @param[in] conn            Connection handle.
  *  @param[in] channel_number  Target channel.

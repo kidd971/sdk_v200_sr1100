@@ -29,7 +29,9 @@ extern "C" {
 /** @brief Certification modes.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
+    /*! Hello World RTOS certification mode. */
     FACADE_CERTIF_HELLO_WORLD_RTOS,
 } facade_certification_mode_t;
 
@@ -43,6 +45,8 @@ typedef struct facade_button_callbacks {
 } facade_button_callbacks_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
+/** @brief Initialize the button GPIO and interrupts.
+ */
 void facade_button_init(void);
 
 /** @brief Read button state to define if certification mode is required.

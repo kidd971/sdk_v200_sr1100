@@ -19,10 +19,8 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Update the SPARK Audio Core pipeline statistics.
  *
- *  After calling this function, the statistics inside the
- *  pipeline instance will be updated. The function also
- *  returns a reference to these internal statistics so they
- *  can be used by the caller.
+ *  @note After calling this function, the statistics inside the pipeline instance will be updated. The function also
+ *        returns a reference to these internal statistics so they can be used by the caller.
  *
  *  @param[in]  pipeline  Pipeline instance.
  *  @param[out] status    Status code.

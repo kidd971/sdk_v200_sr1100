@@ -24,10 +24,10 @@ extern "C" {
 
 /* MACROS *********************************************************************/
 /* Return the global interrupt of the selected DMA channel from quasar_dma_selection_t. */
-#define QUASAR_DMA_GET_SELECTED_IRQ(dma_channel)                         \
-    ((IRQn_Type)((dma_channel <= QUASAR_DMA_SELECTION_GPDMA1_CHANNEL7) ? \
-                     (GPDMA1_Channel0_IRQn + (dma_channel)) :            \
-                     (QUASAR_DMA_SELECTION_GPDMA1_CHANNEL8_OFFSET + dma_channel)))
+#define QUASAR_DMA_GET_SELECTED_IRQ(dma_channel)                           \
+    ((IRQn_Type)(((dma_channel) <= QUASAR_DMA_SELECTION_GPDMA1_CHANNEL7) ? \
+                     (GPDMA1_Channel0_IRQn + (dma_channel)) :              \
+                     (QUASAR_DMA_SELECTION_GPDMA1_CHANNEL8_OFFSET + (dma_channel))))
 
 /* TYPES **********************************************************************/
 /** @brief List of all available channel of the general purpose DMA 1 instances.
@@ -69,8 +69,7 @@ typedef enum quasar_dma_selection {
     QUASAR_DMA_SELECTION_NOT_USED = 16,
 } quasar_dma_selection_t;
 
-/** @brief List of all available peripherals that can be used as source or/and
- *         destination for DMA transfers.
+/** @brief List of all available peripherals that can be used as source or/and destination for DMA transfers.
  */
 typedef enum quasar_dma_peripheral {
     /*! Select the UART peripheral to be used for the DMA transfer. */
@@ -97,8 +96,7 @@ typedef struct quasar_dma_config {
 } quasar_dma_config_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-/** @brief Initializes the DMA to operate in either peripheral to memory or
- *         memory to peripheral mode.
+/** @brief Initializes the DMA to operate in either peripheral to memory or memory to peripheral mode.
  *
  *  @note Currently, only peripherals of type UART are supported with this DMA configuration.
  *

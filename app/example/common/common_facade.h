@@ -19,6 +19,7 @@
 #define COMMON_FACADE_H_
 
 /* INCLUDES *******************************************************************/
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -32,19 +33,19 @@ extern "C" {
 /** @brief Triggers a software interrupt for context switching in a bare-metal environment.
  *
  *  @note This function is designed to be used as a callback for the wireless core's context switch mechanism. It
- *  configures and triggers a software interrupt specifically allocated for context switching purposes. The interrupt
- *  invoked by this function should be set with the lowest priority to ensure that it does not preempt more critical
- *  system operations.
+ *        configures and triggers a software interrupt specifically allocated for context switching purposes. The
+ *        interrupt invoked by this function should be set with the lowest priority to ensure that it does not preempt
+ *        more critical system operations.
  *
- *  In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used to perform the context
- *  switch by setting the PendSV interrupt pending bit. The actual context switching logic, including saving and
- *  restoring of contexts, is handled by the interrupt service routine (ISR) associated with the software interrupt,
- *  which should invoke `swc_connection_callbacks_processing_handler` as part of its execution.
+ *  @note In ARM Cortex-M systems, this function could triggers the PendSV interrupt, which is used to perform the
+ *        context switch by setting the PendSV interrupt pending bit. The actual context switching logic, including
+ *        saving and restoring of contexts, is handled by the interrupt service routine (ISR) associated with the
+ *        software interrupt, which should invoke `swc_connection_callbacks_processing_handler` as part of its
+ *        execution.
  *
- *  Usage:
- *  This function should be registered with `swc_init` as part of the initialization process for applications that
- *  require custom context switching mechanisms, allowing the wireless core to manage task priorities and execute less
- *  critical processes seamlessly.
+ *  @note Usage: This function should be registered with `swc_init` as part of the initialization process for
+ *        applications that require custom context switching mechanisms, allowing the wireless core to manage task
+ *        priorities and execute less critical processes seamlessly.
  */
 void facade_context_switch_trigger(void);
 
@@ -90,6 +91,13 @@ void facade_delay(uint32_t ms_delay);
  */
 void facade_print_string(char *string);
 
+/** @brief Report whether the USB CDC connection is active.
+ *
+ *  @retval true   USB CDC is connected.
+ *  @retval false  USB CDC is not connected.
+ */
+bool facade_is_usb_connected(void);
+
 /** @brief Print error string.
  *
  *  @note The print mechanism must be able to work at the highest priority level where error checks are done.
@@ -109,6 +117,23 @@ void facade_notify_not_paired(void);
 /** @brief Successful pairing notification LED pattern.
  */
 void facade_notify_pairing_successful(void);
+
+/** @brief Display the certification mode indicator.
+ *
+ *  @note Shows a steady indicator to signal the device is running in certification mode. On boards with an RGB LED, the
+ *        indicator is a steady yellow. On boards without an RGB LED, a dedicated status LED is used instead. While
+ *        active, all activity status LEDs are suppressed so the certification indicator stays unambiguous.
+ */
+void facade_notify_certification_mode(void);
+
+/** @brief Report whether the certification mode indicator is currently active.
+ *
+ *  @note Used by the board backends to suppress activity status LEDs while the certification indicator is shown.
+ *
+ *  @retval true   Certification mode is active.
+ *  @retval false  Certification mode is not active.
+ */
+bool facade_is_certification_mode_active(void);
 
 /** @brief Turn off all LEDs.
  */

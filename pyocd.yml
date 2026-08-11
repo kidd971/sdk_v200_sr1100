@@ -1,0 +1,7 @@
+pack:
+# BEGIN PIXI PYOCD PACKS (AUTO-GENERATED - DO NOT EDIT)
+  - D:\_SDK_v240\RC2\spark_sdk_sr1100_v2.4.0-rc2\.pixi\envs\spark-sdk\packs\Keil.STM32G0xx_DFP.1.5.0.pack
+  - D:\_SDK_v240\RC2\spark_sdk_sr1100_v2.4.0-rc2\.pixi\envs\spark-sdk\packs\Keil.STM32G4xx_DFP.2.2.0.pack
+  - D:\_SDK_v240\RC2\spark_sdk_sr1100_v2.4.0-rc2\.pixi\envs\spark-sdk\packs\Keil.STM32U5xx_DFP.3.2.0.pack
+  - D:\_SDK_v240\RC2\spark_sdk_sr1100_v2.4.0-rc2\.pixi\envs\spark-sdk\packs\NXP.LPC55S28_DFP.25.12.00.pack
+# END PIXI PYOCD PACKS

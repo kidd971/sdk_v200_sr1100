@@ -21,8 +21,7 @@ extern "C" {
 #endif
 
 /* TYPES **********************************************************************/
-/** @brief List of all available UART instances. Also used as index into Quasar
- *  FIFO buffer array.
+/** @brief List of all available UART instances. Also used as index into Quasar FIFO buffer array.
  */
 typedef enum quasar_uart_selection {
     /*! Select the full feature USART 1. */
@@ -44,23 +43,23 @@ typedef enum quasar_uart_selection {
 /** @brief List of most common baud rates.
  */
 typedef enum quasar_uart_baud_rate {
-    /*! Select the UART communication at 1200 baud/s */
+    /*! Select the UART communication at 1200 baud/s. */
     QUASAR_UART_BAUD_RATE_1200 = 1200,
-    /*! Select the UART communication at 2400 baud/s */
+    /*! Select the UART communication at 2400 baud/s. */
     QUASAR_UART_BAUD_RATE_2400 = 2400,
-    /*! Select the UART communication at 4800 baud/s */
+    /*! Select the UART communication at 4800 baud/s. */
     QUASAR_UART_BAUD_RATE_4800 = 4800,
-    /*! Select the UART communication at 9600 baud/s */
+    /*! Select the UART communication at 9600 baud/s. */
     QUASAR_UART_BAUD_RATE_9600 = 9600,
-    /*! Select the UART communication at 19200 baud/s */
+    /*! Select the UART communication at 19200 baud/s. */
     QUASAR_UART_BAUD_RATE_19200 = 19200,
-    /*! Select the UART communication at 38400 baud/s */
+    /*! Select the UART communication at 38400 baud/s. */
     QUASAR_UART_BAUD_RATE_38400 = 38400,
-    /*! Select the UART communication at 57600 baud/s */
+    /*! Select the UART communication at 57600 baud/s. */
     QUASAR_UART_BAUD_RATE_57600 = 57600,
-    /*! Select the UART communication at 115200 baud/s */
+    /*! Select the UART communication at 115200 baud/s. */
     QUASAR_UART_BAUD_RATE_115200 = 115200,
-    /*! Select the UART communication at 1152000 baud/s */
+    /*! Select the UART communication at 1152000 baud/s. */
     QUASAR_UART_BAUD_RATE_1152000 = 1152000,
 } quasar_uart_baud_rate_t;
 
@@ -161,8 +160,8 @@ void quasar_uart_transmit_string_irq(quasar_uart_selection_t uart_selection, cha
 
 /** @brief Retrieve received data from the associated FIFO buffer used for reception.
  *
- *  Received data is automatically pushed into the reception FIFO buffer using interrupts.
- *  This function pulls data from this FIFO buffer.
+ *  @note Received data is automatically pushed into the reception FIFO buffer using interrupts. This function pulls
+ *        data from this FIFO buffer.
  *
  *  @note This function should be used only if the UART instance has been initialized with IRQ.
  *
@@ -173,8 +172,8 @@ uint8_t quasar_uart_receive_irq(quasar_uart_selection_t uart_selection);
 
 /** @brief Initiate UART transmission with DMA for a specified UART instance.
  *
- *  @note This function should be used only if the UART instance has been initialized without
- *        IRQ and if the DMA has to be initialized before.
+ *  @note This function should be used only if the UART instance has been initialized without IRQ and if the DMA has to
+ *        be initialized before.
  *
  *  @param[in]  uart_selection  Selected UART peripheral.
  *  @param[in]  data            Data to be transmitted.
@@ -186,8 +185,8 @@ void quasar_uart_transmit_dma(quasar_uart_selection_t uart_selection, uint8_t *d
 
 /** @brief Initiate UART reception with DMA for a specified UART instance.
  *
- *  @note This function should be used only if the UART instance has been initialized without
- *        IRQ and if the DMA has to be initialized before.
+ *  @note This function should be used only if the UART instance has been initialized without IRQ and if the DMA has to
+ *        be initialized before.
  *
  *  @param[in] uart_selection  Selected UART peripheral.
  *  @return The received data.
@@ -196,13 +195,13 @@ uint8_t quasar_uart_receive_dma(quasar_uart_selection_t uart_selection);
 
 /** @brief Transmit over UART using blocking method.
  *
- *  @note This function should be used only if the UART instance has been initialized without
- *        IRQ and if no DMA has been initialized.
+ *  @note This function should be used only if the UART instance has been initialized without IRQ and if no DMA has been
+ *        initialized.
  *
  *  @param[in]  uart_selection  Selected UART peripheral.
  *  @param[in]  data            Data to be transmitted.
  *  @param[in]  size            Size of the data array to be transmitted.
- *  @param[in]  timeout         Timeout period
+ *  @param[in]  timeout         Timeout period.
  *  @param[out] err             Pointer to store error status.
  */
 void quasar_uart_transmit_blocking(quasar_uart_selection_t uart_selection, uint8_t *data, uint16_t size,
@@ -210,11 +209,11 @@ void quasar_uart_transmit_blocking(quasar_uart_selection_t uart_selection, uint8
 
 /** @brief Receive over UART using blocking method.
  *
- *  @note This function should be used only if the UART instance has been initialized without
- *        IRQ and if no DMA has been initialized.
+ *  @note This function should be used only if the UART instance has been initialized without IRQ and if no DMA has been
+ *        initialized.
  *
  *  @param[in] uart_selection  Selected UART peripheral.
- *  @param[in] timeout         Timeout period
+ *  @param[in] timeout         Timeout period.
  *  @return The received data.
  */
 uint8_t quasar_uart_receive_blocking(quasar_uart_selection_t uart_selection, uint16_t timeout);

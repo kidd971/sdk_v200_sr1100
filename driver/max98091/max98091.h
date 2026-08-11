@@ -20,11 +20,11 @@ extern "C" {
 /* CONSTANTS ******************************************************************/
 #define MAX98091_SET_MICROPHONE 0x20
 
-/* Volume control definition */
+/* Volume control definition. */
 #define MAX98091_VOLUME_UNMUTE 0
 #define MAX98091_VOLUME_MUTE   1
 
-/* Filter definition */
+/* Filter definition. */
 #define FLAT_B0   0x100000
 #define FLAT_B1   0x000000
 #define FLAT_B2   0x000000
@@ -55,7 +55,7 @@ extern "C" {
 #define LP_5k_A1  0xECA6D9 /*-1.209265 */
 #define LP_5k_A2  0x089647 /* 0.536689 */
 
-/* f0=1302.2 Q=0.7 -42.9dB@12kHz */
+/* F0=1302.2 Q=0.7 -42.9dB@12kHz. */
 #define LP_1_3k_B0 0x001A79 /* 0.006464 */
 #define LP_1_3k_B1 0x0034F5 /* 0.012929 */
 #define LP_1_3k_B2 0x001A79 /* 0.006464 */
@@ -71,98 +71,120 @@ extern "C" {
 /* TYPES **********************************************************************/
 /** @brief max98091 I2C Addresses.
  *
- *  This enum contains all supported I2C addresses for this codec.
+ *  @note This enum contains all supported I2C addresses for this codec.
  */
 typedef enum max98091_i2c_address {
+    /*! I2C address for MAX98091A. */
     MAX98091A_I2C_ADDR = 0x20,
+    /*! I2C address for MAX98091B. */
     MAX98091B_I2C_ADDR = 0x22
 } max98091_i2c_address_t;
 
 /** @brief max98091 driver API Hardware Abstraction Layer.
  *
- *  This structure contains all function pointers used to interact with the
- *  codec's peripherals.
+ *  @note This structure contains all function pointers used to interact with the codec's peripherals.
  */
 typedef struct max98091_i2c_hal {
+    /*! I2C address of the codec. */
     max98091_i2c_address_t i2c_addr;
-    void (*write)(uint8_t dev_address, uint8_t mem_addr, uint8_t data); /* Blocking I2C write function */
-    void (*read)(uint8_t dev_address, uint8_t mem_addr, uint8_t *data); /* Blocking I2C read function */
+    /* Blocking I2C write function. */
+    void (*write)(uint8_t dev_address, uint8_t mem_addr, uint8_t data);
+    /* Blocking I2C read function. */
+    void (*read)(uint8_t dev_address, uint8_t mem_addr, uint8_t *data);
 } max98091_i2c_hal_t;
 
 /** @brief max98091 driver supported sampling rates.
  *
- *  This enum contains all the sampling rates supported by this driver.
+ *  @note This enum contains all the sampling rates supported by this driver.
  */
 typedef enum max98091_sampling_rate {
+    /*! 96 kHz sampling rate. */
     MAX98091_AUDIO_96KHZ,
+    /*! 48 kHz sampling rate. */
     MAX98091_AUDIO_48KHZ,
+    /*! 44.1 kHz sampling rate. */
     MAX98091_AUDIO_44_1KHZ,
+    /*! 32 kHz sampling rate. */
     MAX98091_AUDIO_32KHZ,
+    /*! 24 kHz sampling rate. */
     MAX98091_AUDIO_24KHZ,
+    /*! 16 kHz sampling rate. */
     MAX98091_AUDIO_16KHZ,
+    /*! 12 kHz sampling rate. */
     MAX98091_AUDIO_12KHZ,
+    /*! 8 kHz sampling rate. */
     MAX98091_AUDIO_8KHZ
 } max98091_sampling_rate_t;
 
 /** @brief max98091 word size enum.
  *
- *  This enum contains all the word size supported by this driver.
+ *  @note This enum contains all the word size supported by this driver.
  */
 typedef enum max98091_word_size {
+    /*! 16-bit word size. */
     MAX98091_AUDIO_16BITS,
+    /*! 20-bit word size. */
     MAX98091_AUDIO_20BITS,
+    /*! 24-bit word size. */
     MAX98091_AUDIO_24BITS,
+    /*! 32-bit word size. */
     MAX98091_AUDIO_32BITS
 } max98091_word_size_t;
 
 /** @brief max98091 driver configuration structure.
  *
- *  Variables within this structure can be set by the user to configure the CODEC.
+ *  @note Variables within this structure can be set by the user to configure the CODEC.
  */
 typedef struct max98091_codec_cfg {
+    /*! Audio sampling rate. */
     max98091_sampling_rate_t sampling_rate;
+    /*! Audio word size. */
     max98091_word_size_t word_size;
+    /*! Enable audio recording. */
     bool record_enabled;
+    /*! Enable audio playback. */
     bool playback_enabled;
+    /*! Enable recording filter. */
     bool record_filter_enabled;
+    /*! Enable playback filter. */
     bool playback_filter_enabled;
 } max98091_codec_cfg_t;
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize the max98091 audio codec driver.
  *
- *  @param[in]  i2c_hal       Hardware Abstraction Layer structure i2c_hal.
- *  @param[in]  codec_config  Max98091 hardware codec configuration structure.
+ *  @param[in] i2c_hal    Hardware Abstraction Layer structure i2c_hal.
+ *  @param[in] codec_cfg  Max98091 hardware codec configuration structure.
  */
-void max98091_init(max98091_i2c_hal_t *i2c_hal, max98091_codec_cfg_t *codec_cfg);
+void max98091_init(max98091_i2c_hal_t *i2c_hal, const max98091_codec_cfg_t *codec_cfg);
 
 /** @brief Perfom a software reset.
  *
- *  @param[in]  i2c_hal  Hardware Abstraction Layer structure i2c_hal.
+ *  @param[in] i2c_hal  Hardware Abstraction Layer structure i2c_hal.
  */
 void max98091_reset_codec(max98091_i2c_hal_t *i2c_hal);
 
 /** @brief Increase headphone volume.
  *
- *  @param[in]  i2c_hal  Hardware Abstraction Layer structure i2c_hal.
+ *  @param[in] i2c_hal  Hardware Abstraction Layer structure i2c_hal.
  */
 void max98091_hp_increase_volume(max98091_i2c_hal_t *i2c_hal);
 
 /** @brief Decrease headphone volume.
  *
- *  @param[in]  i2c_hal  Hardware Abstraction Layer structure i2c_hal.
+ *  @param[in] i2c_hal  Hardware Abstraction Layer structure i2c_hal.
  */
 void max98091_hp_decrease_volume(max98091_i2c_hal_t *i2c_hal);
 
 /** @brief Unmute global volume.
  *
- *  @param[in]  i2c_hal  Hardware Abstraction Layer structure i2c_hal.
+ *  @param[in] i2c_hal  Hardware Abstraction Layer structure i2c_hal.
  */
 void max98091_unmute_volume(max98091_i2c_hal_t *i2c_hal);
 
 /** @brief Mute global volume.
  *
- *  @param[in]  i2c_hal  Hardware Abstraction Layer structure i2c_hal.
+ *  @param[in] i2c_hal  Hardware Abstraction Layer structure i2c_hal.
  */
 void max98091_mute_volume(max98091_i2c_hal_t *i2c_hal);
 
@@ -201,7 +223,7 @@ void max98091_disable_mic_trrs(max98091_i2c_hal_t *i2c_hal);
 
 /** @brief Enable codec output.
  *
- *  Speaker outputs are not enable.
+ *  @note Speaker outputs are not enable.
  *
  *  @param[in] i2c_hal  Hardware Abstraction Layer structure i2c_hal.
  */

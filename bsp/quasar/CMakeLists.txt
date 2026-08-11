@@ -5,7 +5,7 @@ set(STM32U5_HAL_CONF_PATH ${BSP_PATH} CACHE INTERNAL "Path to stm32u5xx_hal_conf
 set(STM32U5_LINKER_SCRIPT_PATH ${BSP_PATH}/GCC/STM32U5A5AJHXQ_FLASH.ld CACHE INTERNAL "Path to CMAKE_EXE_LINKER_FLAG use by gcc-arm-flags.cmake")
 set(STM32U5_MCU_MODEL STM32U5A5xx CACHE INTERNAL "STM32U5 MCU model definition use by stm32u5xx_hal_driver lib")
 
-message("ST HAL Driver using MCU model: ${STM32U5_MCU_MODEL}")
+message(STATUS "ST HAL Driver using MCU model: ${STM32U5_MCU_MODEL}")
 
 target_link_libraries(hardware PUBLIC stm32u5xx_hal_driver cmsis_device_u5)
 

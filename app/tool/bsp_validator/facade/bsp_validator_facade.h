@@ -32,30 +32,29 @@ extern "C" {
 /* TYPES **********************************************************************/
 /** @brief Hardware Abstraction Layer for Spark Radio.
  *
- *  Provides an interface for controlling communication with the radio, managing chip select (CS) pins,
- *  handling data transfer in both blocking and non-blocking modes, and managing IRQ and DMA
- *  interrupt sources for a Spark Radio device. This abstraction facilitates flexible integration
- *  with different hardware platforms and enhances portability by decoupling the radio operation
- *  specifics from the main application logic.
+ *  @note Provides an interface for controlling communication with the radio, managing chip select (CS) pins, handling
+ *        data transfer in both blocking and non-blocking modes, and managing IRQ and DMA interrupt sources for a Spark
+ *        Radio device. This abstraction facilitates flexible integration with different hardware platforms and enhances
+ *        portability by decoupling the radio operation specifics from the main application logic.
  *
- *  Functions:
- *  - end_transfer: Set the CS pin high.
- *  - begin_transfer: Set the CS pin low.
- *  - transfer_half_duplex_rx_blocking: Transfer half duplex from the radio in blocking mode.
- *  - transfer_half_duplex_rx_non_blocking: Transfer half duplex from the radio in non-blocking mode.
- *  - transfer_half_duplex_tx_blocking: Transfer half duplex to the radio in blocking mode.
- *  - transfer_half_duplex_tx_non_blocking: Transfer half duplex to the radio in non-blocking mode.
- *  - transfer_full_duplex_blocking: Perform transfer in full duplex blocking mode.
- *  - transfer_full_duplex_non_blocking: Perform transfer in full duplex non-blocking mode.
- *  - radio_context_switch: Trigger the radio's IRQ pin interrupt context.
- *  - disable_radio_irq: Disable the radio IRQ interrupt source.
- *  - enable_radio_irq: Enable the radio IRQ interrupt source.
- *  - disable_radio_non_blocking_transfer_irq: Disable the non blocking transfer complete interrupt source.
- *  - enable_radio_non_blocking_transfer_irq: Enable the non blocking transfer complete interrupt source.
+ *  @note Functions:
+ *        - end_transfer: Set the CS pin high.
+ *        - begin_transfer: Set the CS pin low.
+ *        - transfer_half_duplex_rx_blocking: Transfer half duplex from the radio in blocking mode.
+ *        - transfer_half_duplex_rx_non_blocking: Transfer half duplex from the radio in non-blocking mode.
+ *        - transfer_half_duplex_tx_blocking: Transfer half duplex to the radio in blocking mode.
+ *        - transfer_half_duplex_tx_non_blocking: Transfer half duplex to the radio in non-blocking mode.
+ *        - transfer_full_duplex_blocking: Perform transfer in full duplex blocking mode.
+ *        - transfer_full_duplex_non_blocking: Perform transfer in full duplex non-blocking mode.
+ *        - radio_context_switch: Trigger the radio's IRQ pin interrupt context.
+ *        - disable_radio_irq: Disable the radio IRQ interrupt source.
+ *        - enable_radio_irq: Enable the radio IRQ interrupt source.
+ *        - disable_radio_non_blocking_transfer_irq: Disable the non blocking transfer complete interrupt source.
+ *        - enable_radio_non_blocking_transfer_irq: Enable the non blocking transfer complete interrupt source.
  *
- *  This structure should be initialized statically, pointing to the appropriate subset of facade
- *  functions that implement the specified operations, allowing for tailored behavior based on
- *  the specific radio and platform in use.
+ *  @note This structure should be initialized statically, pointing to the appropriate subset of facade functions that
+ *        implement the specified operations, allowing for tailored behavior based on the specific radio and platform in
+ *        use.
  */
 typedef struct {
     /*! Set reset pin HIGH. */
@@ -101,8 +100,8 @@ typedef struct {
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Initialize the BSP main peripherals.
  *
- *  @note This function initializes peripherals such as: System clock, SPI, GPIO, UART, NVIC and timers,
- *        which are required by the functions within this BSP validator application.
+ *  @note This function initializes peripherals such as: System clock, SPI, GPIO, UART, NVIC and timers, which are
+ *        required by the functions within this BSP validator application.
  */
 void facade_bsp_init(void);
 
@@ -118,7 +117,7 @@ void facade_time_delay(uint32_t ms);
 
 /** @brief Serial output for the log feature.
  *
- *  User can provide serial IO such as UART.
+ *  @note User can provide serial IO such as UART.
  *
  *  @param[in] string  Message to be printed to the serial output.
  */

@@ -1,3 +1,7 @@
+if (NOT TRANSCEIVER STREQUAL "SR1100")
+    return()
+endif()
+
 add_library(audio_unidirectional_backend "")
 target_include_directories(audio_unidirectional_backend PUBLIC facade)
 target_link_libraries(audio_unidirectional_backend PUBLIC common_backend)
@@ -17,6 +21,8 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
             audio_core
             audio_unidirectional_backend
             swc
+            swc_backend
+            spark_pairing
     )
     add_custom_command(TARGET audio_unidirectional_coordinator.elf
         POST_BUILD
@@ -31,6 +37,8 @@ target_link_libraries(audio_unidirectional_node.elf
         audio_core
         audio_unidirectional_backend
         swc
+        swc_backend
+        spark_pairing
 )
 add_custom_command(TARGET audio_unidirectional_node.elf
     POST_BUILD

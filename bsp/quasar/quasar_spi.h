@@ -20,7 +20,7 @@ extern "C" {
 /* MACROS *********************************************************************/
 /*! Return the handle from the selected SPI from quasar_spi_selection_t. */
 #define QUASAR_SPI_GET_SELECTED_HANDLE(spi_selection) \
-    ((SPI_HandleTypeDef *)((spi_selection <= QUASAR_SPI_SELECTION_SPI3) ? spi_handle_table[spi_selection] : NULL))
+    ((SPI_HandleTypeDef *)(((spi_selection) <= QUASAR_SPI_SELECTION_SPI3) ? spi_handle_table[(spi_selection)] : NULL))
 
 /*! Return true is the spi is busy, false if not. */
 #define QUASAR_SPI_IS_BUSY(spi_selection) \
@@ -42,43 +42,43 @@ typedef enum quasar_spi_selection {
 
 /** @brief List of all available clock sources for the SPI instances.
  *
- *  @note From the reference manual
- *      - `0b00` : PCLK1    -> set 0
- *      - `0b01` : SYSCLK   -> set 1
- *      - `0b10` : HSI16    -> set 2
- *      - `0b11` : MSIK     -> set 3
+ *  @note From the reference manual:
+ *        - `0b00` : PCLK1    -> set 0
+ *        - `0b01` : SYSCLK   -> set 1
+ *        - `0b10` : HSI16    -> set 2
+ *        - `0b11` : MSIK     -> set 3
  *
- *  The selected clock source must be initialized and activated before.
+ *  @note The selected clock source must be initialized and activated before.
  */
 typedef enum quasar_spi_clk_source {
-    /* Select PCLK1 as clock source. */
+    /*! Select PCLK1 as clock source. */
     QUASAR_SPI_CLK_SOURCE_PCLK1 = 0,
-    /* Select SYSCLK as clock source. */
+    /*! Select SYSCLK as clock source. */
     QUASAR_SPI_CLK_SOURCE_SYSCLK = 1,
-    /* Select HSI16 as clock source. */
+    /*! Select HSI16 as clock source. */
     QUASAR_SPI_CLK_SOURCE_HSI16 = 2,
-    /* Select MSIK as clock source. */
+    /*! Select MSIK as clock source. */
     QUASAR_SPI_CLK_SOURCE_MSIK = 3,
 } quasar_spi_clk_source_t;
 
 /** @brief List of available SPI prescalers.
  */
 typedef enum quasar_spi_prescaler {
-    /* Set the SPI prescaler to 2. */
+    /*! Set the SPI prescaler to 2. */
     QUASAR_SPI_PRESCALER_2 = SPI_BAUDRATEPRESCALER_2,
-    /* Set the SPI prescaler to 4. */
+    /*! Set the SPI prescaler to 4. */
     QUASAR_SPI_PRESCALER_4 = SPI_BAUDRATEPRESCALER_4,
-    /* Set the SPI prescaler to 8. */
+    /*! Set the SPI prescaler to 8. */
     QUASAR_SPI_PRESCALER_8 = SPI_BAUDRATEPRESCALER_8,
-    /* Set the SPI prescaler to 16. */
+    /*! Set the SPI prescaler to 16. */
     QUASAR_SPI_PRESCALER_16 = SPI_BAUDRATEPRESCALER_16,
-    /* Set the SPI prescaler to 32. */
+    /*! Set the SPI prescaler to 32. */
     QUASAR_SPI_PRESCALER_32 = SPI_BAUDRATEPRESCALER_32,
-    /* Set the SPI prescaler to 64. */
+    /*! Set the SPI prescaler to 64. */
     QUASAR_SPI_PRESCALER_64 = SPI_BAUDRATEPRESCALER_64,
-    /* Set the SPI prescaler to 128. */
+    /*! Set the SPI prescaler to 128. */
     QUASAR_SPI_PRESCALER_128 = SPI_BAUDRATEPRESCALER_128,
-    /* Set the SPI prescaler to 256. */
+    /*! Set the SPI prescaler to 256. */
     QUASAR_SPI_PRESCALER_256 = SPI_BAUDRATEPRESCALER_256,
 } quasar_spi_prescaler_t;
 

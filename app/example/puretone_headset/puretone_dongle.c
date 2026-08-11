@@ -35,6 +35,7 @@
 #include "swc_cfg_coord.h"
 #include "swc_error.h"
 #include "swc_stats.h"
+#include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
 /* Total memory needed for the Audio Core. */
@@ -45,7 +46,11 @@
 #define MAX_DATA_PAYLOAD_SIZE 16
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 5000
-/* Period for data transmission timer in ms. */
+/* Period for data transmission timer in ms.
+ * With USB audio, the audio connection stops transmitting when the host is not streaming, making this periodic data
+ * transmission the Node's only synchronization source (beacon). This period must not exceed 10 ms so that two data
+ * frames fit within the Node's 21 ms sync-loss timeout, tolerating the loss of one frame.
+ */
 #define DATA_TX_PERIOD_MS 10
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
@@ -121,8 +126,8 @@ static const sac_sample_format_t I2S_SAC_SAMPLE_FORMAT = {
     .sample_encoding = SAC_SAMPLE_UNPACKED,
 };
 
-/* Sample format of audio samples sent by the SWC of the Coordinator. */
-static const sac_sample_format_t MAIN_CHANNEL_SAC_SAMPLE_FORMAT = {
+/* Sample format of main channel audio samples received via USB. */
+static const sac_sample_format_t USB_SAC_SAMPLE_FORMAT = {
     .bit_depth = SAC_24BITS,
     .sample_encoding = SAC_SAMPLE_PACKED,
 };
@@ -133,8 +138,19 @@ static const sac_sample_format_t BACK_CHANNEL_SAC_SAMPLE_FORMAT = {
     .sample_encoding = SAC_SAMPLE_PACKED,
 };
 
-#define MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT \
-    (USB_AUDIO_ENABLED ? MAIN_CHANNEL_SAC_SAMPLE_FORMAT : I2S_SAC_SAMPLE_FORMAT)
+/* Sample format of uncompressed audio samples sent over the air (normal operation, fallback modes 0-1). */
+static const sac_sample_format_t MAIN_CHANNEL_OTA_UNCOMPRESSED_SAC_SAMPLE_FORMAT = {
+    .bit_depth = MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH,
+    .sample_encoding = SAC_SAMPLE_PACKED,
+};
+
+/* Sample format of packed audio samples sent over the air in fallback mode 2. */
+static const sac_sample_format_t MAIN_CHANNEL_OTA_PACKED_FBK_SAC_SAMPLE_FORMAT = {
+    .bit_depth = MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH,
+    .sample_encoding = SAC_SAMPLE_PACKED,
+};
+
+#define MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT (USB_AUDIO_ENABLED ? USB_SAC_SAMPLE_FORMAT : I2S_SAC_SAMPLE_FORMAT)
 
 #define BACK_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT \
     (USB_AUDIO_ENABLED ? BACK_CHANNEL_SAC_SAMPLE_FORMAT : I2S_SAC_SAMPLE_FORMAT)
@@ -198,13 +214,13 @@ static swc_connection_t *tx_data_conn;
 static swc_connection_t *rx_audio_conn;
 static swc_connection_t *rx_data_conn;
 
-static uint32_t timeslot_us[] = SCHEDULE;
-static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-static uint32_t channel_frequency[] = CHANNEL_FREQ;
+static const uint32_t timeslot_us[] = SCHEDULE;
+static const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+static const uint32_t channel_frequency[] = CHANNEL_FREQ;
 
 /* There is a bidirectional link for audio and a bidirectional link for data with a lower connection priority. */
-static int32_t tx_timeslots[] = COORD_TIMESLOTS;
-static int32_t rx_timeslots[] = NODE_TIMESLOTS;
+static const int32_t tx_timeslots[] = COORD_TIMESLOTS;
+static const int32_t rx_timeslots[] = NODE_TIMESLOTS;
 
 /* **** Application Specific **** */
 static facade_certification_mode_t certification_mode;
@@ -218,7 +234,7 @@ static sac_cdc_instance_t back_channel_cdc_instance;
 
 /* Fallback latency. */
 uint8_t back_channel_fbk_latency_queue_size[] = BACK_CHANNEL_FALLBACK_LATENCY_QUEUE_SIZE;
-uint8_t back_channel_fbk_latency_fifo_size[] = BACK_CHANNEL_FALLBACK_LATENCY_FIFO_SIZE;
+uint8_t back_channel_fbk_latency_usb_fifo_size[] = BACK_CHANNEL_FALLBACK_LATENCY_USB_FIFO_SIZE;
 
 /* Main channel audio sample accumulator settings. */
 uint8_t main_channel_acc_mul[] = MAIN_CHANNEL_ACC_MUL;
@@ -275,7 +291,7 @@ static void abort_pairing_procedure(void);
 static bool should_print_stats(void);
 static void print_stats(void);
 
-static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
+static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
 static uint32_t get_accumulator_size(sac_pipeline_t *pipeline);
 
@@ -289,7 +305,7 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
-    /* Initialize wireless core context switch handler before pairing is available */
+    /* Initialize wireless core context switch handler before pairing is available. */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
     facade_button_callbacks_t button_callbacks = {
@@ -304,13 +320,16 @@ int main(void)
     facade_audio_process_main_channel_timer_init(audio_process_main_channel_callback);
     facade_audio_process_back_channel_timer_init(audio_process_back_channel_callback);
 
-    /* Timer that updates statistics display every second and transmits button state to the Node every 10 ms. */
+    /* Timer that updates statistics display every second and transmits button state to the Node at the
+     * DATA_TX_PERIOD_MS interval.
+     */
     facade_data_timer_init(DATA_TX_PERIOD_MS);
     facade_data_timer_set_callback(data_callback);
 
-    certification_mode = facade_coord_get_certification_mode();
+    certification_mode = facade_get_coord_certification_mode();
     if (certification_mode != FACADE_CERTIF_NONE) {
         /* Init app in certification mode. */
+        facade_notify_certification_mode();
         app_init();
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
@@ -351,20 +370,22 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
 {
     uint8_t remote_address = pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE].node_address;
     uint8_t local_address = pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address;
-    uint8_t fallback_thresholds[] = MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE;
-    uint8_t fallback_cca_try_count[] = {SWC_CCA_AUDIO_FBK_1_TRY_COUNT, SWC_CCA_AUDIO_FBK_2_TRY_COUNT,
-                                        SWC_CCA_AUDIO_FBK_3_TRY_COUNT};
+    const uint8_t fallback_thresholds[] = MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE;
+    const uint8_t fallback_cca_try_count[] = {
+        SWC_CCA_AUDIO_FBK_1_TRY_COUNT,
+        SWC_CCA_AUDIO_FBK_2_TRY_COUNT,
+        SWC_CCA_AUDIO_FBK_3_TRY_COUNT,
+    };
+    swc_radio_handle_t *radio_handle = NULL;
 
     if (certification_mode != FACADE_CERTIF_NONE) {
-        app_pairing->coordinator_address = 0x1;
-        app_pairing->node_address = 0x2;
         app_pairing->pan_id = 0xABC;
         remote_address = 0x2;
         local_address = 0x1;
     }
 
     /* Initialize Wireless Core. */
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -372,20 +393,24 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = app_pairing->pan_id,
     };
 
     /* Initialize Node. */
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_COORDINATOR,
-        .pan_id = app_pairing->pan_id,
-        .coordinator_address = app_pairing->coordinator_address,
+        .coordinator_address = local_address,
         .local_address = local_address,
     };
     swc_init(core_cfg, node_cfg, facade_context_switch_trigger, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    /* Initialize radio. */
-    swc_radio_module_init(SWC_RADIO_ID_1, true, swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
     /* **** TX Connections **** */
@@ -471,7 +496,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     }
 
     /* Audio connection concurrency settings. */
-    swc_connection_concurrency_cfg_t tx_audio_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t tx_audio_concurrency_cfg = {
         .enabled = true,
         .try_count = MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT,
         .retry_time = MAIN_CHANNEL_SWC_CCA_AUDIO_RETRY_TIME,
@@ -482,7 +507,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection fallback settings. */
-    swc_connection_fallback_cfg_t fallback_cfg = {
+    const swc_connection_fallback_cfg_t fallback_cfg = {
         .enabled = true,
         .fallback_mode_count = SWC_FALLBACK_MODE_COUNT,
         .thresholds = fallback_thresholds,
@@ -493,44 +518,61 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection RF channels settings. */
-    swc_channel_cfg_t tx_audio_channel_cfg = {
-        .tx_pulse_count = SR1100_PULSE_COUNT,
-        .rx_pulse_count = SR1100_PULSE_COUNT,
-    };
-    uint8_t tx_audio_pulse_width[] = TX_AUDIO_PULSE_WIDTH;
-    uint8_t tx_audio_pulse_gain[] = TX_AUDIO_PULSE_GAIN;
+    const uint8_t tx_audio_pulse_width[] = TX_AUDIO_PULSE_WIDTH;
+    const uint8_t tx_audio_pulse_gain[] = TX_AUDIO_PULSE_GAIN;
 
-    swc_fallback_channel_cfg_t tx_audio_fallback_channel_cfg = {
-        .tx_pulse_count = SR1100_PULSE_COUNT,
-    };
-    uint8_t tx_audio_fb_pulse_width[][MAX_CHANNEL_NUMBER] = {
+    const uint8_t tx_audio_fb_pulse_width[][MAX_CHANNEL_NUMBER] = {
         TX_AUDIO_FB_BAND_1_PULSE_WIDTH,
         TX_AUDIO_FB_BAND_2_PULSE_WIDTH,
         TX_AUDIO_FB_BAND_3_PULSE_WIDTH,
         TX_AUDIO_FB_BAND_4_PULSE_WIDTH,
     };
 
-    uint8_t tx_audio_fb_pulse_gain[][MAX_CHANNEL_NUMBER] = {
+    const uint8_t tx_audio_fb_pulse_gain[][MAX_CHANNEL_NUMBER] = {
         TX_AUDIO_FB_BAND_1_PULSE_GAIN,
         TX_AUDIO_FB_BAND_2_PULSE_GAIN,
         TX_AUDIO_FB_BAND_3_PULSE_GAIN,
         TX_AUDIO_FB_BAND_4_PULSE_GAIN,
     };
 
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_audio_channel_cfg.frequency = channel_frequency[i];
-        tx_audio_channel_cfg.tx_pulse_width = tx_audio_pulse_width[i];
-        tx_audio_channel_cfg.tx_pulse_gain = tx_audio_pulse_gain[i];
-        swc_connection_add_channel(tx_audio_conn, tx_audio_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
+    swc_channel_cfg_t tx_audio_channel_cfgs[ARRAY_SIZE(channel_frequency)];
 
-        for (uint8_t j = 0; j < SWC_FALLBACK_MODE_COUNT; j++) {
-            tx_audio_fallback_channel_cfg.tx_pulse_width = tx_audio_fb_pulse_width[i][j];
-            tx_audio_fallback_channel_cfg.tx_pulse_gain = tx_audio_fb_pulse_gain[i][j];
-            swc_connection_add_fallback_channel(tx_audio_conn, tx_audio_channel_cfg, tx_audio_fallback_channel_cfg, i,
-                                                j, swc_err);
+    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
+        tx_audio_channel_cfgs[i] = (swc_channel_cfg_t){
+            .tx_pulse_count = SR1100_PULSE_COUNT,
+            .rx_pulse_count = SR1100_PULSE_COUNT,
+            .frequency = channel_frequency[i],
+            .tx_pulse_width = tx_audio_pulse_width[i],
+            .tx_pulse_gain = tx_audio_pulse_gain[i],
+        };
+    }
+
+    swc_channel_t *tx_audio_channels = swc_channel_list_init(tx_audio_channel_cfgs, ARRAY_SIZE(channel_frequency),
+                                                             swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    swc_connection_set_channels(tx_audio_conn, tx_audio_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    for (uint8_t j = 0; j < SWC_FALLBACK_MODE_COUNT; j++) {
+        swc_channel_cfg_t tx_audio_fb_channel_cfgs[ARRAY_SIZE(channel_frequency)];
+
+        for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
+            tx_audio_fb_channel_cfgs[i] = (swc_channel_cfg_t){
+                .tx_pulse_count = SR1100_PULSE_COUNT,
+                .rx_pulse_count = SR1100_PULSE_COUNT,
+                .frequency = channel_frequency[i],
+                .tx_pulse_width = tx_audio_fb_pulse_width[i][j],
+                .tx_pulse_gain = tx_audio_fb_pulse_gain[i][j],
+            };
         }
 
+        swc_channel_t *tx_audio_fb_channels = swc_channel_list_init(tx_audio_fb_channel_cfgs,
+                                                                    ARRAY_SIZE(channel_frequency), swc_err);
+        ASSERT_SWC_STATUS(*swc_err);
+
+        swc_connection_set_fallback_channels(tx_audio_conn, tx_audio_fb_channels, ARRAY_SIZE(channel_frequency), j,
+                                             swc_err);
         ASSERT_SWC_STATUS(*swc_err);
     }
 
@@ -539,7 +581,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection concurrency settings. */
-    swc_connection_concurrency_cfg_t tx_data_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t tx_data_concurrency_cfg = {
         .enabled = true,
         .try_count = MAIN_CHANNEL_SWC_CCA_DATA_TRY_COUNT,
         .retry_time = MAIN_CHANNEL_SWC_CCA_DATA_RETRY_TIME,
@@ -550,20 +592,27 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection RF channels settings. */
-    swc_channel_cfg_t tx_data_channel_cfg = {
-        .tx_pulse_count = SR1100_PULSE_COUNT,
-        .rx_pulse_count = SR1100_PULSE_COUNT,
-    };
-    uint8_t tx_data_pulse_width[] = TX_DATA_PULSE_WIDTH;
-    uint8_t tx_data_pulse_gain[] = TX_DATA_PULSE_GAIN;
+    const uint8_t tx_data_pulse_width[] = TX_DATA_PULSE_WIDTH;
+    const uint8_t tx_data_pulse_gain[] = TX_DATA_PULSE_GAIN;
+
+    swc_channel_cfg_t tx_data_channel_cfgs[ARRAY_SIZE(channel_frequency)];
 
     for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_data_channel_cfg.frequency = channel_frequency[i];
-        tx_data_channel_cfg.tx_pulse_width = tx_data_pulse_width[i];
-        tx_data_channel_cfg.tx_pulse_gain = tx_data_pulse_gain[i];
-        swc_connection_add_channel(tx_data_conn, tx_data_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
+        tx_data_channel_cfgs[i] = (swc_channel_cfg_t){
+            .tx_pulse_count = SR1100_PULSE_COUNT,
+            .rx_pulse_count = SR1100_PULSE_COUNT,
+            .frequency = channel_frequency[i],
+            .tx_pulse_width = tx_data_pulse_width[i],
+            .tx_pulse_gain = tx_data_pulse_gain[i],
+        };
     }
+
+    swc_channel_t *tx_data_channels = swc_channel_list_init(tx_data_channel_cfgs, ARRAY_SIZE(channel_frequency),
+                                                            swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    swc_connection_set_channels(tx_data_conn, tx_data_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection callback settings. */
     swc_connection_set_tx_success_callback(tx_data_conn, conn_tx_data_success_callback, NULL, swc_err);
@@ -571,7 +620,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
 
     /* **** RX Connections **** */
     /* ** Back Channel: RX Audio Connection ** */
-    swc_connection_cfg_t rx_audio_conn_cfg = {
+    const swc_connection_cfg_t rx_audio_conn_cfg = {
         .name = "RX Audio Connection",
         .source_address = remote_address,
         .destination_address = local_address,
@@ -590,7 +639,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection concurrency settings. */
-    swc_connection_concurrency_cfg_t rx_audio_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t rx_audio_concurrency_cfg = {
         .enabled = true,
         .try_count = BACK_CHANNEL_SWC_CCA_FB_TRY_COUNT, /* Use maximum CCA try count on this connection. */
         .retry_time = BACK_CHANNEL_SWC_CCA_AUDIO_RETRY_TIME,
@@ -601,20 +650,27 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection RF channels settings. */
-    swc_channel_cfg_t rx_audio_channel_cfg = {
-        .tx_pulse_count = SR1100_PULSE_COUNT,
-        .rx_pulse_count = SR1100_PULSE_COUNT,
-    };
-    uint8_t tx_ack_pulse_width[] = TX_ACK_PULSE_WIDTH;
-    uint8_t tx_ack_pulse_gain[] = TX_ACK_PULSE_GAIN;
+    const uint8_t tx_ack_pulse_width[] = TX_ACK_PULSE_WIDTH;
+    const uint8_t tx_ack_pulse_gain[] = TX_ACK_PULSE_GAIN;
+
+    swc_channel_cfg_t rx_audio_channel_cfgs[ARRAY_SIZE(channel_frequency)];
 
     for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_audio_channel_cfg.frequency = channel_frequency[i];
-        rx_audio_channel_cfg.tx_pulse_width = tx_ack_pulse_width[i];
-        rx_audio_channel_cfg.tx_pulse_gain = tx_ack_pulse_gain[i];
-        swc_connection_add_channel(rx_audio_conn, rx_audio_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
+        rx_audio_channel_cfgs[i] = (swc_channel_cfg_t){
+            .tx_pulse_count = SR1100_PULSE_COUNT,
+            .rx_pulse_count = SR1100_PULSE_COUNT,
+            .frequency = channel_frequency[i],
+            .tx_pulse_width = tx_ack_pulse_width[i],
+            .tx_pulse_gain = tx_ack_pulse_gain[i],
+        };
     }
+
+    swc_channel_t *rx_audio_channels = swc_channel_list_init(rx_audio_channel_cfgs, ARRAY_SIZE(channel_frequency),
+                                                             swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    swc_connection_set_channels(rx_audio_conn, rx_audio_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection priority settings. */
     swc_connection_set_connection_priority(rx_audio_conn, AUDIO_CONNECTION_PRIORITY, swc_err);
@@ -625,7 +681,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* ** RX Data Connection ** */
-    swc_connection_cfg_t rx_data_conn_cfg = {
+    const swc_connection_cfg_t rx_data_conn_cfg = {
         .name = "RX Data Connection",
         .source_address = remote_address,
         .destination_address = local_address,
@@ -644,7 +700,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection concurrency settings. */
-    swc_connection_concurrency_cfg_t rx_data_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t rx_data_concurrency_cfg = {
         .enabled = true,
         .try_count = BACK_CHANNEL_SWC_CCA_DATA_TRY_COUNT,
         .retry_time = BACK_CHANNEL_SWC_CCA_DATA_RETRY_TIME,
@@ -655,20 +711,27 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection RF channels settings. */
-    swc_channel_cfg_t rx_data_channel_cfg = {
-        .tx_pulse_count = SR1100_PULSE_COUNT,
-        .rx_pulse_count = SR1100_PULSE_COUNT,
-    };
-    uint8_t tx_data_ack_pulse_width[] = TX_DATA_ACK_PULSE_WIDTH;
-    uint8_t tx_data_ack_pulse_gain[] = TX_DATA_ACK_PULSE_GAIN;
+    const uint8_t tx_data_ack_pulse_width[] = TX_DATA_ACK_PULSE_WIDTH;
+    const uint8_t tx_data_ack_pulse_gain[] = TX_DATA_ACK_PULSE_GAIN;
+
+    swc_channel_cfg_t rx_data_channel_cfgs[ARRAY_SIZE(channel_frequency)];
 
     for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_data_channel_cfg.frequency = channel_frequency[i];
-        rx_data_channel_cfg.tx_pulse_width = tx_data_ack_pulse_width[i];
-        rx_data_channel_cfg.tx_pulse_gain = tx_data_ack_pulse_gain[i];
-        swc_connection_add_channel(rx_data_conn, rx_data_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
+        rx_data_channel_cfgs[i] = (swc_channel_cfg_t){
+            .tx_pulse_count = SR1100_PULSE_COUNT,
+            .rx_pulse_count = SR1100_PULSE_COUNT,
+            .frequency = channel_frequency[i],
+            .tx_pulse_width = tx_data_ack_pulse_width[i],
+            .tx_pulse_gain = tx_data_ack_pulse_gain[i],
+        };
     }
+
+    swc_channel_t *rx_data_channels = swc_channel_list_init(rx_data_channel_cfgs, ARRAY_SIZE(channel_frequency),
+                                                            swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    swc_connection_set_channels(rx_data_conn, rx_data_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection priority settings. */
     swc_connection_set_connection_priority(rx_data_conn, DATA_CONNECTION_PRIORITY, swc_err);
@@ -832,14 +895,14 @@ static void app_audio_core_init(void)
      * Main Channel Audio Pipeline (TX)
      * ================================
      *
-     ***** NORMAL MODE USB (Fallback mode 0) *****
+     * **** NORMAL MODE USB (Fallback mode 0) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples.
      * Output:      Stereo stream of 96kHz/24-bit is sent over the air to the Node.
      * +-----+    +-----+
      * | USB | -> | SWC |
      * +-----+    +-----+
      *
-     ***** NORMAL MODE I2S (Fallback mode 0) *****
+     * **** NORMAL MODE I2S (Fallback mode 0) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples, encoded on 32 bits.
      * Processing:  Packing from 32 bits to 24 bits audio samples.
      * Output:      Stereo stream of 96kHz/24-bit is sent over the air to the Node.
@@ -848,7 +911,7 @@ static void app_audio_core_init(void)
      * | I2S | -> | Packing to 24 bits | -> | SWC |
      * +-----+    +--------------------+    +-----+
      *
-     ***** FALLBACK MODE USB (Fallback mode 1) *****
+     * **** FALLBACK MODE USB (Fallback mode 1) *****
      * Input:       Stereo stream of 96kHz/24-bit packed depth samples.
      * Processing:  Audio sample accumulator 1.7x.
      * Processing:  Downsampling audio samples from 96kHz to 48kHz.
@@ -858,7 +921,7 @@ static void app_audio_core_init(void)
      * | USB | -> | Accumulator 1.7x | -> | Downsampling 2x | -> | SWC |
      * +-----+    +------------------+    +-----------------+    +-----+
      *
-     ***** FALLBACK MODE I2S (Fallback mode 1) *****
+     * **** FALLBACK MODE I2S (Fallback mode 1) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples, encoded on 32 bits.
      * Processing:  Audio sample accumulator 1.7x.
      * Processing:  Downsampling audio samples from 96kHz to 48kHz.
@@ -869,7 +932,7 @@ static void app_audio_core_init(void)
      * | I2S | -> | Accumulator 1.7x | -> | Downsampling 2x | -> | Packing to 24 bits | -> | SWC |
      * +-----+    +------------------+    +-----------------+    +--------------------+    +-----+
      *
-     ***** FALLBACK MODE USB (Fallback mode 2) *****
+     * **** FALLBACK MODE USB (Fallback mode 2) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples.
      * Processing:  Audio sample accumulator 1.7x.
      * Processing:  Downsampling audio samples from 96kHz to 48kHz.
@@ -880,7 +943,7 @@ static void app_audio_core_init(void)
      * | USB | -> | Accumulator 1.7x | -> | Downsampling 2x | -> | Packing to 16 bits | -> | SWC |
      * +-----+    +------------------+    +-----------------+    +--------------------+    +-----+
      *
-     ***** FALLBACK MODE I2S (Fallback mode 2) *****
+     * **** FALLBACK MODE I2S (Fallback mode 2) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples, encoded on 32 bits.
      * Processing:  Audio sample accumulator 1.7x.
      * Processing:  Downsampling audio samples from 96kHz to 48kHz.
@@ -891,7 +954,7 @@ static void app_audio_core_init(void)
      * | I2S | -> | Accumulator 1.7x | -> | Downsampling 2x | -> | Packing to 16 bits | -> | SWC |
      * +-----+    +------------------+    +-----------------+    +--------------------+    +-----+
      *
-     ***** FALLBACK MODE USB (Fallback mode 3) *****
+     * **** FALLBACK MODE USB (Fallback mode 3) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples.
      * Processing:  Audio sample accumulator 2.3x.
      * Processing:  Downsampling audio samples from 96kHz to 48kHz.
@@ -902,7 +965,7 @@ static void app_audio_core_init(void)
      * | USB | -> | Accumulator 2.3x | -> | Downsampling 2x | -> | ADPCM Compression | -> | SWC |
      * +-----+    +------------------+    +-----------------+    +-------------------+    +-----+
      *
-     ***** FALLBACK MODE I2S (Fallback mode 3) *****
+     * **** FALLBACK MODE I2S (Fallback mode 3) *****
      * Input:       Stereo stream of 96kHz/24-bit depth samples, encoded on 32 bits.
      * Processing:  Audio sample accumulator 2.3x.
      * Processing:  Downsampling audio samples from 96kHz to 48kHz.
@@ -919,7 +982,7 @@ static void app_audio_core_init(void)
         .use_encapsulation = false,
         .delayed_action = !USB_AUDIO_ENABLED,
         .channel_count = MAIN_CHANNEL_CHANNEL_COUNT,
-        .audio_payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_SWC_PAYLOAD_SIZE : MAIN_CHANNEL_I2S_PAYLOAD_SIZE,
+        .audio_payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_USB_PAYLOAD_SIZE : MAIN_CHANNEL_I2S_PAYLOAD_SIZE,
         .queue_size = SAC_MIN_PRODUCER_QUEUE_SIZE + (USB_AUDIO_ENABLED ? MAIN_CHANNEL_USB_FS_PRODUCER_BUFFERING : 0),
     };
     main_channel_producer_endpoint = sac_endpoint_init(NULL, "Audio EP (Producer)", main_channel_producer_iface,
@@ -952,7 +1015,7 @@ static void app_audio_core_init(void)
     /* Processing stage that downsamples the audio samples from 96kHz to 48kHz. */
     main_channel_downsampling_instance.cfg.multiply_ratio = SAC_SRC_ONE;
     main_channel_downsampling_instance.cfg.divide_ratio = SAC_SRC_TWO;
-    main_channel_downsampling_instance.cfg.payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_SWC_PAYLOAD_SIZE :
+    main_channel_downsampling_instance.cfg.payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_USB_PAYLOAD_SIZE :
                                                                               MAIN_CHANNEL_I2S_PAYLOAD_SIZE;
     main_channel_downsampling_instance.cfg.payload_size =
         (main_channel_downsampling_instance.cfg.payload_size * MAIN_CHANNEL_MAX_ACC_MUL) / MAIN_CHANNEL_MAX_ACC_DIV;
@@ -983,22 +1046,28 @@ static void app_audio_core_init(void)
                                                                             &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-    /* Processing stage packs into 24 bits before sending if fallback is deactivated. */
-    main_channel_packing_instance.packing_mode = SAC_PACK_24BITS;
-    main_channel_packing_processing = sac_processing_stage_init((void *)&main_channel_packing_instance, "Audio Packing",
-                                                                main_channel_packing_iface, &sac_status);
+    /* Processing stage packs audio before sending over the air. */
+    bool packing_en = sac_configure_packing(&main_channel_packing_instance, MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT,
+                                            MAIN_CHANNEL_OTA_UNCOMPRESSED_SAC_SAMPLE_FORMAT, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-
-    /* Processing stage that unpacks the received audio samples from 16 bits to 24 bits. */
-    if (USB_AUDIO_ENABLED) {
-        main_channel_fbk_packing_instance.packing_mode = SAC_SCALE_24BITS_16BITS;
-    } else {
-        main_channel_fbk_packing_instance.packing_mode = SAC_PACK_24BITS_16BITS;
-    }
-    main_channel_fbk_packing_processing = sac_processing_stage_init((void *)&main_channel_fbk_packing_instance,
-                                                                    "Audio Unpacking", main_channel_packing_iface,
+    if (packing_en) {
+        main_channel_packing_processing = sac_processing_stage_init((void *)&main_channel_packing_instance,
+                                                                    "Audio Packing", main_channel_packing_iface,
                                                                     &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
+
+    /* Processing stage that packs audio samples to 16 bits for fallback mode 2. */
+    bool packing_fbk_en = sac_configure_packing(&main_channel_fbk_packing_instance,
+                                                MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT,
+                                                MAIN_CHANNEL_OTA_PACKED_FBK_SAC_SAMPLE_FORMAT, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+    if (packing_fbk_en) {
+        main_channel_fbk_packing_processing = sac_processing_stage_init((void *)&main_channel_fbk_packing_instance,
+                                                                        "Audio Packing FBK", main_channel_packing_iface,
+                                                                        &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
 
     /* Mute packet processing stage initialization. */
     main_channel_mute_packet_instance.is_tx = true;
@@ -1039,17 +1108,18 @@ static void app_audio_core_init(void)
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_downsampling_discard_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-#if !USB_AUDIO_ENABLED
-    /* When using I2S, packing is required to convert 24-bit audio aligned on 32-bit words. */
-    sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_packing_processing, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-#endif
+    if (packing_en) {
+        sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_packing_processing, &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_compression_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_compression_discard_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-    sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_fbk_packing_processing, &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
+    if (packing_fbk_en) {
+        sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_fbk_packing_processing, &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
     sac_pipeline_add_processing(main_channel_sac_pipeline, main_channel_mute_packet_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
@@ -1074,12 +1144,11 @@ static void app_audio_core_init(void)
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index,
                                      main_channel_downsampling_discard_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-#if !USB_AUDIO_ENABLED
-    /* When using I2S, packing is required to convert 24-bit audio aligned on 32-bit words. */
-    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_packing_processing,
-                                     &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-#endif
+    if (packing_en) {
+        sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_packing_processing,
+                                         &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
 
     /* Fallback mode 1 configuration. */
     mode_cfg = sac_fallback_mode_get_defaults();
@@ -1099,12 +1168,11 @@ static void app_audio_core_init(void)
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_downsampling_processing,
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-#if !USB_AUDIO_ENABLED
-    /* When using I2S, packing is required to convert 24-bit audio aligned on 32-bit words. */
-    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_packing_processing,
-                                     &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
-#endif
+    if (packing_en) {
+        sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_packing_processing,
+                                         &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
 
     /* Fallback mode 2 configuration. */
     mode_cfg = sac_fallback_mode_get_defaults();
@@ -1124,9 +1192,11 @@ static void app_audio_core_init(void)
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_downsampling_processing,
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
-    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_fbk_packing_processing,
-                                     &sac_status);
-    ASSERT_SAC_STATUS(sac_status);
+    if (packing_fbk_en) {
+        sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index,
+                                         main_channel_fbk_packing_processing, &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+    }
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index,
                                      main_channel_compression_discard_processing, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -1164,7 +1234,7 @@ static void app_audio_core_init(void)
      * Back Channel Audio Pipeline (RX)
      * ================================
      *
-     ****** NORMAL MODE USB (Fallback mode 0) *****
+     * ***** NORMAL MODE USB (Fallback mode 0) *****
      * Input:       Mono stream of 48kHz/16-bit depth samples is received over the air from the Node.
      * Processing:  Audio sample accumulator 1.7647x.
      * Processing:  Digital volume control.
@@ -1174,7 +1244,7 @@ static void app_audio_core_init(void)
      * | SWC | -> | Accumulator 1.7647x | -> | Digital Volume | -> | USB |
      * +-----+    +---------------------+    +----------------+    +-----+
      *
-     ***** NORMAL MODE I2S (Fallback mode 0) *****
+     * **** NORMAL MODE I2S (Fallback mode 0) *****
      * Input:       Mono stream of 32kHz/16-bit depth samples is received over the air from the Node.
      * Processing:  Audio sample accumulator 1.7647x.
      * Processing:  Upsampling audio samples from 48kHz to 96kHz.
@@ -1201,7 +1271,7 @@ static void app_audio_core_init(void)
      * | SWC | -> | ADPCM Decompression | -> | Accumulator 1.7647x | -> | Digital Volume | -> | USB |
      * +-----+    +---------------------+    +---------------------+    +----------------+    +-----+
      *
-     ***** FALLBACK MODE (Fallback mode 1) *****
+     * **** FALLBACK MODE (Fallback mode 1) *****
      * Input:       Mono stream of 48kHz/16-bit depth samples is received over the air from the Node.
      * Processing:  Decompression of samples compressed with ADPCM.
      * Processing:  Audio sample accumulator 1.7647x.
@@ -1288,7 +1358,7 @@ static void app_audio_core_init(void)
 
     /* Fallback mode 0 configuration. */
     mode_cfg.sample_count = BACK_CHANNEL_SAMPLE_COUNT;
-    mode_index = sac_fallback_add_mode(&back_channel_fallback_instance, "48kHz 16-bit", mode_cfg, &sac_status);
+    sac_fallback_add_mode(&back_channel_fallback_instance, "48kHz 16-bit", mode_cfg, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
     /* Fallback mode 1 configuration. */
@@ -1554,7 +1624,7 @@ static void app_audio_core_volume_interface_init(sac_processing_interface_t *ifa
 
 /** @brief Increase the audio output volume level.
  *
- *  This affects the audio pipeline that the digital volume processing stage is added to.
+ *  @note This affects the audio pipeline that the digital volume processing stage is added to.
  */
 static void volume_up(void)
 {
@@ -1571,7 +1641,7 @@ static void volume_up(void)
 
 /** @brief Decrease the audio output volume level.
  *
- *  This affects the audio pipeline that the digital volume processing stage is added to.
+ *  @note This affects the audio pipeline that the digital volume processing stage is added to.
  */
 static void volume_down(void)
 {
@@ -1588,8 +1658,8 @@ static void volume_down(void)
 
 /** @brief Main channel audio RX complete callback.
  *
- *  This receives audio packets from the codec. It needs to be executed every time a DMA transfer from the codec is
- *  completed in order to keep recording audio.
+ *  @note This receives audio packets from the codec. It needs to be executed every time a DMA transfer from the codec
+ *        is completed in order to keep recording audio.
  */
 static void main_channel_audio_rx_complete_callback(void)
 {
@@ -1606,8 +1676,8 @@ static void main_channel_audio_rx_complete_callback(void)
 #if USB_AUDIO_ENABLED
 /** @brief SAI DMA TX complete callback.
  *
- *  This feeds the codec with audio packets. It needs to be executed every time a DMA transfer to the codec is completed
- *  in order to keep the audio playing.
+ *  @note This feeds the codec with audio packets. It needs to be executed every time a DMA transfer to the codec is
+ *        completed in order to keep the audio playing.
  */
 static void back_channel_audio_tx_complete_callback(void)
 {
@@ -1616,7 +1686,8 @@ static void back_channel_audio_tx_complete_callback(void)
     uint32_t usb_buf_rem = facade_app_audio_usb_get_epin_fifo_remaining();
 
     target_fifo_size =
-        back_channel_fbk_latency_fifo_size[sac_fallback_get_current_mode(&back_channel_fallback_instance, &sac_status)];
+        back_channel_fbk_latency_usb_fifo_size[sac_fallback_get_current_mode(&back_channel_fallback_instance,
+                                                                             &sac_status)];
     facade_app_audio_usb_set_epin_target_fifo_size(target_fifo_size);
 
     if ((sac_pipeline_get_consumer_buffer_load(back_channel_accumulator_pipeline, &sac_status) > 0) &&
@@ -1627,8 +1698,8 @@ static void back_channel_audio_tx_complete_callback(void)
 #else
 /** @brief Back channel audio TX complete callback.
  *
- *  This feeds the codec with audio packets. It needs to be executed every time a DMA transfer to the codec is
- *  completed in order to keep the audio playing.
+ *  @note This feeds the codec with audio packets. It needs to be executed every time a DMA transfer to the codec is
+ *        completed in order to keep the audio playing.
  */
 static void back_channel_audio_tx_complete_callback(void)
 {
@@ -1813,33 +1884,15 @@ static void print_stats(void)
 
     /* ** Wireless Statistics ** */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
-    swc_connection_update_stats(tx_audio_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    swc_connection_t *connections[] = {tx_audio_conn, rx_audio_conn, tx_data_conn, rx_data_conn};
 
-    string_length += swc_connection_format_stats(tx_audio_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(rx_audio_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(rx_audio_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(tx_data_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(tx_data_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(rx_data_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(rx_data_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    for (uint8_t i = 0; i < ARRAY_SIZE(connections); i++) {
+        swc_connection_update_stats(connections[i], &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+        string_length += swc_connection_format_stats(connections[i], stats_string + string_length,
+                                                     sizeof(stats_string) - string_length, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+    }
 
     facade_print_string(stats_string);
 
@@ -1847,25 +1900,24 @@ static void print_stats(void)
     string_length = snprintf(stats_string, sizeof(stats_string), "\r\n<< Application Statistics >>\r\n");
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, "Fallback State:");
     if (fallback_state == FALLBACK_AUTO) {
-        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " AUTO\r\n");
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " AUTO\r\n");
     } else if (fallback_state == FALLBACK_96K_24BIT_UNCOMPRESSED) {
-        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
-                                  " 96kHz 24-bit\r\n");
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 96kHz %d-bit\r\n",
+                 MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH);
     } else if (fallback_state == FALLBACK_48K_24BIT_UNCOMPRESSED) {
-        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
-                                  " 48kHz 24-bit\r\n");
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 48kHz %d-bit\r\n",
+                 MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH);
     } else if (fallback_state == FALLBACK_48K_16BIT_UNCOMPRESSED) {
-        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
-                                  " 48kHz 16-bit\r\n");
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 48kHz %d-bit\r\n",
+                 MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH);
     } else if (fallback_state == FALLBACK_48K_ADPCM_STEREO) {
-        string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
-                                  " 48kHz ADPCM\r\n");
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 48kHz ADPCM\r\n");
     }
 
     facade_print_string(stats_string);
 }
 
-/** @brief Callback sends the button state every 10 ms.
+/** @brief Callback sends the button state at the DATA_TX_PERIOD_MS interval.
  */
 static void data_callback(void)
 {
@@ -1931,7 +1983,7 @@ static void enter_pairing_mode(void)
     pairing_event = pairing_coordinator_start(&app_pairing_cfg, &pairing_assigned_address, pairing_discovery_list,
                                               PAIRING_DISCOVERY_LIST_SIZE, &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
-        facade_print_error_string("An error occured during the pairing process.");
+        facade_print_error_string("An error occurred during the pairing process.");
         while (1);
     }
 
@@ -2027,7 +2079,7 @@ static void abort_pairing_procedure(void)
  *  @param[in]  size              Size of the data to be sent over the air.
  *  @param[out] swc_err           Wireless Core error code.
  */
-static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err)
+static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err)
 {
     uint8_t *buffer = NULL;
 
@@ -2052,7 +2104,6 @@ static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t
  *  @param[out] received_data  Pointer to data buffer to write to.
  *  @param[in]  size           Size of the data buffer.
  *  @param[out] swc_err        Wireless Core error code.
- *
  *  @return Size of the data read.
  */
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err)
@@ -2119,7 +2170,7 @@ void sac_error_handler(sac_status_t sac_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SAC Error! Code: %d\n\r", sac_status);
+    snprintf(buffer, sizeof(buffer), "SAC Error! Code: %d\n\r", sac_status);
     facade_print_error_string(buffer);
 
     while (1);
@@ -2129,7 +2180,7 @@ void swc_error_handler(swc_error_t swc_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    snprintf(buffer, sizeof(buffer), "SWC Error ! Code: %d\n\r", swc_status);
     facade_print_error_string(buffer);
 
     while (1);
@@ -2138,7 +2189,7 @@ void swc_error_handler(swc_error_t swc_status)
 /** @brief Return the accumulator size according to the current fallback mode.
  *
  *  @param[in] pipeline  Pipeline instance.
- *  @return  Accumulator size.
+ *  @return Accumulator size.
  */
 static uint32_t get_accumulator_size(sac_pipeline_t *pipeline)
 {
@@ -2159,11 +2210,17 @@ static uint32_t get_accumulator_size(sac_pipeline_t *pipeline)
  */
 static void change_fallback_state(void)
 {
+    sac_status_t sac_status;
+
     fallback_state = (fallback_state + 1) % FALLBACK_STATE_COUNT;
 
-    sac_fallback_set_manual_mode(&main_channel_fallback_instance, (fallback_state > FALLBACK_AUTO), NULL);
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+
+    sac_fallback_set_manual_mode(&main_channel_fallback_instance, (fallback_state > FALLBACK_AUTO), &sac_status);
 
     if (fallback_state > FALLBACK_AUTO) {
-        sac_fallback_set_current_mode(&main_channel_fallback_instance, (fallback_state - 1), NULL);
+        sac_fallback_set_current_mode(&main_channel_fallback_instance, (fallback_state - 1), &sac_status);
     }
 }

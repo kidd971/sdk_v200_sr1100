@@ -44,10 +44,10 @@ void quasar_rgb_deinit(void);
 
 /** @brief Configures the RGB LED to display a specified color.
  *
- *  @note  The color can be specified just once or every time a color change is
- *         desired. By default the specified color is white.
+ *  @note The color can be specified just once or every time a color change is desired. By default the specified color
+ *        is white.
  *
- *  @param[in] rgb_color The color to configure the RGB LED to.
+ *  @param[in] rgb_color  The color to configure the RGB LED to.
  */
 void quasar_rgb_configure_color(quasar_rgb_color_t rgb_color);
 

@@ -210,7 +210,7 @@ void quasar_it_set_timer17_callback(void (*irq_callback)(void))
 void quasar_it_enter_critical(void)
 {
     if (!nested_critical) {
-        /* First time enter critical */
+        /* First time enter critical. */
         __disable_irq();
     }
     ++nested_critical;
@@ -220,15 +220,15 @@ void quasar_it_exit_critical(void)
 {
     --nested_critical;
     if (!nested_critical) {
-        /* Last time exit critical */
+        /* Last time exit critical. */
         __enable_irq();
     }
 }
 
-/* ST HAL FUNCTIONS IMPLEMENTATION ********************************************/
+/* ST HAL WEAK FUNCTIONS IMPLEMENTATION ********************************************/
 /** @brief Implementation of weak alias for GPDMA1 Channel 7 IRQ handler.
  *
- *  Implementation for the SAI TX transfer complete Exception handler.
+ *  @note Implementation for the SAI TX transfer complete Exception handler.
  */
 void GPDMA1_Channel7_IRQHandler(void)
 {
@@ -237,7 +237,7 @@ void GPDMA1_Channel7_IRQHandler(void)
 
 /** @brief Implementation of weak alias for GPDMA1 Channel 8 IRQ handler.
  *
- *  Implementation for the SAI RX reception complete Exception handler.
+ *  @note Implementation for the SAI RX reception complete Exception handler.
  */
 void GPDMA1_Channel8_IRQHandler(void)
 {
@@ -428,9 +428,9 @@ void OTG_HS_IRQHandler(void)
  */
 void TIM1_UP_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM1->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM1->SR = ~((uint16_t)TIM_SR_UIF);
         timer1_callback();
     }
@@ -440,9 +440,9 @@ void TIM1_UP_IRQHandler(void)
  */
 void TIM2_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM2->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM2->SR = ~((uint16_t)TIM_SR_UIF);
         timer2_callback();
     }
@@ -452,9 +452,9 @@ void TIM2_IRQHandler(void)
  */
 void TIM3_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM3->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM3->SR = ~((uint16_t)TIM_SR_UIF);
         timer3_callback();
     }
@@ -464,9 +464,9 @@ void TIM3_IRQHandler(void)
  */
 void TIM4_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM4->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM4->SR = ~((uint16_t)TIM_SR_UIF);
         timer4_callback();
     }
@@ -476,9 +476,9 @@ void TIM4_IRQHandler(void)
  */
 void TIM5_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM5->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM5->SR = ~((uint16_t)TIM_SR_UIF);
         timer5_callback();
     }
@@ -488,9 +488,9 @@ void TIM5_IRQHandler(void)
  */
 void TIM6_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM6->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM6->SR = ~((uint16_t)TIM_SR_UIF);
         timer6_callback();
     }
@@ -500,9 +500,9 @@ void TIM6_IRQHandler(void)
  */
 void TIM7_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM7->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM7->SR = ~((uint16_t)TIM_SR_UIF);
         timer7_callback();
     }
@@ -512,9 +512,9 @@ void TIM7_IRQHandler(void)
  */
 void TIM8_UP_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM8->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM8->SR = ~((uint16_t)TIM_SR_UIF);
         timer8_callback();
     }
@@ -524,9 +524,9 @@ void TIM8_UP_IRQHandler(void)
  */
 void TIM15_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM15->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM15->SR = ~((uint16_t)TIM_SR_UIF);
         timer15_callback();
     }
@@ -536,9 +536,9 @@ void TIM15_IRQHandler(void)
  */
 void TIM16_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM16->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM16->SR = ~((uint16_t)TIM_SR_UIF);
         timer16_callback();
     }
@@ -548,9 +548,9 @@ void TIM16_IRQHandler(void)
  */
 void TIM17_IRQHandler(void)
 {
-    /* Check whether the interruption is linked to an update (end of cycle) */
+    /* Check whether the interruption is linked to an update (end of cycle). */
     if ((TIM17->SR & TIM_SR_UIF) != 0) {
-        /* Clear the interruption flag */
+        /* Clear the interruption flag. */
         TIM17->SR = ~((uint16_t)TIM_SR_UIF);
         timer17_callback();
     }
@@ -594,7 +594,6 @@ void UsageFault_Handler(void)
 #if (RTOS_ENABLED == 0)
 
 /** @brief This function handles pendable request for system service.
- *
  */
 void PendSV_Handler(void)
 {
@@ -603,7 +602,6 @@ void PendSV_Handler(void)
 }
 
 /** @brief Implementation of weak alias for SysTick Handler.
- *
  */
 void SysTick_Handler(void)
 {

@@ -25,11 +25,11 @@
 extern "C" {
 #endif
 
-/* MACROS *********************************************************************/
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Initializes the logging interface.
  *
- *  This function configures the communication interface used for logging, which may be UART, USB, or another medium.
+ *  @note This function configures the communication interface used for logging, which may be UART, USB, or another
+ *        medium.
  */
 void facade_log_init(void);
 
@@ -76,15 +76,15 @@ void facade_packet_generation_timer_stop(void);
 
 /** @brief Initializes the profiling system.
  *
- *  @note This function sets up the profiling mechanism, allowing time measurements between
- *        `facade_profiler_start` and `facade_profiler_stop`.
+ *  @note This function sets up the profiling mechanism, allowing time measurements between `facade_profiler_start` and
+ *        `facade_profiler_stop`.
  */
 void facade_profiler_init(void);
 
 /** @brief Starts a profiling measurement.
  *
- *  @note This function marks the beginning of a time measurement. The elapsed number of cycles can be
- *        retrieved by calling `facade_profiler_stop`.
+ *  @note This function marks the beginning of a time measurement. The elapsed number of cycles can be retrieved by
+ *        calling `facade_profiler_stop`.
  *
  *  @param[out] timestamp_start_handle  An optional pointer to a variable to save the start cycle count value to.
  */
@@ -92,8 +92,8 @@ void facade_profiler_start(uint32_t *timestamp_start_handle);
 
 /** @brief Stops a profiling measurement and returns the elapsed time in nanoseconds.
  *
- *  @note This function marks the end of a time measurement and returns the number of cycles since
- *        the call to `facade_profiler_start`.
+ *  @note This function marks the end of a time measurement and returns the number of cycles since the call to
+ *        `facade_profiler_start`.
  *
  *  @param[in] timestamp_start_handle  An optional pointer to a variable containing the start cycle count value.
  *  @return Elapsed number of cycles since the last `facade_profiler_start` call.

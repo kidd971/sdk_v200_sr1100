@@ -10,13 +10,12 @@
 #define SWC_CFG_NODE_H_
 
 /* CONSTANTS ******************************************************************/
-
 /* Sets the output power configuration for transmitting autoreply data. */
 #define TX_AUTO_REPLY_PULSE_COUNT 1
 #define TX_AUTO_REPLY_PULSE_WIDTH 3
 #define TX_AUTO_REPLY_PULSE_GAIN  3
 
-/* Input power configuration */
+/* Input power configuration. */
 #define RX_DATA_PULSE_COUNT 1 /* Pulses configuration of received data frames */
 
 #endif /* SWC_CFG_NODE_H_ */

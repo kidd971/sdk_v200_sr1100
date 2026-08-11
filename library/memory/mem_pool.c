@@ -45,7 +45,7 @@ void mem_pool_free(mem_pool_t *mem_pool)
     mem_pool->mem_pool_end = mem_pool->mem_pool_begin + mem_pool->capacity;
 }
 
-uint32_t mem_pool_get_allocated_bytes(mem_pool_t *mem_pool)
+uint32_t mem_pool_get_allocated_bytes(const mem_pool_t *mem_pool)
 {
-    return (mem_pool->capacity - mem_pool->free_bytes);
+    return mem_pool->capacity - mem_pool->free_bytes;
 }

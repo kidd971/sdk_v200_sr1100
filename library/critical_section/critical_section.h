@@ -23,15 +23,15 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Function for entering a critical region.
  *
- *  @note This function disables interrupts and increments the nesting level
- *        of critical sections. It is designed to handle nested critical sections.
+ *  @note This function disables interrupts and increments the nesting level of critical sections. It is designed to
+ *        handle nested critical sections.
  */
 void CRITICAL_SECTION_ENTER(void);
 
 /** @brief Function for leaving a critical region.
  *
- *  @note This function decrements the nesting level of critical sections.
- *        If the nesting level becomes zero, interrupts are re-enabled.
+ *  @note This function decrements the nesting level of critical sections. If the nesting level becomes zero, interrupts
+ *        are re-enabled.
  */
 void CRITICAL_SECTION_EXIT(void);
 

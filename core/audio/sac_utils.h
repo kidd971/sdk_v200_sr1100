@@ -11,6 +11,7 @@
 
 /* INCLUDES *******************************************************************/
 #include "sac_api.h"
+#include "sac_packing.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,6 +74,22 @@ uint16_t sac_get_nb_packets_in_x_ms(uint16_t ms, uint16_t audio_payload_size, ui
  */
 uint16_t sac_get_ms_in_x_packets(uint16_t nb_packet, uint16_t audio_payload_size, uint8_t nb_channel,
                                  sac_sample_format_t sample_format, uint32_t sampling_rate);
+
+/** @brief Configure a packing instance based on producer and consumer sample formats.
+ *
+ *  @note Determines the appropriate packing mode for converting between the producer and consumer sample formats.
+ *        Handles all combinations of pack (unpacked to packed), unpack (packed to unpacked), and scale (packed to
+ *        packed) operations.
+ *
+ *  @param[out] instance         Packing instance to configure.
+ *  @param[in]  producer_format  Sample format of the audio producer.
+ *  @param[in]  consumer_format  Sample format of the audio consumer.
+ *  @param[out] status           SAC status code. Set to SAC_ERR_BIT_DEPTH on unsupported combination.
+ *  @retval true   Packing is required; instance has been configured.
+ *  @retval false  No packing required (formats are compatible) or unsupported (check status).
+ */
+bool sac_configure_packing(sac_packing_instance_t *instance, sac_sample_format_t producer_format,
+                           sac_sample_format_t consumer_format, sac_status_t *status);
 
 #ifdef __cplusplus
 }

@@ -9,13 +9,18 @@
 
 /* INCLUDES *******************************************************************/
 #include "uwb_log.h"
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <string.h>
 
 /* TYPES **********************************************************************/
+/** @brief Log header structure stored in the circular buffer for deferred logging.
+ */
 typedef struct log_header {
+    /*! Timestamp of the log entry. */
     uint32_t ts;
+    /*! Log level of the entry. */
     uint8_t level;
 } log_header_t;
 
@@ -23,47 +28,18 @@ typedef struct log_header {
 static const char *const level_str[] = {"TRACE : ", "DEBUG : ", "INFO : ", "WARN : ", "ERROR : ", "FATAL : "};
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-
-/** @brief Initialize the log interface
- *
- *  The log and config structure must initialize prior to the function call.
- *
- *  @param[in] log  log struct with buffer and function pointers.
- *  @param[out] config  Configuration structure.
- *
- */
 void uwb_log_init(uwb_log_t *log, log_config_t config)
 {
     log->config = config;
     uwb_circ_buff_init(&log->circ_buf, log->buffer, log->buf_size, sizeof(char));
 }
 
-/** @brief Write new log.
- *
- *  Print the log to the interface declared in the log structure.
- *  if deferred mode is enabled in the config structure, logs are saved in a
- *  buffer for processor optimization. You need to call sr1000_log_dump later
- *  to empty the buffer. Otherwise, the interface function is called right away
- *  to output the log string.
- *
- *  @param[in]  log   Log struct.
- *  @param[out] err   Pointer that receive an error code.
- *  @param[in]  level Desired log level
- *      @li TRACE,
- *      @li DEBUG,
- *      @li INFO,
- *      @li WARN,
- *      @li ERROR,
- *      @li FATAL
- *  @param[in] fmt    Pointer to the string to print.
- *  @param[in] args   Arguments for the string.
- */
 void uwb_vlog(uwb_log_t *log, log_error_t *err, log_level_t level, const char *fmt, va_list args)
 {
     char log_buf[MAX_LOG_SIZE];
     circ_buff_error_t cb_err = CIRC_BUFF_ERR_NONE;
     size_t str_size = 0;
-    uint32_t ts = 0;
+    uint32_t ts;
 
     *err = LOG_ERR_NONE;
 
@@ -93,8 +69,8 @@ void uwb_vlog(uwb_log_t *log, log_error_t *err, log_level_t level, const char *f
         } else {
             if ((bool)log->config.timestamp) {
                 ts = log->timestamp();
-                str_size += snprintf(log_buf + str_size, MAX_LOG_SIZE - str_size, "[%lu.%.3lu] ", ts / log->config.freq,
-                                     ts % log->config.freq);
+                str_size += snprintf(log_buf + str_size, MAX_LOG_SIZE - str_size, "[%" PRIu32 ".%.3" PRIu32 "] ",
+                                     ts / log->config.freq, ts % log->config.freq);
             }
 
             str_size += snprintf(log_buf + str_size, MAX_LOG_SIZE - str_size, "%s", level_str[level]);
@@ -109,44 +85,15 @@ void uwb_vlog(uwb_log_t *log, log_error_t *err, log_level_t level, const char *f
     }
 }
 
-/** @brief Write new log.
- *
- *  Print the log to the interface declared in the log structure.
- *  if deferred mode is enabled in the config structure, logs are saved in a
- *  buffer for processor optimization. You need to call sr1000_log_dump later
- *  to empty the buffer. Otherwise, the interface function is called right away
- *  to output the log string.
- *
- *  @param[in]  log   Log struct.
- *  @param[out] err   Pointer that receive an error code.
- *  @param[in]  level Desired log level
- *      @li TRACE,
- *      @li DEBUG,
- *      @li INFO,
- *      @li WARN,
- *      @li ERROR,
- *      @li FATAL
- *  @param[in] fmt    Pointer to the string to print.
- *  @param[in] ...    Arguments for the string.
- */
 void uwb_log(uwb_log_t *log, log_error_t *err, log_level_t level, const char *fmt, ...)
 {
-    va_list args = {0};
+    va_list args;
 
     va_start(args, fmt);
     uwb_vlog(log, err, level, fmt, args);
     va_end(args);
 }
 
-/** @brief Output log when deferred mode is enabled
- *
- *  This function output one log from the log buffer. Do not
- *  use it if deferred mode is not enabled
- *
- *  @param[in]  log   Log struct.
- *  @param[out] err   Pointer that receive an error code.
- *  @return True if the buffer is not empty. False otherwise.
- */
 bool uwb_log_dump(uwb_log_t *log, log_error_t *err)
 {
     log_header_t log_header = {0};
@@ -170,7 +117,7 @@ bool uwb_log_dump(uwb_log_t *log, log_error_t *err)
     }
 
     if ((bool)log->config.timestamp) {
-        str_size += snprintf(log_buf + str_size, MAX_LOG_SIZE - str_size, "[%lu.%.3lu] ",
+        str_size += snprintf(log_buf + str_size, MAX_LOG_SIZE - str_size, "[%" PRIu32 ".%.3" PRIu32 "] ",
                              log_header.ts / log->config.freq, log_header.ts % log->config.freq);
     }
 
@@ -194,17 +141,6 @@ bool uwb_log_dump(uwb_log_t *log, log_error_t *err)
     return !(log->circ_buf.buf_empty);
 }
 
-/** @brief Set the logging level output
- *
- *  @param[in]  log     Log struct.
- *  @param[in]  level   max type of level to print
- *      @lo TRACE,
- *      @lo DEBUG,
- *      @lo INFO,
- *      @lo WARN,
- *      @Lo ERROR,
- *      @lo FATAL
- */
 void uwb_log_set_level(uwb_log_t *log, log_level_t level)
 {
     log->config.level = level;

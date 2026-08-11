@@ -17,11 +17,24 @@
 /*! Must be dividable by all sac_src_factor since fir phaseLength is (NumTaps / ratio). */
 #define FIR_NUMTAPS 24
 /*
- * The filters used in this processing stage will introduce a delay equivalent to FIR_NUMTAPS samples.
- * This delay is the results of the FIR filters used for decimation and interpolation.
+ * Group delay contributed by the SRC FIR filters.
  *
- * Both the decimator and interpolator filters will introduce a delay of FIR_NUMTAPS divided by 2. For that reason half
- * of the accumutor will be applied at the decimator and will send the rest to the interpolator to apply its correction.
+ * Each FIR is linear-phase with N = FIR_NUMTAPS symmetric taps, so its group delay is
+ * (N-1)/2 samples (rounded to N/2 = FIR_NUMTAPS/2 = 12 samples here), measured AT THAT
+ * FILTER'S OPERATING RATE.
+ *
+ * When both filters are active (rational SRC with multiply_ratio > 1 AND divide_ratio > 1),
+ * they are connected by a buffer at the intermediate rate F_int = multiply_ratio * F_in;
+ * both filters run at F_int, so their delays sum to FIR_NUMTAPS samples at F_int (i.e.
+ * FIR_NUMTAPS / F_int seconds). FIR_SAMPLE_COUNT_CORRECTION_FACTOR = 2 splits the
+ * discard accumulator in half so the decimator absorbs its own FIR_NUMTAPS/2 samples of
+ * delay and the interpolator absorbs the remaining FIR_NUMTAPS/2 samples.
+ *
+ * For pure decimation (multiply_ratio = 1): only the decimator FIR runs at F_in, so the
+ * total delay is FIR_NUMTAPS/2 samples at F_in.
+ *
+ * For pure interpolation (divide_ratio = 1): only the interpolator FIR runs at
+ * F_out = multiply_ratio * F_in, so the total delay is FIR_NUMTAPS/2 samples at F_out.
  */
 #define FIR_SAMPLE_COUNT_CORRECTION_FACTOR 2
 
@@ -377,7 +390,6 @@ void sac_src_cmsis_init(void *instance, const char *name, sac_pipeline_t *pipeli
 
             /* Output format assignment. */
             output_format = &decimate_instance[i].output_sample_format;
-            bit_depth = src_instance->cfg.output_sample_format.bit_depth;
             output_format->bit_depth = bit_depth;
             output_format->sample_size_byte = output_sample_size_byte;
             if (bit_depth == SAC_16BITS) {
@@ -419,7 +431,7 @@ void sac_src_cmsis_discard_init(void *instance, const char *name, sac_pipeline_t
     (void)name;
     (void)pipeline;
 
-    int16_t discard_accumulator_size = 0;
+    int16_t discard_accumulator_size;
     src_cmsis_instance_t *src_instance = instance;
     uint8_t input_sample_size_byte = 0;
 
@@ -454,13 +466,13 @@ uint16_t sac_src_cmsis_process(void *instance, sac_pipeline_t *pipeline, sac_hea
     uint16_t sample_count_in = 0;
     uint16_t sample_count_out = 0;
     uint32_t expected_sample_count_in = 0;
-    uint16_t accumulator_sample_count = 0;
-    uint16_t expected_discard_input_size = 0;
+    uint16_t accumulator_sample_count;
+    uint16_t expected_discard_input_size;
     src_cmsis_instance_t *src_instance = instance;
     uint8_t input_sample_size_byte = 0;
     uint8_t output_sample_size_byte = 0;
-    uint16_t data_in_idx = 0;
-    uint16_t data_out_idx = 0;
+    uint16_t data_in_idx;
+    uint16_t data_out_idx;
     uint8_t *audio_in = NULL;
     uint8_t *audio_out = NULL;
 
@@ -591,7 +603,7 @@ uint16_t sac_src_cmsis_process(void *instance, sac_pipeline_t *pipeline, sac_hea
                src_instance->_internal.discard_accumulator_size);
     }
 
-    return (sample_count_out * output_sample_size_byte);
+    return sample_count_out * output_sample_size_byte;
 }
 
 uint16_t sac_src_cmsis_process_discard(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,

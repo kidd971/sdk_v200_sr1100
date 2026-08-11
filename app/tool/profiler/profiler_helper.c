@@ -23,9 +23,12 @@
  */
 
 /* INCLUDES *******************************************************************/
+#include <stdio.h>
+#include <string.h>
 #include "profiler_facade.h"
 #include "swc_api.h"
 #include "swc_cfg.h"
+#include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
 #define SWC_MEM_POOL_SIZE 8000
@@ -37,13 +40,13 @@
 /** @brief Represents the state of processing time measurements for a connection.
  */
 typedef enum profiler_state {
-    /* The link is idle, waiting for the next scenario to start. */
+    /*! The link is idle, waiting for the next scenario to start. */
     PROFILER_STATE_IDLE,
-    /* Currently transmitting or receiving AVERAGE_LENGTH payloads of the current payload size. */
+    /*! Currently transmitting or receiving AVERAGE_LENGTH payloads of the current payload size. */
     PROFILER_STATE_RUNNING,
-    /* The last payload of the current size has been transmitted or received, and the payload size must increase. */
+    /*! The last payload of the current size has been transmitted or received, and the payload size must increase. */
     PROFILER_STATE_INCREMENT_PAYLOAD_SIZE,
-    /* The scenario is complete. */
+    /*! The scenario is complete. */
     PROFILER_STATE_COMPLETE,
 } profiler_state_t;
 
@@ -105,8 +108,8 @@ int main(void)
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
-/** @brief Initialize the SWC and the connection for the unidirectional reception scenario. It also resets metrics
- *         used for synchronizing devices.
+/** @brief Initialize the SWC and the connection for the unidirectional reception scenario. It also resets metrics used
+ *         for synchronizing devices.
  */
 static void setup_rx_connection(void)
 {
@@ -115,6 +118,7 @@ static void setup_rx_connection(void)
     int32_t timeslots[] = TIMESLOTS;
     uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
     uint32_t channel_frequency[] = CHANNEL_FREQ;
+    swc_radio_handle_t *radio_handle = NULL;
 
     /* Reset the synchronizing flags for the next scenario. */
     current_profiling_payload = MIN_PAYLOAD_SIZE_BYTE;
@@ -122,7 +126,7 @@ static void setup_rx_connection(void)
     transmitted_packet_count = 0;
     generated_packet_count = 0;
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -130,11 +134,11 @@ static void setup_rx_connection(void)
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = PAN_ID,
     };
 
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_NODE,
-        .pan_id = PAN_ID,
         .coordinator_address = COORDINATOR_ADDRESS,
         .local_address = NODE_ADDRESS,
     };
@@ -142,11 +146,16 @@ static void setup_rx_connection(void)
     swc_init(core_cfg, node_cfg, facade_context_switch_trigger, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* ** RX Connection ** */
-    swc_connection_cfg_t rx_conn_cfg = {
+    const swc_connection_cfg_t rx_conn_cfg = {
         .name = "RX Connection",
         .source_address = COORDINATOR_ADDRESS,
         .destination_address = NODE_ADDRESS,
@@ -158,17 +167,19 @@ static void setup_rx_connection(void)
     rx_conn = swc_connection_init(rx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t rx_channel_cfg = {
+    const swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_conn, rx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *rx_channels = swc_channel_list_init_from_base(rx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(rx_conn, rx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -186,6 +197,7 @@ static void setup_tx_connection(void)
     int32_t timeslots[] = TIMESLOTS;
     uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
     uint32_t channel_frequency[] = CHANNEL_FREQ;
+    swc_radio_handle_t *radio_handle = NULL;
 
     /* Reset the synchronizing flags for the next scenario. */
     current_profiling_payload = MIN_PAYLOAD_SIZE_BYTE;
@@ -193,7 +205,7 @@ static void setup_tx_connection(void)
     transmitted_packet_count = 0;
     generated_packet_count = 0;
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -201,12 +213,12 @@ static void setup_tx_connection(void)
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = PAN_ID,
     };
 
     /* For the unidirectional TX connection (scenario 2), the Helper acts as the Coordinator. */
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_COORDINATOR,
-        .pan_id = PAN_ID,
         .coordinator_address = COORDINATOR_ADDRESS,
         .local_address = NODE_ADDRESS,
     };
@@ -214,11 +226,16 @@ static void setup_tx_connection(void)
     swc_init(core_cfg, node_cfg, facade_context_switch_trigger, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* ** TX Connection ** */
-    swc_connection_cfg_t tx_conn_cfg = {
+    const swc_connection_cfg_t tx_conn_cfg = {
         .name = "TX Connection",
         .source_address = NODE_ADDRESS,
         .destination_address = COORDINATOR_ADDRESS,
@@ -230,17 +247,19 @@ static void setup_tx_connection(void)
     tx_conn = swc_connection_init(tx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t tx_channel_cfg = {
+    const swc_channel_cfg_t tx_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_conn, tx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *tx_channels = swc_channel_list_init_from_base(tx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(tx_conn, tx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_tx_success_callback(tx_conn, conn_tx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -262,6 +281,7 @@ static void setup_bidir_connection(void)
     int32_t bidir_rx_timeslots[] = BIDIR_TIMESLOTS_1;
     uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
     uint32_t channel_frequency[] = CHANNEL_FREQ;
+    swc_radio_handle_t *radio_handle = NULL;
 
     /* Reset the synchronizing flags for the next scenario. */
     current_profiling_payload = MIN_PAYLOAD_SIZE_BYTE;
@@ -269,7 +289,7 @@ static void setup_bidir_connection(void)
     transmitted_packet_count = 0;
     generated_packet_count = 0;
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = bidir_timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(bidir_timeslot_us),
         .channel_sequence = channel_sequence,
@@ -277,11 +297,11 @@ static void setup_bidir_connection(void)
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = PAN_ID,
     };
 
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_NODE,
-        .pan_id = PAN_ID,
         .coordinator_address = COORDINATOR_ADDRESS,
         .local_address = NODE_ADDRESS,
     };
@@ -289,11 +309,16 @@ static void setup_bidir_connection(void)
     swc_init(core_cfg, node_cfg, facade_context_switch_trigger, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* ** RX Connection ** */
-    swc_connection_cfg_t rx_conn_cfg = {
+    const swc_connection_cfg_t rx_conn_cfg = {
         .name = "RX Connection",
         .source_address = COORDINATOR_ADDRESS,
         .destination_address = NODE_ADDRESS,
@@ -305,22 +330,24 @@ static void setup_bidir_connection(void)
     rx_conn = swc_connection_init(rx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t rx_channel_cfg = {
+    const swc_channel_cfg_t bidir_rx_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_conn, rx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *bidir_rx_channels = swc_channel_list_init_from_base(bidir_rx_channel_cfg, channel_frequency,
+                                                                       ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(rx_conn, bidir_rx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* ** TX Connection ** */
-    swc_connection_cfg_t tx_conn_cfg = {
+    const swc_connection_cfg_t tx_conn_cfg = {
         .name = "TX Connection",
         .source_address = NODE_ADDRESS,
         .destination_address = COORDINATOR_ADDRESS,
@@ -332,17 +359,19 @@ static void setup_bidir_connection(void)
     tx_conn = swc_connection_init(tx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t tx_channel_cfg = {
+    const swc_channel_cfg_t bidir_tx_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_conn, tx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *bidir_tx_channels = swc_channel_list_init_from_base(bidir_tx_channel_cfg, channel_frequency,
+                                                                       ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(tx_conn, bidir_tx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_tx_success_callback(tx_conn, conn_tx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -434,8 +463,8 @@ static void conn_tx_fail_callback(void *conn, void *arg)
 
 /** @brief Timer callback for generating packets.
  *
- *  This function is triggered by a timer to periodically send packets. If the required number of packets has not been
- *  sent, it allocates a buffer, fills it with test data, and queues it for transmission.
+ *  @note This function is triggered by a timer to periodically send packets. If the required number of packets has not
+ *        been sent, it allocates a buffer, fills it with test data, and queues it for transmission.
  */
 static void packet_generation_timer_callback(void)
 {
@@ -450,7 +479,7 @@ static void packet_generation_timer_callback(void)
 
         swc_connection_get_payload_buffer(tx_conn, &profiler_buf, &swc_err);
 
-        /* If the SWC queue is not full, a new packets is inserted into the queue */
+        /* If the SWC queue is not full, a new packets is inserted into the queue. */
         if (profiler_buf != NULL) {
             memset(profiler_buf, PAYLOAD_TO_SEND, current_profiling_payload);
             swc_connection_send(tx_conn, profiler_buf, current_profiling_payload, &swc_err);
@@ -600,7 +629,7 @@ static void run_bidir_bidir_scenario(void)
         /* Start the generation of packets. */
         facade_packet_generation_timer_start();
 
-        /* Wait until both sequence are finished. (Packets with the right payload size has been sent and received) */
+        /* Wait until both sequence are finished. (Packets with the right payload size has been sent and received). */
         while (state_rx != PROFILER_STATE_INCREMENT_PAYLOAD_SIZE || state_tx != PROFILER_STATE_INCREMENT_PAYLOAD_SIZE);
 
         /* Stop the timer used for the generation of new packets. */
@@ -639,7 +668,7 @@ void swc_error_handler(swc_error_t swc_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    snprintf(buffer, sizeof(buffer), "SWC Error ! Code: %d\n\r", swc_status);
     facade_log_error_string(buffer);
 
     while (1);

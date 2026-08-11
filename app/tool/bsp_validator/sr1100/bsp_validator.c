@@ -13,7 +13,6 @@
 /* INCLUDES *******************************************************************/
 #include "bsp_validator_facade.h"
 #include "critical_section.h"
-#include "sr_access.h"
 #include "swc_api.h"
 #include "swc_hal_facade.h"
 
@@ -22,30 +21,47 @@
 
 /* MACROS *********************************************************************/
 /*! Retrieve the LSB of a 16 bits register value. */
-#define LSB_VALUE(VALUE_16BITS) (VALUE_16BITS & 0x00FF)
+#define LSB_VALUE(VALUE_16BITS) ((VALUE_16BITS) & 0x00FF)
 /*! Retrieve the MSB of a 16 bits register value. */
-#define MSB_VALUE(VALUE_16BITS) (VALUE_16BITS >> 8)
+#define MSB_VALUE(VALUE_16BITS) ((VALUE_16BITS) >> 8)
 
 /*! Register field single bit mask. */
 #define BIT(n)                 (1 << (n))
 #define REG_READ_BURST         BIT(7)
 #define REG_WRITE              BIT(6)
 #define REG_WRITE_BURST        (BIT(7) | REG_WRITE)
-#define SET_BIT_OFFSET(OFFSET) (1 << OFFSET)
+#define SET_BIT_OFFSET(OFFSET) (1 << (OFFSET))
+
+/*! Register field multibit mask, 16-bit. */
+#define BITS16(b, a) ((0xffff >> (15 - (b))) & ~((1U << (a)) - 1))
+/*! Calculates leftshift for given mask (e.g BITS2SHIFT(0x30) = 16, where log2(16) = 4, to shift 4). */
+#define BITS2SHIFT(mask) ((mask) & -(mask))
+/*! Returns a value within the given mask. */
+#define MOV2MASK(val, mask) (((val) * BITS2SHIFT(mask)) & (mask))
 
 /*! Registers fields used to configure the radio during tests. */
-#define WAKEUPE_POSITION  8
-#define SLPDEPTH_POSITION 14
-#define GO_SLEEP_POSITION 0
+#define WAKEUPE_POSITION            8
+#define SLPDEPTH_POSITION           14
+#define GO_SLEEP_POSITION           0
+#define REG16_HARDDISABLES_IOCONFIG 0x01
 
-/*! HARDDISABLES_IOCONFIG Register configuration for fast MISO.  */
+/*! HARDDISABLES_IOCONFIG Register configuration for fast MISO. */
 #define HARDDISABLES_IOCONFIG_REGISTER  0x01
 #define HARDDISABLES_IOCONFIG_FAST_MISO (BIT(12) | BIT(13))
 
+#define BITS_QSPI                       BITS16(11, 10)
+#define QSPI_0b10                       MOV2MASK(0b10, BITS_QSPI)
+#define QSPI_0b00                       MOV2MASK(0b00, BITS_QSPI)
+
 /* TYPES **********************************************************************/
+/** @brief Log levels for the BSP validator.
+ */
 typedef enum level {
+    /*! Debug log level. */
     LOG_LEVEL_DEBUG,
+    /*! Info log level. */
     LOG_LEVEL_INFO,
+    /*! Error log level. */
     LOG_LEVEL_ERR,
 } log_level_t;
 
@@ -146,11 +162,11 @@ static void validate_trigger_transceiver_irq(bsp_radio_t radio_index);
 static void validate_critical_section(bsp_radio_t radio_index);
 static void validate_critical_section_context_switch(void);
 
-/* Other functions */
+/* Other functions. */
 static void enable_fast_miso(bsp_radio_t radio_index);
 static void reset_transceiver(bsp_radio_t radio_index);
 static void read_sfd(bsp_radio_t radio_index, uint8_t *sfd);
-static void write_sfd(bsp_radio_t radio_index, uint8_t *sfd);
+static void write_sfd(bsp_radio_t radio_index, const uint8_t *sfd);
 static void config_radio_wakeup_irq(bsp_radio_t radio_index);
 static bool compare_reg_value(const uint8_t *buffer1, const uint8_t *buffer2, size_t size);
 static bool reg_value_differ(const uint8_t *buffer1, const uint8_t *buffer2, size_t size);
@@ -165,11 +181,6 @@ static void run_radio_1_bsp_validator_tests(void);
 static void run_radio_2_bsp_validator_tests(void);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-/** @brief Validate the BSP implementation by running basic tests.
- *
- *  The tests use the SPARK SR1120 Transceiver to validate proper
- *  implementations of the board peripheral drivers.
- */
 int main(void)
 {
     /* Initiate basic components. */
@@ -241,13 +252,11 @@ static void run_radio_2_bsp_validator_tests(void)
 
 /** @brief Test the SPI blocking implementation.
  *
- *  The SPARK Wireless Core requires a basic SPI transfer blocking function.
- *  This test validates that the CS, SCLK, MOSI and MISO pins are well mapped
- *  and behave has expected by the transceiver.
+ *  @note The SPARK Wireless Core requires a basic SPI transfer blocking function. This test validates that the CS,
+ *        SCLK, MOSI and MISO pins are well mapped and behave has expected by the transceiver.
  *
- *  Scenario :
- *      Use the SPI blocking method to read the SR11x0 SFD register and
- *      compare the read value with the known default value.
+ *  @note Scenario : Use the SPI blocking method to read the SR11x0 SFD register and compare the read value with the
+ *        known default value.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -274,16 +283,14 @@ static void validate_spi_blocking(bsp_radio_t radio_index)
 
 /** @brief Test the Chip Select implementation.
  *
- *  The SPARK Wireless Core requires full control over the SPI Chip Select pin.
- *  This test validates that the SPI transfer fails if the CS Pin in not controlled manually,
- *  and validate that the SPI succeeds when the CS Pin is manually toggled.
+ *  @note The SPARK Wireless Core requires full control over the SPI Chip Select pin. This test validates that the SPI
+ *        transfer fails if the CS Pin in not controlled manually, and validate that the SPI succeeds when the CS Pin is
+ *        manually toggled.
  *
- *  Scenario :
- *      Use the SPI blocking method to read the SFD register and compare
- *      the read value with the known default to make sure the operation works.
- *      Using SPI blocking method again to read back the SFD register without
- *      driving the CS low and making sure the received data is random.
- *      Overwrite the SFD once and check again that the read value is random.
+ *  @note Scenario : Use the SPI blocking method to read the SFD register and compare the read value with the known
+ *        default to make sure the operation works. Using SPI blocking method again to read back the SFD register
+ *        without driving the CS low and making sure the received data is random. Overwrite the SFD once and check again
+ *        that the read value is random.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -308,7 +315,7 @@ static void validate_cs(bsp_radio_t radio_index)
         return;
     }
 
-    /* Read SFD without reseting the CS pin. */
+    /* Read SFD without resetting the CS pin. */
     if (RADIO_QSPI_ENABLED) {
         swc_hal[radio_index].transfer_half_duplex_rx_blocking(tx_data[0], &rx_data[1], 4);
     } else {
@@ -322,7 +329,7 @@ static void validate_cs(bsp_radio_t radio_index)
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
     }
 
-    uint8_t new_sfd[4] = {0x01, 0x02, 0x03, 0x04};
+    const uint8_t new_sfd[4] = {0x01, 0x02, 0x03, 0x04};
 
     /* Write SFD in blocking mode. */
     write_sfd(radio_index, new_sfd);
@@ -337,7 +344,7 @@ static void validate_cs(bsp_radio_t radio_index)
         return;
     }
 
-    /* Read SFD without reseting the CS pin. */
+    /* Read SFD without resetting the CS pin. */
     if (RADIO_QSPI_ENABLED) {
         swc_hal[radio_index].transfer_half_duplex_rx_blocking(tx_data[0], &rx_data[1], 4);
     } else {
@@ -358,22 +365,19 @@ static void validate_cs(bsp_radio_t radio_index)
 
 /** @brief Test the reset pin implementation.
  *
- *  Driving the Reset pin low resets the internal register of the transceiver
- *  to their default values. This test validates that the pin is well mapped
- *  and behave as the transceiver is expecting it.
+ *  @note Driving the Reset pin low resets the internal register of the transceiver to their default values. This test
+ *        validates that the pin is well mapped and behave as the transceiver is expecting it.
  *
- *  Scenario :
- *      Write a custom SFD value to the transceiver register using the
- *      SPI Blocking method. Then read back these register to make sure that the
- *      operation works. Finally, reset the transceiver, then read the sycnword
- *      register and compare the value with the expected default one.
+ *  @note Scenario : Write a custom SFD value to the transceiver register using the SPI Blocking method. Then read back
+ *        these register to make sure that the operation works. Finally, reset the transceiver, then read the sycnword
+ *        register and compare the value with the expected default one.
  *
  *  @param[in] radio_index  Selected radio index.
  */
 static void validate_reset_pin(bsp_radio_t radio_index)
 {
     static const char TEST_NAME_STRING[] = "Transceiver reset pin";
-    uint8_t tx_data[4] = {0x01, 0x02, 0x03, 0x04};
+    const uint8_t tx_data[4] = {0x01, 0x02, 0x03, 0x04};
     uint8_t rx_data[5] = {0};
 
     print_log(LOG_LEVEL_INFO, "%s %s", TEST_RUN_STRING, TEST_NAME_STRING);
@@ -409,29 +413,25 @@ static void validate_reset_pin(bsp_radio_t radio_index)
 
 /** @brief Test the transceiver IRQ pin callback read state implementations.
  *
- *  By default, when the transceiver generates an IRQ, it's IRQ Pin rises.
- *  When this happens, the BSP must read a high state on the connected MCU Pin.
- *  This state should be held until reset by the user.
- *  If enabled, a callback event should be called immediately when the
- *  IRQ pin is driven in its active state. This test validates that the IRQ pin
- *  state after an applicable event occurred on the transceiver side.
+ *  @note By default, when the transceiver generates an IRQ, it's IRQ Pin rises. When this happens, the BSP must read a
+ *        high state on the connected MCU Pin. This state should be held until reset by the user. If enabled, a callback
+ *        event should be called immediately when the IRQ pin is driven in its active state. This test validates that
+ *        the IRQ pin state after an applicable event occurred on the transceiver side.
  *
- *  Scenario :
- *      Configure the transceiver to generate an IRQ when it wakes up from sleep.
- *      Read the MCU input pin state and validate it is correct. Additionally,
- *      set and enable the callback event and make sure it is triggered.
- *      The sequence of events is shown below:
+ *  @note Scenario : Configure the transceiver to generate an IRQ when it wakes up from sleep. Read the MCU input pin
+ *        state and validate it is correct. Additionally, set and enable the callback event and make sure it is
+ *        triggered. The sequence of events is shown below:
  *
- *  1. Set IRQ callback function and enable the transceiver's IRQ on wake up event.
- *  2. Prepare the SPI frame with transceiver configurations and commands :
- *      a. Set up the interrupt flag to "wake up from sleep".
- *      b. Set up the sleep level to "shallow".
- *      c. Command the transceiver to go to sleep
- *  3. Transfer the payload to transceiver over SPI with the blocking method.
- *  4. Wait 1ms.
- *  5. Prepare the SPI frame with the "wake up" command and send it over SPI with the blocking method.
- *  6. Wait 10ms.
- *  7. Read transceiver's IRQ pin and assess its state.
+ *  @note 1. Set IRQ callback function and enable the transceiver's IRQ on wake up event.
+ *        2. Prepare the SPI frame with transceiver configurations and commands:
+ *          a. Set up the interrupt flag to "wake up from sleep".
+ *          b. Set up the sleep level to "shallow".
+ *          c. Command the transceiver to go to sleep.
+ *        3. Transfer the payload to transceiver over SPI with the blocking method.
+ *        4. Wait 1ms.
+ *        5. Prepare the SPI frame with the "wake up" command and send it over SPI with the blocking method.
+ *        6. Wait 10ms.
+ *        7. Read transceiver's IRQ pin and assess its state.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -490,18 +490,14 @@ static void validate_transceiver_irq_pin(bsp_radio_t radio_index)
 
 /** @brief Test the SPI DMA transfer.
  *
- *  The SPARK Wireless Core requires a second SPI transfer function.
- *  This implementation must allow a non-blocking data transfer over
- *  the SPI. If enabled, the transfer completion IRQ must
- *  trigger an IRQ event which calls the configured callback function. This test validates
- *  the SPI DMA driver, the SPI DMA complete callback setter
- *  function and the IRQ configuration for the transfer completion.
+ *  @note The SPARK Wireless Core requires a second SPI transfer function. This implementation must allow a non-blocking
+ *        data transfer over the SPI. If enabled, the transfer completion IRQ must trigger an IRQ event which calls the
+ *        configured callback function. This test validates the SPI DMA driver, the SPI DMA complete callback setter
+ *        function and the IRQ configuration for the transfer completion.
  *
- *  Scenario :
- *      Set and enable the SPI DMA complete callback. Use the SPI DMA method
- *      to read the SFD register. Wait 1ms and then validate that the
- *      SPI DMA complete callback was triggered and compare the read value with
- *      the known default.
+ *  @note Scenario : Set and enable the SPI DMA complete callback. Use the SPI DMA method to read the SFD register. Wait
+ *        1ms and then validate that the SPI DMA complete callback was triggered and compare the read value with the
+ *        known default.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -516,7 +512,7 @@ static void validate_spi_dma(bsp_radio_t radio_index)
     reset_transceiver(radio_index);
     swc_hal[radio_index].enable_radio_non_blocking_transfer_irq();
 
-    /* Transfer payload to transceiver buffer register.*/
+    /* Transfer payload to transceiver buffer register. */
     swc_hal[radio_index].begin_transfer();
     if (RADIO_QSPI_ENABLED) {
         swc_hal[radio_index].transfer_half_duplex_rx_non_blocking(tx_data[0], &rx_data[1], 4);
@@ -540,7 +536,7 @@ static void validate_spi_dma(bsp_radio_t radio_index)
     swc_hal[radio_index].end_transfer();
 
     /* Validator TX non-blocking. */
-    uint8_t new_sfd[4] = {0x01, 0x02, 0x03, 0x04};
+    const uint8_t new_sfd[4] = {0x01, 0x02, 0x03, 0x04};
 
     tx_data[0] = SFD_REGISTER | REG_WRITE_BURST;
     memcpy(&tx_data[1], new_sfd, SFD_LENGTH);
@@ -573,26 +569,24 @@ static void validate_spi_dma(bsp_radio_t radio_index)
 
 /** @brief Test the disable IRQ feature of the transceiver IRQ pin.
  *
- *  This test validates that the set callback function is not called when
- *  the transceiver generates an IRQ while the user chooses to disable this event.
+ *  @note This test validates that the set callback function is not called when the transceiver generates an IRQ while
+ *        the user chooses to disable this event.
  *
- *  Scenario :
- *      Configure the transceiver to generate an IRQ when it wakes up from sleep.
- *      Disable the MCU IRQ mapped to the transceiver's IRQ pin. Read the MCU
- *      input pin state and assess its state. Validate that the configured
- *      callback is not executed. The sequence of events is shown below:
+ *  @note Scenario : Configure the transceiver to generate an IRQ when it wakes up from sleep. Disable the MCU IRQ
+ *        mapped to the transceiver's IRQ pin. Read the MCU input pin state and assess its state. Validate that the
+ *        configured callback is not executed. The sequence of events is shown below:
  *
- *  1. Set IRQ callback function and disable the transceiver's IRQ on wake up event.
- *  2. Prepare the SPI frame with transceiver configurations and commands :
- *      a. Set interrupt flag to "wake up from sleep".
- *      b. Set sleep level to "shallow".
- *      c. Command the transceiver to go in sleep.
- *  1. Transfer payload to transceiver over SPI using the blocking method.
- *  2. Wait 1ms.
- *  3. Prepare the SPI frame with wake up command and send it over SPI using the blocking method.
- *  4. Wait 10ms.
- *  5. Read the transceiver's IRQ pin state and assess its state.
- *  6. Validate that the IRQ callback was not executed.
+ *  @note 1. Set IRQ callback function and disable the transceiver's IRQ on wake up event.
+ *        2. Prepare the SPI frame with transceiver configurations and commands:
+ *          a. Set interrupt flag to "wake up from sleep".
+ *          b. Set sleep level to "shallow".
+ *          c. Command the transceiver to go in sleep.
+ *        3. Transfer payload to transceiver over SPI using the blocking method.
+ *        4. Wait 1ms.
+ *        5. Prepare the SPI frame with wake up command and send it over SPI using the blocking method.
+ *        6. Wait 25ms.
+ *        7. Read the transceiver's IRQ pin state and assess its state.
+ *        8. Validate that the IRQ callback was not executed.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -648,7 +642,7 @@ static void validate_disable_transceiver_irq(bsp_radio_t radio_index)
 
     facade_time_delay(1);
 
-    /* Wake up radio by clearing the SLEEP field of the register.*/
+    /* Wake up radio by clearing the SLEEP field of the register. */
     reg_value = 0;
     print_log(LOG_LEVEL_DEBUG, "             Main command reg value set to wake up: %d", reg_value);
     tx_data[0] = MAIN_COMMAND_REGISTER | REG_WRITE;
@@ -680,14 +674,12 @@ static void validate_disable_transceiver_irq(bsp_radio_t radio_index)
 
 /** @brief Test the SPI DMA transfer while transfer complete interrupt is disabled.
  *
- *  The SPARK Wireless Core requires the ability to disable the SPI DMA complete interrupt.
- *  This test validates that the SPI DMA complete can correctly be deactivated.
+ *  @note The SPARK Wireless Core requires the ability to disable the SPI DMA complete interrupt. This test validates
+ *        that the SPI DMA complete can correctly be deactivated.
  *
- *  Scenario :
- *      Set and disable the SPI DMA complete callback. Use the SPI DMA method
- *      to read the SFD register. Wait 1ms and then validate that the
- *      SPI DMA complete callback was not triggered and compare the read value with
- *      the known default.
+ *  @note Scenario : Set and disable the SPI DMA complete callback. Use the SPI DMA method to read the SFD register.
+ *        Wait 1ms and then validate that the SPI DMA complete callback was not triggered and compare the read value
+ *        with the known default.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -702,7 +694,7 @@ static void validate_disable_non_blocking_transfer_irq(bsp_radio_t radio_index)
 
     swc_hal[radio_index].disable_radio_non_blocking_transfer_irq();
 
-    /* Transfer payload to transceiver buffer register.*/
+    /* Transfer payload to transceiver buffer register. */
     swc_hal[radio_index].begin_transfer();
     if (RADIO_QSPI_ENABLED) {
         swc_hal[radio_index].transfer_half_duplex_tx_non_blocking(tx_data[0], &tx_data[1], 4);
@@ -728,12 +720,9 @@ static void validate_disable_non_blocking_transfer_irq(bsp_radio_t radio_index)
 
 /** @brief Test baremetal context switch mecanisme.
  *
- *  The Wireless Core requires a mechanism to schedule user-configurable callback execution.
- *  This test validates the callback setter function and the custom callback execution.
- *
- *  Scenario :
- *      Set the context switch callback function, then trigger a context switch.
- *      Wait 1ms and validate the callback execution.
+ *  @note The Wireless Core requires a mechanism to schedule user-configurable callback execution. This test validates
+ *        the callback setter function and the custom callback execution. Scenario : Set the context switch callback
+ *        function, then trigger a context switch. Wait 1ms and validate the callback execution.
  */
 static void validate_wireless_context_switch(void)
 {
@@ -758,12 +747,10 @@ static void validate_wireless_context_switch(void)
 
 /** @brief Test the triggering of transceiver IRQ.
  *
- *  The Wireless Core should be able to Pend into the Transceiver IRQ.
+ *  @note The Wireless Core should be able to Pend into the Transceiver IRQ.
  *
- *  Scenario :
- *      Set a mocked callback function to called when the transceiver
- *      generates an IRQ and enable the IRQ interrupt, then Pend on this IRQ.
- *      Wait 100ms and validates that the callback function is called.
+ *  @note Scenario : Set a mocked callback function to called when the transceiver generates an IRQ and enable the IRQ
+ *        interrupt, then Pend on this IRQ. Wait 100ms and validates that the callback function is called.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -789,14 +776,11 @@ static void validate_trigger_transceiver_irq(bsp_radio_t radio_index)
 
 /** @brief Test the enter/exit critical section feature.
  *
- *  The Wireless Core requires the ability to enter/exit critical sections.
+ *  @note The Wireless Core requires the ability to enter/exit critical sections.
  *
- *  Scenario :
- *      Set the transceiver IRQ callback and validates IRQ callback actually works.
- *      Then enter critical section and generate and transceiver IRQ by pending
- *      on it. Afterwards, validate that the callback function was not called.
- *      Finally Exit the critical section and validate that the transceiver
- *      callback was called.
+ *  @note Scenario : Set the transceiver IRQ callback and validates IRQ callback actually works. Then enter critical
+ *        section and generate and transceiver IRQ by pending on it. Afterwards, validate that the callback function was
+ *        not called. Finally Exit the critical section and validate that the transceiver callback was called.
  *
  *  @param[in] radio_index  Selected radio index.
  */
@@ -849,14 +833,10 @@ static void validate_critical_section(bsp_radio_t radio_index)
 }
 
 /** @brief Test the enter/exit critical section feature to make sure it disable the.
- *  context switch.
  *
- *  Scenario :
- *      Set context switch IRQ callback and while
- *      in a critical section, trigger a context switch.
- *      Validate that the callback function is not called.
- *      Exit the critical section and validate that the context switch callback
- *      is called.
+ *  @note context switch. Scenario : Set context switch IRQ callback and while in a critical section, trigger a context
+ *        switch. Validate that the callback function is not called. Exit the critical section and validate that the
+ *        context switch callback is called.
  */
 static void validate_critical_section_context_switch(void)
 {
@@ -902,14 +882,13 @@ static void validate_critical_section_context_switch(void)
 
 /** @brief Compare the content of two data buffers.
  *
- *  Return the buffer comparison's result. If PW_LOG module is
- *  set to LOG_LEVEL_DEBUG level first 4 bytes will be print onto the serial port.
+ *  @note Return the buffer comparison's result. If PW_LOG module is set to LOG_LEVEL_DEBUG level first 4 bytes will be
+ *        print onto the serial port.
  *
  *  @param[in] buffer1  Pointer to the first data buffer to be compared.
  *  @param[in] buffer2  Pointer to the second data buffer to be compared.
  *  @param[in] size     Number of bytes to be compared.
- *
- *  @retval True  If values are equal.
+ *  @retval True   If values are equal.
  *  @retval False  If values are not equal.
  */
 static bool compare_reg_value(const uint8_t *buffer1, const uint8_t *buffer2, size_t size)
@@ -932,8 +911,7 @@ static bool compare_reg_value(const uint8_t *buffer1, const uint8_t *buffer2, si
  *  @param[in] buffer1  Pointer to the first data buffer to be compared.
  *  @param[in] buffer2  Pointer to the second data buffer to be compared.
  *  @param[in] size     Number of bytes to be compared.
- *
- *  @retval True  If values are different.
+ *  @retval True   If values are different.
  *  @retval False  If values are not equal.
  */
 static bool reg_value_differ(const uint8_t *buffer1, const uint8_t *buffer2, size_t size)
@@ -954,7 +932,6 @@ static bool reg_value_differ(const uint8_t *buffer1, const uint8_t *buffer2, siz
 /** @brief Get all the interrupt sources such as radio IRQ pin and DMA IRQ.
  *
  *  @param[in] radio_index  The radio index to get the IRQ sources for.
- *
  *  @return The interrupt sources.
  */
 static interrupt_sources_t get_interrupt_sources(bsp_radio_t radio_index)
@@ -989,13 +966,21 @@ static interrupt_sources_t get_interrupt_sources(bsp_radio_t radio_index)
  */
 static void reset_transceiver(bsp_radio_t radio_index)
 {
+    uint8_t tx_buffer[3];
+#if !RADIO_QSPI_ENABLED
+    uint8_t rx_buffer[3];
+#endif
+    uint16_t register_value = 0;
+
     swc_hal[radio_index].reset_reset_pin();
     facade_time_delay(50);
     swc_hal[radio_index].set_reset_pin();
     facade_time_delay(50);
 
+#if RADIO_QSPI_ENABLED
     /* Set the peripheral communication mode to SPI since the radio just got reset. */
-    sr_access_set_mode(radio_index, SPI);
+    swc_hal[radio_index].set_access_mode_spi();
+#endif
 
     /* Enable Fast MISO after radio reset. */
     enable_fast_miso(radio_index);
@@ -1003,15 +988,43 @@ static void reset_transceiver(bsp_radio_t radio_index)
     /* Configure communication mode with the radio. */
 
     /* Get the current config in the register. */
-    uint16_t register_value = sr_access_read_reg16(radio_index, REG16_HARDDISABLES_IOCONFIG);
+    tx_buffer[0] = REG16_HARDDISABLES_IOCONFIG;
+
+#if !RADIO_QSPI_ENABLED
+    swc_hal[radio_index].begin_transfer();
+    swc_hal[radio_index].transfer_full_duplex_blocking(tx_buffer, rx_buffer, 3);
+    swc_hal[radio_index].end_transfer();
+    register_value = rx_buffer[1] | (rx_buffer[2] << 8);
+#else
+
+    swc_hal[radio_index].begin_transfer();
+    swc_hal[radio_index].transfer_half_duplex_rx_blocking(tx_buffer[0], (uint8_t *)&register_value, 2);
+    swc_hal[radio_index].end_transfer();
+
+#endif
 
     /* Add the desired access mode (SPI/QSPI). */
     register_value = register_value & ~BITS_QSPI;
     register_value |= RADIO_QSPI_ENABLED ? QSPI_0b10 : QSPI_0b00;
-    sr_access_write_reg16(radio_index, REG16_HARDDISABLES_IOCONFIG, register_value);
+
+#if !RADIO_QSPI_ENABLED
+    tx_buffer[0] = REG_WRITE | REG16_HARDDISABLES_IOCONFIG;
+    memcpy(&tx_buffer[1], (uint8_t *)&register_value, 2);
+
+    swc_hal[radio_index].begin_transfer();
+    swc_hal[radio_index].transfer_full_duplex_blocking(tx_buffer, rx_buffer, 3);
+    swc_hal[radio_index].end_transfer();
+#else
+    swc_hal[radio_index].begin_transfer();
+    swc_hal[radio_index].transfer_half_duplex_tx_blocking(REG_WRITE | REG16_HARDDISABLES_IOCONFIG,
+                                                          (uint8_t *)&register_value, 2);
+    swc_hal[radio_index].end_transfer();
+#endif
 
     /* Turn on the appropriate access mode. */
-    sr_access_set_mode(radio_index, RADIO_QSPI_ENABLED ? QSPI : SPI);
+    if (RADIO_QSPI_ENABLED) {
+        swc_hal[radio_index].set_access_mode_qspi();
+    }
 }
 
 /** @brief Enable Fast MISO to make sure SPI reads are accurate.
@@ -1036,13 +1049,12 @@ static void enable_fast_miso(bsp_radio_t radio_index)
 
 /** @brief Read the SFD register.
  *
- *  Read the SFD register with SPI blocking mode. The CS pin is reset/set
- *  for this operation.
+ *  @note Read the SFD register with SPI blocking mode. The CS pin is reset/set for this operation.
  *
  *  @param[in]  radio_index  Selected radio index.
  *  @param[out] sfd          Pointer to the SFD value.
  */
-void read_sfd(bsp_radio_t radio_index, uint8_t *sfd)
+static void read_sfd(bsp_radio_t radio_index, uint8_t *sfd)
 {
     uint8_t tx_data[5] = {SFD_REGISTER | REG_READ_BURST, 0, 0, 0, 0};
 
@@ -1059,13 +1071,12 @@ void read_sfd(bsp_radio_t radio_index, uint8_t *sfd)
 
 /** @brief Write to the SFD register.
  *
- *  Write to the SFD register with SPI blocking mode. The CS pin is reset/set
- *  for this operation.
+ *  @note Write to the SFD register with SPI blocking mode. The CS pin is reset/set for this operation.
  *
  *  @param[in]  radio_index  Selected radio index.
  *  @param[out] sfd          Pointer to the SFD value.
  */
-void write_sfd(bsp_radio_t radio_index, uint8_t *sfd)
+static void write_sfd(bsp_radio_t radio_index, const uint8_t *sfd)
 {
     uint8_t tx_data[5] = {SFD_REGISTER | REG_WRITE_BURST, 0, 0, 0, 0};
     uint8_t rx_data[5] = {0};
@@ -1138,7 +1149,7 @@ static void config_radio_wakeup_irq(bsp_radio_t radio_index)
 
 /** @brief Mock radio 1 interrupt IRQ callback.
  *
- *  Set the flag that attests that the callback was called.
+ *  @note Set the flag that attests that the callback was called.
  */
 static void mocked_radio_1_irq_callback(void)
 {
@@ -1147,7 +1158,7 @@ static void mocked_radio_1_irq_callback(void)
 
 /** @brief Mock radio 2 interrupt IRQ callback.
  *
- *  Set the flag that attests that the callback was called.
+ *  @note Set the flag that attests that the callback was called.
  */
 static void mocked_radio_2_irq_callback(void)
 {
@@ -1156,7 +1167,7 @@ static void mocked_radio_2_irq_callback(void)
 
 /** @brief Mock radio 1 DMA transfer callback.
  *
- *  Set the flag that attests that the callback was called.
+ *  @note Set the flag that attests that the callback was called.
  */
 static void mocked_radio_1_dma_transfer_callback(void)
 {
@@ -1165,7 +1176,7 @@ static void mocked_radio_1_dma_transfer_callback(void)
 
 /** @brief Mock radio 2 DMA transfer callback.
  *
- *  Set the flag that attests that the callback was called.
+ *  @note Set the flag that attests that the callback was called.
  */
 static void mocked_radio_2_dma_transfer_callback(void)
 {
@@ -1174,7 +1185,7 @@ static void mocked_radio_2_dma_transfer_callback(void)
 
 /** @brief Mock context switch callback.
  *
- *  Set the flag that attests that the callback was called.
+ *  @note Set the flag that attests that the callback was called.
  */
 static void mocked_context_switch_callback(void)
 {
@@ -1183,12 +1194,12 @@ static void mocked_context_switch_callback(void)
 
 /** @brief Write new print_log.
  *
- *  @param[in] level            Desired print_log level.
- *   @li       LOG_LEVEL_DEBUG  Debug logging level.
- *   @li       LOG_LEVEL_INFO   Info logging level.
- *   @li       ERROR            Error logging level.
- *  @param[in] fmt              Pointer to the string to print.
- *  @param[in] ...              Arguments for the string.
+ *  @param[in] level  Desired print_log level.
+ *  @li       LOG_LEVEL_DEBUG  Debug logging level.
+ *  @li       LOG_LEVEL_INFO   Info logging level.
+ *  @li       ERROR            Error logging level.
+ *  @param[in] fmt    Pointer to the string to print.
+ *  @param[in] ...    Arguments for the string.
  */
 static void print_log(log_level_t level, const char *fmt, ...)
 {
@@ -1197,7 +1208,7 @@ static void print_log(log_level_t level, const char *fmt, ...)
     va_list args;
 
     va_start(args, fmt);
-    if (level >= LOG_LEVEL) {
+    if (level >= LOG_LEVEL && level <= LOG_LEVEL_ERR) {
         str_size += snprintf(log_buf + str_size, 128 - str_size, "%s", LOG_LEVEL_STR[level]);
         str_size += vsnprintf(log_buf + str_size, 128 - str_size, fmt, args);
         snprintf(log_buf + str_size, 128 - str_size, "\n\r");

@@ -19,8 +19,8 @@
 static queue_t *last_queue;
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
-static int8_t get_next_queue_index(queue_t *queue, queue_node_t *node);
-static int8_t get_empty_next_queue_index(queue_node_t *node);
+static int8_t get_next_queue_index(const queue_t *queue, const queue_node_t *node);
+static int8_t get_empty_next_queue_index(const queue_node_t *node);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void queue_init(void)
@@ -248,13 +248,17 @@ void queue_flush(queue_t *queue_to_flush)
 {
     queue_node_t *node = NULL;
 
+    if (queue_to_flush == NULL) {
+        return;
+    }
+
     /* Cannot flush free queues. */
     if (!queue_to_flush->free_queue_type) {
         CRITICAL_SECTION_ENTER();
-        if ((queue_to_flush == NULL) || (queue_to_flush->length == 0)) {
-            /* Ignore if queue_to_flush invalid or empty. */
+        if (queue_to_flush->length == 0) {
+            /* Ignore if queue_to_flush is empty. */
         } else {
-            /* free each node. */
+            /* Free each node. */
             node = queue_dequeue_node(queue_to_flush);
             while (node != NULL) {
                 queue_free_node(node);
@@ -265,7 +269,7 @@ void queue_flush(queue_t *queue_to_flush)
     }
 }
 
-void queue_unlink(queue_t *queue_to_unlink)
+void queue_unlink(const queue_t *queue_to_unlink)
 {
     queue_t *q_ptr = last_queue;
     queue_t *prev_qptr = last_queue;
@@ -323,7 +327,7 @@ bool queue_get_stats(bool first, queue_stats_t *queue_stats)
  *  @param[in] node   Address of the node.
  *  @return -1 if queue not found, or index of the queue in the array.
  */
-static int8_t get_next_queue_index(queue_t *queue, queue_node_t *node)
+static int8_t get_next_queue_index(const queue_t *queue, const queue_node_t *node)
 {
     if (node != NULL) {
         for (uint8_t i = 0; i < node->num_queues; i++) {
@@ -341,7 +345,7 @@ static int8_t get_next_queue_index(queue_t *queue, queue_node_t *node)
  *  @param[in] node  Address of the node.
  *  @return -2 if the array is full, or index of the queue in the array.
  */
-static int8_t get_empty_next_queue_index(queue_node_t *node)
+static int8_t get_empty_next_queue_index(const queue_node_t *node)
 {
     if (node != NULL) {
         for (uint8_t i = 0; i < node->num_queues; i++) {

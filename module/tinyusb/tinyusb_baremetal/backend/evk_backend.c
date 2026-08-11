@@ -18,7 +18,7 @@
 /* PUBLIC FUNCTIONS ***********************************************************/
 void facade_tinyusb_usb_peripheral_init(void)
 {
-    /* USB related peripheral for the evk is initialized in the datacom main */
+    /* USB related peripheral for the evk is initialized in the datacom main. */
     return;
 }
 

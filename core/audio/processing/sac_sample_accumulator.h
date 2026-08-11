@@ -29,12 +29,12 @@ typedef enum sac_sample_accumulator_cmd {
 typedef struct sac_sample_accumulator_instance {
     /*! Maximum number of bytes to accumulate. */
     uint32_t max_accumulator_size;
-    /*! Pointer to function that gets accumulator size*/
+    /*! Pointer to function that gets accumulator size. */
     uint32_t (*get_accumulator_size)(sac_pipeline_t *pipeline);
     struct {
         /*! Internal: Accumulator memory. */
         uint8_t *accumulator;
-        /*! Internal: Current number of bytes to accumulate */
+        /*! Internal: Current number of bytes to accumulate. */
         uint32_t accumulator_size;
         /*! Internal: Accumulator used memory size in bytes. */
         uint32_t accumulator_used_size;
@@ -49,6 +49,7 @@ typedef struct sac_sample_accumulator_instance {
 /** @brief Initialize sample accumulator process.
  *
  *  @param[in]  instance  Sample accumulator instance.
+ *  @param[in]  name      Processing stage name.
  *  @param[in]  pipeline  Pipeline instance.
  *  @param[in]  mem_pool  Memory pool for memory allocation.
  *  @param[out] status    Status code.

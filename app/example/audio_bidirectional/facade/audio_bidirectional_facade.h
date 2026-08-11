@@ -28,11 +28,22 @@ extern "C" {
 
 /* TYPES **********************************************************************/
 /** @brief Certification modes.
+ *
+ *  @note The Coordinator main channel is 48 kHz/24-bit; the Node back channel is 32 kHz/16-bit. Each role selects from
+ *        a subset of these values through its own facade getter.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
-    FACADE_CERTIF_AUDIO_24_BIT,
-    FACADE_CERTIF_AUDIO_ADPCM,
+    /*! 48 kHz/24-bit audio certification mode (Coordinator main channel). */
+    FACADE_CERTIF_AUDIO_48k_24_BIT,
+    /*! 48 kHz ADPCM audio certification mode (Coordinator main channel). */
+    FACADE_CERTIF_AUDIO_48k_ADPCM,
+    /*! 32 kHz/16-bit audio certification mode (Node back channel). */
+    FACADE_CERTIF_AUDIO_32k_16_BIT,
+    /*! 32 kHz ADPCM audio certification mode (Node back channel). */
+    FACADE_CERTIF_AUDIO_32k_ADPCM,
+    /*! Data certification mode. */
     FACADE_CERTIF_DATA,
 } facade_certification_mode_t;
 
@@ -73,11 +84,17 @@ void facade_audio_deinit(void);
  */
 void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_callback)(void));
 
-/** @brief Read button state to define if certification mode is required.
+/** @brief Read button state to determine the Coordinator certification mode.
  *
- *  @return The certification mode to be applied.
+ *  @return The certification mode to be applied on the Coordinator.
  */
-facade_certification_mode_t facade_get_certification_mode(void);
+facade_certification_mode_t facade_get_coord_certification_mode(void);
+
+/** @brief Read button state to determine the Node certification mode.
+ *
+ *  @return The certification mode to be applied on the Node.
+ */
+facade_certification_mode_t facade_get_node_certification_mode(void);
 
 /** @brief Set button function callbacks.
  *
@@ -106,6 +123,8 @@ void facade_rx_audio_conn_status(void);
 void facade_rx_data_conn_status(void);
 
 /** @brief Notify user of the fallback status.
+ *
+ *  @param[in] on  Fallback status. True if fallback is active, false otherwise.
  */
 void facade_fallback_status(bool on);
 

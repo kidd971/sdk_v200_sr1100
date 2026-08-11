@@ -12,16 +12,21 @@
 
 /* MACROS *********************************************************************/
 /*! Configure the GPIO mode. */
-#define GPIO_MODE(PORT, PIN, MODE) (PORT->MODER = (PORT->MODER & (~(0b11 << (2 * PIN)))) | (MODE << (2 * PIN)))
-/* Configure the GPIO type */
-#define GPIO_TYPE(PORT, PIN, TYPE) (PORT->OTYPER = (PORT->OTYPER & (~(0b01 << (1 * PIN)))) | (TYPE << (1 * PIN)))
-/* Configure the GPIO pull up/down */
-#define GPIO_PULL(PORT, PIN, PULL) (PORT->PUPDR = (PORT->PUPDR & (~(0b11 << (2 * PIN)))) | (PULL << (2 * PIN)))
-/* Configure the GPIO speed */
-#define GPIO_SPEED(PORT, PIN, SPEED) (PORT->OSPEEDR = (PORT->OSPEEDR & (~(0b11 << (2 * PIN)))) | (SPEED << (2 * PIN)))
-/* Configure the GPIO alternate function */
-#define GPIO_FUNC(PORT, PIN, FUNC) \
-    (PORT->AFR[PIN / 8] = (PORT->AFR[PIN / 8] & (~(0b1111 << ((PIN % 8) * 4)))) | (FUNC << ((PIN % 8) * 4)))
+#define GPIO_MODE(PORT, PIN, MODE) \
+    ((PORT)->MODER = ((PORT)->MODER & (~(0b11 << (2 * (PIN))))) | ((MODE) << (2 * (PIN))))
+/* Configure the GPIO type. */
+#define GPIO_TYPE(PORT, PIN, TYPE) \
+    ((PORT)->OTYPER = ((PORT)->OTYPER & (~(0b01 << (1 * (PIN))))) | ((TYPE) << (1 * (PIN))))
+/* Configure the GPIO pull up/down. */
+#define GPIO_PULL(PORT, PIN, PULL) \
+    ((PORT)->PUPDR = ((PORT)->PUPDR & (~(0b11 << (2 * (PIN))))) | ((PULL) << (2 * (PIN))))
+/* Configure the GPIO speed. */
+#define GPIO_SPEED(PORT, PIN, SPEED) \
+    ((PORT)->OSPEEDR = ((PORT)->OSPEEDR & (~(0b11 << (2 * (PIN))))) | ((SPEED) << (2 * (PIN))))
+/* Configure the GPIO alternate function. */
+#define GPIO_FUNC(PORT, PIN, FUNC)                                                          \
+    ((PORT)->AFR[(PIN) / 8] = ((PORT)->AFR[(PIN) / 8] & (~(0b1111 << (((PIN) % 8) * 4)))) | \
+                              ((FUNC) << (((PIN) % 8) * 4)))
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static uint16_t gpio_get_ref_pin(quasar_gpio_pin_t pin);
@@ -90,6 +95,63 @@ void quasar_gpio_disable_irq(quasar_gpio_pin_t gpio_pin)
     QUASAR_CLEAR_BIT(EXTI->IMR1, (1 << gpio_pin));
     /* Clear the interruption flag. */
     QUASAR_SET_BIT(EXTI->RPR1, (1 << gpio_pin));
+}
+
+void quasar_gpio_clear_exti_port_selection(quasar_gpio_pin_t gpio_pin)
+{
+    switch (gpio_pin) {
+    case QUASAR_GPIO_PIN_0:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[0], EXTI_EXTICR1_EXTI0_Msk);
+        break;
+    case QUASAR_GPIO_PIN_1:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[0], EXTI_EXTICR1_EXTI1_Msk);
+        break;
+    case QUASAR_GPIO_PIN_2:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[0], EXTI_EXTICR1_EXTI2_Msk);
+        break;
+    case QUASAR_GPIO_PIN_3:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[0], EXTI_EXTICR1_EXTI3_Msk);
+        break;
+    case QUASAR_GPIO_PIN_4:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[1], EXTI_EXTICR2_EXTI4_Msk);
+        break;
+    case QUASAR_GPIO_PIN_5:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[1], EXTI_EXTICR2_EXTI5_Msk);
+        break;
+    case QUASAR_GPIO_PIN_6:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[1], EXTI_EXTICR2_EXTI6_Msk);
+        break;
+    case QUASAR_GPIO_PIN_7:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[1], EXTI_EXTICR2_EXTI7_Msk);
+        break;
+    case QUASAR_GPIO_PIN_8:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[2], EXTI_EXTICR3_EXTI8_Msk);
+        break;
+    case QUASAR_GPIO_PIN_9:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[2], EXTI_EXTICR3_EXTI9_Msk);
+        break;
+    case QUASAR_GPIO_PIN_10:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[2], EXTI_EXTICR3_EXTI10_Msk);
+        break;
+    case QUASAR_GPIO_PIN_11:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[2], EXTI_EXTICR3_EXTI11_Msk);
+        break;
+    case QUASAR_GPIO_PIN_12:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[3], EXTI_EXTICR4_EXTI12_Msk);
+        break;
+    case QUASAR_GPIO_PIN_13:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[3], EXTI_EXTICR4_EXTI13_Msk);
+        break;
+    case QUASAR_GPIO_PIN_14:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[3], EXTI_EXTICR4_EXTI14_Msk);
+        break;
+    case QUASAR_GPIO_PIN_15:
+        QUASAR_CLEAR_BIT(EXTI->EXTICR[3], EXTI_EXTICR4_EXTI15_Msk);
+        break;
+    default:
+        /* Trigger an exception. */
+        break;
+    }
 }
 
 void quasar_gpio_set_pending(quasar_gpio_pin_t gpio_pin)
@@ -162,9 +224,8 @@ static uint16_t gpio_get_ref_pin(quasar_gpio_pin_t pin)
 
 /** @brief Select the port for the interrupt line pin.
  *
- *  @note Once a port is selected for a pin number, that pin number is
- *        reserved across all other ports. For instance, if port C is
- *        chosen for pin 13, pin 13 on any other port becomes unavailable.
+ *  @note Once a port is selected for a pin number, that pin number is reserved across all other ports. For instance, if
+ *        port C is chosen for pin 13, pin 13 on any other port becomes unavailable.
  *
  *  @param[in] gpio_port  The reference GPIO port of the HAL to be configured.
  *  @param[in] gpio_pin   The GPIO pin to set.

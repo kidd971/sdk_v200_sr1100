@@ -17,10 +17,10 @@ static void volume_decrease(sac_volume_instance_t *volume_ctrl);
 static void volume_mute(sac_volume_instance_t *volume_ctrl);
 static float volume_get_level(sac_volume_instance_t *volume_ctrl);
 static void adjust_volume_factor(sac_volume_instance_t *volume);
-static void apply_volume_factor_16bits(int16_t *audio_samples_in, uint16_t samples_count, int16_t *audio_samples_out,
-                                       float volume_factor);
-static void apply_volume_factor_32bits(int32_t *audio_samples_in, uint16_t samples_count, int32_t *audio_samples_out,
-                                       float volume_factor);
+static void apply_volume_factor_16bits(const int16_t *audio_samples_in, uint16_t samples_count,
+                                       int16_t *audio_samples_out, float volume_factor);
+static void apply_volume_factor_32bits(const int32_t *audio_samples_in, uint16_t samples_count,
+                                       int32_t *audio_samples_out, float volume_factor);
 static void validate_sac_bit_depth(sac_bit_depth_t bit_depth, sac_status_t *status);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -184,7 +184,7 @@ static float volume_get_level(sac_volume_instance_t *instance)
 
 /** @brief Adjust volume factor to tend toward volume threshold.
  *
- *  @param[in]  instance  Volume instance.
+ *  @param[in] instance  Volume instance.
  */
 static void adjust_volume_factor(sac_volume_instance_t *instance)
 {
@@ -212,8 +212,8 @@ static void adjust_volume_factor(sac_volume_instance_t *instance)
  *  @param[out] audio_samples_out  16bits samples pointer of data out.
  *  @param[in]  volume_factor      Volume factor to apply.
  */
-static void apply_volume_factor_16bits(int16_t *audio_samples_in, uint16_t samples_count, int16_t *audio_samples_out,
-                                       float volume_factor)
+static void apply_volume_factor_16bits(const int16_t *audio_samples_in, uint16_t samples_count,
+                                       int16_t *audio_samples_out, float volume_factor)
 {
     uint16_t count = 0;
 
@@ -229,8 +229,8 @@ static void apply_volume_factor_16bits(int16_t *audio_samples_in, uint16_t sampl
  *  @param[out] audio_samples_out  32bits samples pointer of data out.
  *  @param[in]  volume_factor      Volume factor to apply.
  */
-static void apply_volume_factor_32bits(int32_t *audio_samples_in, uint16_t samples_count, int32_t *audio_samples_out,
-                                       float volume_factor)
+static void apply_volume_factor_32bits(const int32_t *audio_samples_in, uint16_t samples_count,
+                                       int32_t *audio_samples_out, float volume_factor)
 {
     uint16_t count = 0;
 

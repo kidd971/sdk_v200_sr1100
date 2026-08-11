@@ -22,7 +22,7 @@ extern "C" {
 /* TYPES **********************************************************************/
 /** @brief The ADC peripheral.
  *
- *  Note: The ADC4 was not included since its implementation is different.
+ *  @note Note: The ADC4 was not included since its implementation is different.
  */
 typedef enum quasar_adc_peripheral {
     /*! The ADC1 peripheral. */
@@ -56,39 +56,39 @@ typedef struct quasar_adc_cfg {
 /** @brief The available ADC channels.
  */
 typedef enum quasar_adc_channel {
-    /*! The ADC channel 1 */
+    /*! The ADC channel 1. */
     QUASAR_ADC_CHANNEL_1 = ADC_CHANNEL_1,
-    /*! The ADC channel 2 */
+    /*! The ADC channel 2. */
     QUASAR_ADC_CHANNEL_2 = ADC_CHANNEL_2,
-    /*! The ADC channel 3 */
+    /*! The ADC channel 3. */
     QUASAR_ADC_CHANNEL_3 = ADC_CHANNEL_3,
-    /*! The ADC channel 4 */
+    /*! The ADC channel 4. */
     QUASAR_ADC_CHANNEL_4 = ADC_CHANNEL_4,
-    /*! The ADC channel 5 */
+    /*! The ADC channel 5. */
     QUASAR_ADC_CHANNEL_5 = ADC_CHANNEL_5,
-    /*! The ADC channel 6 */
+    /*! The ADC channel 6. */
     QUASAR_ADC_CHANNEL_6 = ADC_CHANNEL_6,
-    /*! The ADC channel 7 */
+    /*! The ADC channel 7. */
     QUASAR_ADC_CHANNEL_7 = ADC_CHANNEL_7,
-    /*! The ADC channel 8 */
+    /*! The ADC channel 8. */
     QUASAR_ADC_CHANNEL_8 = ADC_CHANNEL_8,
-    /*! The ADC channel 9 */
+    /*! The ADC channel 9. */
     QUASAR_ADC_CHANNEL_9 = ADC_CHANNEL_9,
-    /*! The ADC channel 10 */
+    /*! The ADC channel 10. */
     QUASAR_ADC_CHANNEL_10 = ADC_CHANNEL_10,
-    /*! The ADC channel 11 */
+    /*! The ADC channel 11. */
     QUASAR_ADC_CHANNEL_11 = ADC_CHANNEL_11,
-    /*! The ADC channel 12 */
+    /*! The ADC channel 12. */
     QUASAR_ADC_CHANNEL_12 = ADC_CHANNEL_12,
-    /*! The ADC channel 13 */
+    /*! The ADC channel 13. */
     QUASAR_ADC_CHANNEL_13 = ADC_CHANNEL_13,
-    /*! The ADC channel 14 */
+    /*! The ADC channel 14. */
     QUASAR_ADC_CHANNEL_14 = ADC_CHANNEL_14,
-    /*! The ADC channel 15 */
+    /*! The ADC channel 15. */
     QUASAR_ADC_CHANNEL_15 = ADC_CHANNEL_15,
-    /*! The ADC channel 16 */
+    /*! The ADC channel 16. */
     QUASAR_ADC_CHANNEL_16 = ADC_CHANNEL_16,
-    /*! The ADC channel 17 */
+    /*! The ADC channel 17. */
     QUASAR_ADC_CHANNEL_17 = ADC_CHANNEL_17,
     /*! MCU internal temperature sensor. */
     QUASAR_ADC_CHANNEL_TEMPSENSOR = ADC_CHANNEL_TEMPSENSOR,
@@ -97,8 +97,12 @@ typedef enum quasar_adc_channel {
 /** @brief Quasar board supported revisions.
  */
 typedef enum quasar_revision {
+    /*! Quasar board revision A. */
     QUASAR_REVA = 1,
+    /*! Quasar board revision B. */
     QUASAR_REVB = 2,
+
+    /*! Number of supported Quasar board revisions. */
     _QUASAR_REV_COUNT,
 } quasar_revision_t;
 
@@ -121,7 +125,7 @@ void quasar_adc_deinit(quasar_bsp_status_t *err);
 
 /** @brief Set the ADC voltage reference.
  *
- *  By default, the voltage reference is set to 3300 mV.
+ *  @note By default, the voltage reference is set to 3300 mV.
  *
  *  @param[in] voltage_reference_in_mv  The board's voltage reference in millivolts.
  */
@@ -136,8 +140,8 @@ uint16_t quasar_adc_get_voltage_reference(void);
 /** @brief Start an ADC acquisition and return the raw value. After the data acquisition, the channel is unselected to
  *         free the peripheral for other uses.
  *
- *  - The ADC channel must be selected before calling this function.
- *  - The GPIO related to the ADC channel must be configured before calling this function.
+ *  @note - The ADC channel must be selected before calling this function.
+ *        - The GPIO related to the ADC channel must be configured before calling this function.
  *
  *  @param[in]  adc_peripheral  The selected ADC peripheral.
  *  @param[in]  adc_channel     The selected ADC channel.
@@ -149,11 +153,12 @@ uint32_t quasar_adc_start_conversion_polling(quasar_adc_peripheral_t adc_periphe
 
 /** @brief Start an ADC acquisition by interrupt.
  *
- *  - The ADC channel must be selected before calling this function.
- *  - The GPIO related to the ADC channel must be configured before calling this function.
- *  - The value must be retrieved when the associated IRQ handler is called.
- *  - After the data acquisition, the channel must be unselected to free the peripheral for other uses.
+ *  @note - The ADC channel must be selected before calling this function.
+ *        - The GPIO related to the ADC channel must be configured before calling this function.
+ *        - The value must be retrieved when the associated IRQ handler is called.
+ *        - After the data acquisition, the channel must be unselected to free the peripheral for other uses.
 
+ *
  *  @param[in]  adc_peripheral  The selected ADC peripheral.
  *  @param[out] err             Pointer to store error status.
  */
@@ -169,8 +174,8 @@ uint16_t quasar_adc_get_battery_level_mv_polling(quasar_bsp_status_t *err);
 
 /** @brief Retrieve the local variable of the battery level.
  *
- *  - To use this function, start an ADC acquisition by interrupt first and retrieve the data in the associated IRQ
- *    handler, updating the local variable that contains the battery level.
+ *  @note To use this function, start an ADC acquisition by interrupt first and retrieve the data in the associated IRQ
+ *        handler, updating the local variable that contains the battery level.
  *
  *  @param[out] err  Pointer to store error status.
  *  @return The battery voltage in millivolt.
@@ -187,7 +192,8 @@ quasar_revision_t quasar_adc_get_board_revision(quasar_bsp_status_t *err);
 
 /** @brief Verify if the battery level value has been updated.
  *
- *  Use this function to validate that the ADC had time to acquire the data. It is mainly useful for the interrupt mode.
+ *  @note Use this function to validate that the ADC had time to acquire the data. It is mainly useful for the interrupt
+ *        mode.
  *
  *  @return True if the battery level has been updated.
  */

@@ -24,12 +24,12 @@ void circular_queue_init(circular_queue_t *queue, void *buffer, uint32_t capacit
     queue->free_space = capacity;
 }
 
-void *circular_queue_front_raw(circular_queue_t *queue)
+void *circular_queue_front_raw(const circular_queue_t *queue)
 {
     return queue->dequeue_it;
 }
 
-void *circular_queue_front(circular_queue_t *queue)
+void *circular_queue_front(const circular_queue_t *queue)
 {
     void *ret = NULL;
 
@@ -44,12 +44,12 @@ void *circular_queue_front(circular_queue_t *queue)
     return ret;
 }
 
-void *circular_queue_get_free_slot_raw(circular_queue_t *queue)
+void *circular_queue_get_free_slot_raw(const circular_queue_t *queue)
 {
     return queue->enqueue_it;
 }
 
-void *circular_queue_get_free_slot(circular_queue_t *queue)
+void *circular_queue_get_free_slot(const circular_queue_t *queue)
 {
     void *ret = NULL;
 
@@ -114,27 +114,27 @@ bool circular_queue_dequeue(circular_queue_t *queue)
     return success;
 }
 
-uint32_t circular_queue_size(circular_queue_t *queue)
+uint32_t circular_queue_size(const circular_queue_t *queue)
 {
     return queue->capacity - queue->free_space;
 }
 
-uint32_t circular_queue_capacity(circular_queue_t *queue)
+uint32_t circular_queue_capacity(const circular_queue_t *queue)
 {
     return queue->capacity;
 }
 
-uint32_t circular_queue_free_space(circular_queue_t *queue)
+uint32_t circular_queue_free_space(const circular_queue_t *queue)
 {
     return queue->free_space;
 }
 
-bool circular_queue_is_empty(circular_queue_t *queue)
+bool circular_queue_is_empty(const circular_queue_t *queue)
 {
     return (circular_queue_size(queue) == 0 ? true : false);
 }
 
-bool circular_queue_is_full(circular_queue_t *queue)
+bool circular_queue_is_full(const circular_queue_t *queue)
 {
     return (queue->free_space == 0 ? true : false);
 }

@@ -172,7 +172,7 @@ uint32_t quasar_adc_start_conversion_polling(quasar_adc_peripheral_t adc_periphe
     hal_error = HAL_ADC_Start(hadc);
     QUASAR_BSP_CHECK_ERROR(hal_error != HAL_OK, err, QUASAR_ERR_ADC_START, return adc_raw_value);
 
-    /* Wait for the ADC conversion to finish.  */
+    /* Wait for the ADC conversion to finish. */
     hal_error = HAL_ADC_PollForConversion(hadc, ADC_TIMEOUT);
     QUASAR_BSP_CHECK_ERROR(hal_error != HAL_OK, err, QUASAR_ERR_ADC_START, return adc_raw_value);
 
@@ -411,7 +411,7 @@ static void configure_adc_peripheral_clock(quasar_bsp_status_t *err)
 
     __HAL_RCC_ADC12_CLK_ENABLE();
 
-    /* Initializes the peripherals clock */
+    /* Initializes the peripherals clock. */
     PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADCDAC;
     PeriphClkInit.AdcDacClockSelection = RCC_ADCDACCLKSOURCE_SYSCLK;
 
@@ -421,8 +421,9 @@ static void configure_adc_peripheral_clock(quasar_bsp_status_t *err)
 
 /** @brief Calculate the ADC clock prescaler to be within the acceptable clock frequency.
  *
- *  From datasheet: ADC Clock must be between 5 MHz to 55 MHz.
- *  Must verify if clock is within parameter and adjust clock prescaler otherwise.
+ *  @note From datasheet:
+ *        - ADC Clock must be between 5 MHz to 55 MHz.
+ *        - Must verify if clock is within parameter and adjust clock prescaler otherwise.
  *
  *  @param[out] err  Pointer to store error status.
  *  @return The ADC clock prescaler value.
@@ -460,7 +461,7 @@ static void configure_adc_channel(ADC_HandleTypeDef *hadc, quasar_adc_channel_t 
 
     ADC_ChannelConfTypeDef sConfig = {0};
 
-    /* Configure Regular Channel */
+    /* Configure Regular Channel. */
     sConfig.Channel = adc_channel;
     sConfig.Rank = ADC_REGULAR_RANK_1;
     sConfig.SamplingTime = ADC_SAMPLETIME_68CYCLES;
@@ -488,7 +489,7 @@ static void unselect_adc_channel(ADC_HandleTypeDef *hadc, quasar_adc_channel_t a
     QUASAR_BSP_CHECK_ERROR(HAL_ADC_ConfigChannel(hadc, &sConfig) != HAL_OK, err, QUASAR_ERR_ADC_CHANNEL_CONFIG, return);
 }
 
-/* ST HAL FUNCTIONS IMPLEMENTATIONS ********************************************/
+/* ST HAL WEAK FUNCTIONS IMPLEMENTATIONS ********************************************/
 /** @brief Implementation of weak alias for the ADC1 and ADC2 interrupt handler.
  */
 void ADC1_2_IRQHandler(void)

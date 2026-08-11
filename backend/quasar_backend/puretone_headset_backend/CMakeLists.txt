@@ -1,3 +1,7 @@
+if (NOT TRANSCEIVER STREQUAL "SR1100")
+    return()
+endif()
+
 target_link_libraries(puretone_headset_backend PRIVATE hardware module_tinyusb_baremetal)
 target_sources(puretone_headset_backend PRIVATE puretone_headset_backend.c)
 

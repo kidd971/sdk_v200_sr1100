@@ -24,7 +24,7 @@ extern "C" {
  *  @param[in] len   Size of data.
  *  @return CRC value.
  */
-uint8_t crc4itu(uint8_t crc, uint8_t *data, uint8_t len);
+uint8_t crc4itu(uint8_t crc, const uint8_t *data, uint8_t len);
 
 #ifdef __cplusplus
 }

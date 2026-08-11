@@ -925,7 +925,7 @@ static quasar_radio_config_t radio_2_get_config(quasar_revision_t board_revision
 
 /** @brief Initializes the radio module.
  *
- *  This function handles the initialization of the radio's GPIOs, SPI, and DMA. It also resets the radio module.
+ *  @note This function handles the initialization of the radio's GPIOs, SPI, and DMA. It also resets the radio module.
  *
  *  @param[in]  radio_config  Configuration parameters for the radio initialization.
  *  @param[out] err           Pointer to store error status.
@@ -948,11 +948,11 @@ static void radio_init(quasar_radio_config_t radio_config, quasar_bsp_status_t *
     quasar_dma_init(radio_config.qspi_config.dma_config, err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
 #else
-    /* Initialize radio SPI */
+    /* Initialize radio SPI. */
     quasar_spi_init(radio_config.spi_config, err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
 
-    /* Initialise radio DMA */
+    /* Initialise radio DMA. */
     quasar_dma_init(radio_config.dma_config, err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
 #endif
@@ -966,7 +966,7 @@ static void radio_init(quasar_radio_config_t radio_config, quasar_bsp_status_t *
 
 /** @brief Deinitialize the radio module.
  *
- *  This function handles the deinitialization of the radio's GPIOs, SPI, and DMA.
+ *  @note This function handles the deinitialization of the radio's GPIOs, SPI, and DMA.
  *
  *  @param[in]  radio_config  Configuration parameters for the radio deinitialization.
  *  @param[out] err           Pointer to store error status.
@@ -981,7 +981,7 @@ static void radio_deinit(quasar_radio_config_t radio_config, quasar_bsp_status_t
     quasar_spi_deinit(radio_config.spi_config, err);
     QUASAR_BSP_CHECK_ERROR(*err != QUASAR_OK, err, *err, return);
 
-    /* Deinitialize the GPIOs associated with the radio */
+    /* Deinitialize the GPIOs associated with the radio. */
     quasar_gpio_deinit(radio_config.reset_io.port, radio_config.reset_io.pin);
     quasar_gpio_deinit(radio_config.shutdown_io.port, radio_config.shutdown_io.pin);
     quasar_gpio_deinit(radio_config.irq_io.port, radio_config.irq_io.pin);

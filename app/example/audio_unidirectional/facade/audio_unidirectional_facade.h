@@ -30,9 +30,13 @@ extern "C" {
 /** @brief Certification modes.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
+    /*! Audio 24-bit certification mode. */
     FACADE_CERTIF_AUDIO_24_BIT,
+    /*! Audio 16-bit certification mode. */
     FACADE_CERTIF_AUDIO_16_BIT,
+    /*! Data certification mode. */
     FACADE_CERTIF_DATA,
 } facade_certification_mode_t;
 
@@ -48,7 +52,6 @@ typedef struct facade_button_callbacks {
 } facade_button_callbacks_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-
 /** @brief Initialize the Coordinator's audio peripherals.
  *
  *  @note Configure the serial audio interface to Mono or Stereo.
@@ -118,6 +121,8 @@ void facade_rx_audio_conn_status(void);
 void facade_rx_data_conn_status(void);
 
 /** @brief Notify user of the fallback status.
+ *
+ *  @param[in] on  True if fallback is on, false otherwise.
  */
 void facade_fallback_status(bool on);
 

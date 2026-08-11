@@ -31,6 +31,7 @@
 #include "swc_cfg.h"
 #include "swc_cfg_node.h"
 #include "swc_stats.h"
+#include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
 /* Total memory needed for the Audio Core. */
@@ -101,12 +102,12 @@ static sac_endpoint_t *swc_producer;
 /* **** Wireless Core **** */
 static uint8_t swc_memory_pool[SWC_MEM_POOL_SIZE];
 
-static uint32_t timeslot_us[] = SCHEDULE;
-static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-static uint32_t channel_frequency[] = CHANNEL_FREQ;
+static const uint32_t timeslot_us[] = SCHEDULE;
+static const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+static const uint32_t channel_frequency[] = CHANNEL_FREQ;
 
-static int32_t tx_timeslots[] = NODE_TIMESLOTS;
-static int32_t rx_timeslots[] = COORD_TIMESLOTS;
+static const int32_t tx_timeslots[] = NODE_TIMESLOTS;
+static const int32_t rx_timeslots[] = COORD_TIMESLOTS;
 
 /* There is a unidirectional link for audio and a bidirectional link for data. */
 static swc_connection_t *rx_audio_conn;
@@ -154,7 +155,7 @@ static void fallback_led_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
 
-static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err);
+static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -167,7 +168,7 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
-    /* Initialize wireless core context switch handler before pairing is available */
+    /* Initialize wireless core context switch handler before pairing is available. */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
     facade_button_callbacks_t button_callbacks = {
@@ -180,13 +181,16 @@ int main(void)
     /* Audio process timer initialization. */
     facade_audio_process_timer_init(audio_process_callback);
 
-    /* Timer that updates statistics display every second and transmits button state to Coord every 10 ms. */
+    /* Timer that updates statistics display every second and transmits button state to Coord at the DATA_TX_PERIOD_MS
+     * interval.
+     */
     facade_data_timer_init(DATA_TX_PERIOD_MS);
     facade_data_timer_set_callback(data_callback);
 
     certification_mode = facade_get_node_certification_mode();
     if (certification_mode != FACADE_CERTIF_NONE) {
         /* Init app in certification mode. */
+        facade_notify_certification_mode();
         app_init();
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
@@ -231,17 +235,20 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
 {
     uint16_t local_address = app_pairing->node_address;
     uint16_t remote_address = app_pairing->coordinator_address;
+    swc_radio_handle_t *radio_handle = NULL;
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_handle_t *radio_handle_2 = NULL;
+#endif
 
+    /* In cert mode, pairing has not run -- override addresses directly. */
     if (certification_mode != FACADE_CERTIF_NONE) {
-        app_pairing->coordinator_address = 0x1;
-        app_pairing->node_address = 0x2;
         app_pairing->pan_id = 0xABC;
-        remote_address = 0x2;
-        local_address = 0x1;
+        remote_address = 0x1;
+        local_address = 0x2;
     }
 
     /* Initialize Wireless Core. */
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -249,12 +256,12 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = app_pairing->pan_id,
     };
 
     /* Initialize Node. */
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_NODE,
-        .pan_id = app_pairing->pan_id,
         .coordinator_address = remote_address,
         .local_address = local_address,
     };
@@ -262,18 +269,27 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     swc_init(core_cfg, node_cfg, facade_context_switch_trigger, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    /* Initialize radio. */
-    swc_radio_module_init(SWC_RADIO_ID_1, true, swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
 #if (SWC_RADIO_COUNT == 2)
-    swc_radio_module_init(SWC_RADIO_ID_2, true, swc_err);
+    /* Calibrate the radio. */
+    radio_handle_2 = swc_radio_module_calib(SWC_RADIO_ID_2, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle_2, false, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 #endif
 
     /* **** RX Connections **** */
     /* ** RX Audio Connection ** */
-    swc_connection_cfg_t rx_audio_conn_cfg = {
+    const swc_connection_cfg_t rx_audio_conn_cfg = {
         .name = "RX Audio Connection",
         .source_address = remote_address,
         .destination_address = local_address,
@@ -287,7 +303,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection concurrency settings. */
-    swc_connection_concurrency_cfg_t rx_audio_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t rx_audio_concurrency_cfg = {
         .enabled = true,
         .try_count = SWC_CCA_AUDIO_FBK_TRY_COUNT, /* Use maximum CCA try count on this connection. */
         .retry_time = SWC_CCA_RETRY_TIME,
@@ -298,18 +314,18 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection RF channels settings. */
-    swc_channel_cfg_t rx_audio_channel_cfg = {
+    const swc_channel_cfg_t rx_audio_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
+    swc_channel_t *rx_audio_channels = swc_channel_list_init_from_base(rx_audio_channel_cfg, channel_frequency,
+                                                                       ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_audio_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_audio_conn, rx_audio_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
-    }
+    swc_connection_set_channels(rx_audio_conn, rx_audio_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Audio connection priority settings. */
     swc_connection_set_connection_priority(rx_audio_conn, 0, swc_err);
@@ -320,7 +336,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* ** RX Data Connection ** */
-    swc_connection_cfg_t rx_data_conn_cfg = {
+    const swc_connection_cfg_t rx_data_conn_cfg = {
         .name = "RX Data Connection",
         .source_address = remote_address,
         .destination_address = local_address,
@@ -334,7 +350,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection concurrency settings. */
-    swc_connection_concurrency_cfg_t rx_data_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t rx_data_concurrency_cfg = {
         .enabled = true,
         .try_count = SWC_CCA_DATA_TRY_COUNT,
         .retry_time = SWC_CCA_RETRY_TIME,
@@ -345,18 +361,18 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection RF channels settings. */
-    swc_channel_cfg_t rx_data_channel_cfg = {
+    const swc_channel_cfg_t rx_data_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
+    swc_channel_t *rx_data_channels = swc_channel_list_init_from_base(rx_data_channel_cfg, channel_frequency,
+                                                                      ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_data_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_data_conn, rx_data_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
-    }
+    swc_connection_set_channels(rx_data_conn, rx_data_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection priority settings. */
     swc_connection_set_connection_priority(rx_data_conn, 0, swc_err);
@@ -381,7 +397,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection concurrency settings. */
-    swc_connection_concurrency_cfg_t tx_data_concurrency_cfg = {
+    const swc_connection_concurrency_cfg_t tx_data_concurrency_cfg = {
         .enabled = true,
         .try_count = SWC_CCA_DATA_TRY_COUNT,
         .retry_time = SWC_CCA_RETRY_TIME,
@@ -392,18 +408,18 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection RF channels settings. */
-    swc_channel_cfg_t tx_data_channel_cfg = {
+    const swc_channel_cfg_t tx_data_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
+    swc_channel_t *tx_data_channels = swc_channel_list_init_from_base(tx_data_channel_cfg, channel_frequency,
+                                                                      ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_data_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_data_conn, tx_data_channel_cfg, swc_err);
-        ASSERT_SWC_STATUS(*swc_err);
-    }
+    swc_connection_set_channels(tx_data_conn, tx_data_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Data connection callback settings. */
     swc_connection_set_tx_success_callback(tx_data_conn, conn_tx_data_success_callback, NULL, swc_err);
@@ -479,7 +495,7 @@ static void conn_tx_data_success_callback(void *conn, void *arg)
     (void)arg;
 }
 
-/** @brief Callback for Node to send the current link margin and the current button state to the Coordinator via the.
+/** @brief Callback for Node to send the current link margin and the current button state to the Coordinator via the
  *         auto-reply.
  */
 static void data_callback(void)
@@ -546,7 +562,7 @@ static void enter_pairing_mode(void)
     pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE_NODE,
                                        &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
-        facade_print_error_string("An error occured during the pairing process.");
+        facade_print_error_string("An error occurred during the pairing process.");
         while (1);
     }
 
@@ -841,7 +857,7 @@ static void app_audio_core_mute_on_underflow_interface_init(sac_processing_inter
 
 /** @brief Increase the audio output volume level.
  *
- *  This affects the audio pipeline that the digital volume processing stage is added to.
+ *  @note This affects the audio pipeline that the digital volume processing stage is added to.
  */
 static void volume_up(void)
 {
@@ -857,7 +873,7 @@ static void volume_up(void)
 
 /** @brief Decrease the audio output volume level.
  *
- *  This affects the audio pipeline that the digital volume processing stage is added to.
+ *  @note This affects the audio pipeline that the digital volume processing stage is added to.
  */
 static void volume_down(void)
 {
@@ -873,8 +889,8 @@ static void volume_down(void)
 
 /** @brief Audio peripheral transfer complete callback.
  *
- *  This feeds the codec with audio packets. It needs to be executed every time a DMA transfer to the codec is completed
- *  in order to keep the audio playing.
+ *  @note This feeds the codec with audio packets. It needs to be executed every time a DMA transfer to the codec is
+ *        completed in order to keep the audio playing.
  */
 static void main_channel_audio_tx_complete_callback(void)
 {
@@ -1004,26 +1020,15 @@ static void print_stats(void)
 
     /* ** Wireless Statistics ** */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
-    swc_connection_update_stats(rx_audio_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    swc_connection_t *connections[] = {rx_audio_conn, tx_data_conn, rx_data_conn};
 
-    string_length += swc_connection_format_stats(rx_audio_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(tx_data_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(tx_data_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(rx_data_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(rx_data_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    for (uint8_t i = 0; i < ARRAY_SIZE(connections); i++) {
+        swc_connection_update_stats(connections[i], &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+        string_length += swc_connection_format_stats(connections[i], stats_string + string_length,
+                                                     sizeof(stats_string) - string_length, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+    }
 
     facade_print_string(stats_string);
 }
@@ -1034,7 +1039,7 @@ static void print_stats(void)
  *  @param[in]  size              Size of the data to be sent over the air.
  *  @param[out] swc_err           Wireless Core error code.
  */
-static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t *swc_err)
+static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err)
 {
     uint8_t *buffer = NULL;
 
@@ -1059,7 +1064,6 @@ static void wireless_send_data(void *transmitted_data, uint8_t size, swc_error_t
  *  @param[out] received_data  Pointer to data buffer to write to.
  *  @param[in]  size           Size of the data buffer.
  *  @param[out] swc_err        Wireless Core error code.
- *
  *  @return Size of the data read.
  */
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err)
@@ -1116,7 +1120,7 @@ void sac_error_handler(sac_status_t sac_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SAC Error! Code: %d\n\r", sac_status);
+    snprintf(buffer, sizeof(buffer), "SAC Error! Code: %d\n\r", sac_status);
     facade_print_error_string(buffer);
 
     while (1);
@@ -1126,7 +1130,7 @@ void swc_error_handler(swc_error_t swc_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    snprintf(buffer, sizeof(buffer), "SWC Error ! Code: %d\n\r", swc_status);
     facade_print_error_string(buffer);
 
     while (1);

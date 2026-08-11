@@ -20,15 +20,6 @@
 #include <stdbool.h>
 
 /* MACROS *********************************************************************/
-/** @brief The radio model.
- *
- * Allowed define names are only SR1000 and SR1100.
- */
-#if !defined(SR1000) && !defined(SR1100)
-#define SR1000 true
-#define SR1100 false
-#endif
-
 /** @brief The number of radios.
  */
 #ifndef WPS_RADIO_COUNT
@@ -70,7 +61,8 @@
 #endif /* WPS_ENABLE_PHY_STATS_PER_BANDS */
 
 #if !WPS_ENABLE_PHY_STATS && WPS_ENABLE_PHY_STATS_PER_BANDS
-#error "WPS_ENABLE_PHY_STATS_PER_BANDS (per band stats) cannot be enabled if WPS_ENABLE_PHY_STATS (PHY stats) is disabled."
+#error \
+    "WPS_ENABLE_PHY_STATS_PER_BANDS (per band stats) cannot be enabled if WPS_ENABLE_PHY_STATS (PHY stats) is disabled."
 #endif
 
 /** @brief Enable the gathering of Links statistics.

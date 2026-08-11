@@ -31,7 +31,7 @@ typedef enum sine_freq {
 /** @brief Sinus Endpoint Instance.
  */
 typedef struct sinus_instance {
-    /*! Frequency of the produced sine wave */
+    /*! Frequency of the produced sine wave. */
     sine_freq_t sine_freq;
 } sinus_instance_t;
 

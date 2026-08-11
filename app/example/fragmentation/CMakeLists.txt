@@ -11,8 +11,10 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
     target_link_libraries(fragmentation_coordinator.elf
         PRIVATE
             swc
+            swc_backend
             fragmentation_backend
             pseudo_data
+            spark_pairing
     )
     add_custom_command(TARGET fragmentation_coordinator.elf
         POST_BUILD
@@ -25,8 +27,10 @@ target_sources(fragmentation_node.elf PRIVATE frag_node.c)
 target_link_libraries(fragmentation_node.elf
     PRIVATE
         swc
+        swc_backend
         fragmentation_backend
         pseudo_data
+        spark_pairing
 )
 add_custom_command(TARGET fragmentation_node.elf
     POST_BUILD

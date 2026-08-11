@@ -19,7 +19,7 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Gate function to verify if a process is assigned to the current fallback mode.
  *
- *         e.g. The compression processing stage can be activated when fallback is active to compress the audio stream.
+ *  @note e.g. The compression processing stage can be activated when fallback is active to compress the audio stream.
  *
  *  @param[in]  process   Pointer to process handle to verify.
  *  @param[in]  pipeline  Pipeline instance.

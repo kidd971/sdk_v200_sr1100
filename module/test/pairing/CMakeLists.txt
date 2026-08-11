@@ -1,0 +1,12 @@
+target_sources(module_tests
+    PRIVATE
+        test_pairing_address.cpp
+        test_pairing_api.cpp
+        test_pairing_event.cpp
+        test_pairing_security.cpp
+        test_pairing_state.cpp
+        test_pairing_state_coordinator.cpp
+        test_pairing_state_machine.cpp
+        test_pairing_state_node.cpp
+        test_pairing_timer.cpp
+)

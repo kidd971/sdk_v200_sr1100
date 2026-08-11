@@ -236,9 +236,9 @@ void quasar_uart_transmit_dma(quasar_uart_selection_t uart_selection, uint8_t *d
     QUASAR_BSP_CHECK_ERROR(HAL_UART_Transmit_DMA(uart_handle, data, size) != HAL_OK, err, QUASAR_ERR_UART_TRANSMIT_DMA,
                            return);
 
-    /* Tx process is ended, restore huart->gState to Ready */
+    /* Tx process is ended, restore huart->gState to Ready. */
     uart_handle->gState = HAL_UART_STATE_READY;
-    /* Clear TxISR function pointer */
+    /* Clear TxISR function pointer. */
     uart_handle->TxISR = NULL;
 }
 
@@ -450,10 +450,10 @@ static void uart_configure_protocol(USART_TypeDef *uart_instance, quasar_uart_co
     /* Disable the UART while configuring settings. */
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_UE_Msk);
 
-    /* Configure the oversampling mode at 16 bits */
+    /* Configure the oversampling mode at 16 bits. */
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_OVER8_Msk);
 
-    /* Configure the wordlength at 8 */
+    /* Configure the wordlength at 8. */
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_M0_Msk);
     QUASAR_CLEAR_BIT(uart_instance->CR1, USART_CR1_M1_Msk);
 
@@ -600,7 +600,7 @@ static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UAR
     /* In case of a transmission, we check if there are data to be transmitted. */
     if (((uart_handle->Instance->ISR & USART_ISR_TXE) == USART_ISR_TXE) &&
         ((uart_handle->Instance->CR1 & USART_CR1_TXEIE) == USART_CR1_TXEIE)) {
-        /* Retrieve the count of the number of elements to be transmitted.  */
+        /* Retrieve the count of the number of elements to be transmitted. */
         count = quasar_fifo_get_count(&quasar_uart_fifo_tx[uart_selection]);
         if (count > 0) {
             /* Transfer what is in the associated FIFO buffer into the TDR. */
@@ -614,11 +614,11 @@ static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UAR
     /* In case of a DMA or Blocking mode transmission, the TCIE flag is used instead of TXEIE, and HAL is utilized. */
     if (((uart_handle->Instance->ISR & USART_ISR_TC) == USART_ISR_TC) &&
         ((uart_handle->Instance->CR1 & USART_CR1_TCIE) == USART_CR1_TCIE)) {
-        /* Disable the UART Transmit Complete Interrupt */
+        /* Disable the UART Transmit Complete Interrupt. */
         QUASAR_CLEAR_BIT(uart_handle->Instance->CR1, USART_CR1_TCIE);
-        /* Tx process is ended, restore huart->gState to Ready */
+        /* Tx process is ended, restore huart->gState to Ready. */
         uart_handle->gState = HAL_UART_STATE_READY;
-        /* Clear TxISR function pointer */
+        /* Clear TxISR function pointer. */
         uart_handle->TxISR = NULL;
     }
 
@@ -628,7 +628,7 @@ static void uart_irq_handler_routine(quasar_uart_selection_t uart_selection, UAR
     }
 }
 
-/* ST HAL FUNCTIONS IMPLEMENTATION ********************************************/
+/* ST HAL WEAK FUNCTIONS IMPLEMENTATION ********************************************/
 /** @brief This function handles USART 1 interrupt.
  */
 void USART1_IRQHandler(void)

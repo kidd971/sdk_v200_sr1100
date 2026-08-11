@@ -39,7 +39,7 @@ void tinyusb_freertos_task_setup(void)
 /* PRIVATE FUNCTIONS **********************************************************/
 /** @brief Initializes TinyUSB and enters a loop to handle its tasks.
  *
- * @param argument Unused.
+ *  @param[in] argument  Unused.
  */
 static void tinyusb_thread(void *argument)
 {
@@ -57,7 +57,7 @@ static void tinyusb_thread(void *argument)
         /* tud_task will suspend the thread until an event is generated from the tusb_int_handler. */
         tud_task();
 
-        /* following code only run if tud_task() process at least 1 event */
+        /* Following code only run if tud_task() process at least 1 event. */
         tud_cdc_write_flush();
     }
 }

@@ -11,8 +11,10 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
     target_link_libraries(datalink_coordinator.elf
         PRIVATE
             swc
+            swc_backend
             library_dataforge
             datalink_backend
+            spark_pairing
     )
     add_custom_command(TARGET datalink_coordinator.elf
         POST_BUILD
@@ -25,8 +27,10 @@ target_sources(datalink_node.elf PRIVATE datalink_node.c)
 target_link_libraries(datalink_node.elf
     PRIVATE
         swc
+        swc_backend
         library_dataforge
         datalink_backend
+        spark_pairing
 )
 add_custom_command(TARGET datalink_node.elf
     POST_BUILD

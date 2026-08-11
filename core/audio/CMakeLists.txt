@@ -45,7 +45,18 @@ target_sources(audio_core
         sac_utils.h
 )
 
-target_link_libraries(audio_core PUBLIC adpcm cmsis_5 crc4_itu filtering_functions memory queue resampling swc)
+target_link_libraries(audio_core
+    PUBLIC
+        adpcm
+        cmsis_5
+        crc4_itu
+        filtering_functions
+        memory
+        queue
+        resampling
+        swc
+)
+
 target_include_directories(audio_core
     PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}

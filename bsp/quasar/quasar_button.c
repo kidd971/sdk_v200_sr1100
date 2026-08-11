@@ -12,8 +12,8 @@
 #include "quasar_gpio.h"
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-void button_init(quasar_button_selection_t button_selection, quasar_irq_priority_t irq_priority);
-void button_deinit(quasar_button_selection_t button_selection);
+static void button_init(quasar_button_selection_t button_selection, quasar_irq_priority_t irq_priority);
+static void button_deinit(quasar_button_selection_t button_selection);
 static quasar_gpio_config_t button_get_config(quasar_button_selection_t button_selection);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -92,7 +92,7 @@ bool quasar_button_read_state(quasar_button_selection_t button_selection)
  *  @param[in] irq_priority      IRQ priority is optional; if the button does not trigger an IRQ, assign
  *                               QUASAR_IRQ_PRIORITY_NONE.
  */
-void button_init(quasar_button_selection_t button_selection, quasar_irq_priority_t irq_priority)
+static void button_init(quasar_button_selection_t button_selection, quasar_irq_priority_t irq_priority)
 {
     quasar_gpio_config_t button_config = button_get_config(button_selection);
 
@@ -109,7 +109,7 @@ void button_init(quasar_button_selection_t button_selection, quasar_irq_priority
  *
  *  @param[in] button_selection  Selected button peripheral.
  */
-void button_deinit(quasar_button_selection_t button_selection)
+static void button_deinit(quasar_button_selection_t button_selection)
 {
     quasar_gpio_config_t button_config = button_get_config(button_selection);
 
@@ -118,9 +118,8 @@ void button_deinit(quasar_button_selection_t button_selection)
 
 /** @brief Get the configuration of the button peripheral.
  *
- *  All buttons are connected to VDD and have capacitors for debouncing.
- *  The external interrupt (EXTI) linked to the button corresponds
- *  to the GPIO pin to which the button is connected.
+ *  @note All buttons are connected to VDD and have capacitors for debouncing. The external interrupt (EXTI) linked to
+ *        the button corresponds to the GPIO pin to which the button is connected.
  *
  *  @param[in] button_selection  Selected button peripheral.
  *  @return The button peripheral configuration.

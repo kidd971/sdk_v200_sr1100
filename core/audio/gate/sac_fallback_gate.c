@@ -13,7 +13,7 @@
 #include "sac_utils.h"
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
-static sac_fallback_instance_t *get_fallback_instance(sac_pipeline_t *pipeline, sac_status_t *status);
+static sac_fallback_instance_t *get_fallback_instance(const sac_pipeline_t *pipeline, sac_status_t *status);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 bool sac_fallback_gate_is_process_active(sac_processing_t *process, sac_pipeline_t *pipeline, sac_header_t *header,
@@ -46,9 +46,11 @@ bool sac_fallback_gate_is_process_active(sac_processing_t *process, sac_pipeline
  *  @param[out] status    Status code.
  *  @return If found returns the fallback processing stage instance.
  */
-static sac_fallback_instance_t *get_fallback_instance(sac_pipeline_t *pipeline, sac_status_t *status)
+static sac_fallback_instance_t *get_fallback_instance(const sac_pipeline_t *pipeline, sac_status_t *status)
 {
-    sac_processing_t *current_process = NULL;
+    const sac_processing_t *current_process = NULL;
+
+    *status = SAC_OK;
 
     SAC_CHECK_STATUS(pipeline == NULL, status, SAC_ERR_NULL_PTR, return NULL);
     SAC_CHECK_STATUS(pipeline->process == NULL, status, SAC_ERR_NULL_PTR, return NULL);

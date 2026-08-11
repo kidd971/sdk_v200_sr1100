@@ -21,20 +21,30 @@ extern "C" {
 /** @brief CDC Commands.
  */
 typedef enum sac_cdc_pll_cmd {
+    /*! No command. */
     SAC_CDC_PLL_CMD_NONE,
+    /*! Increase PLL value. */
     SAC_CDC_PLL_CMD_INCREASE,
+    /*! Decrease PLL value. */
     SAC_CDC_PLL_CMD_DECREASE,
+    /*! Set target queue size. */
     SAC_CDC_PLL_CMD_SET_TARGET_QUEUE_SIZE,
 } sac_cdc_pll_cmd_t;
 
 /** @brief CDC Statistics.
  */
 typedef struct sac_cdc_pll_stats {
+    /*! Target queue size in number of samples. */
     uint32_t target_queue_size;
+    /*! Average queue size in number of samples. */
     uint32_t avg_queue_size;
+    /*! Error between average queue size and target queue size in number of samples. */
     int32_t queue_size_error;
+    /*! Delta between current and previous average queue size in number of samples. */
     int32_t queue_size_avg_delta;
+    /*! Current PLL value. */
     uint32_t current_pll_value;
+    /*! PLL fractional offset. */
     int32_t pll_fracn_offset;
 } sac_cdc_pll_stats_t;
 
@@ -79,7 +89,7 @@ typedef struct sac_cdc_pll_instance {
         uint32_t avg_idx;
         /*! Internal: Target queue size in number of samples. */
         uint32_t target_queue_size;
-        /* Internal: Number of samples in each audio payload to process. */
+        /*! Internal: Number of samples in each audio payload to process. */
         uint32_t sample_amount;
         /*! Internal: Current PLL fracn offset from locked value. */
         int16_t pll_fracn_offset;
@@ -111,7 +121,6 @@ void sac_cdc_pll_init(void *instance, const char *name, sac_pipeline_t *pipeline
  *  @param[in]  cmd       Command.
  *  @param[in]  arg       Argument.
  *  @param[out] status    Status code.
- *
  *  @return Command specific value.
  */
 uint32_t sac_cdc_pll_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg, sac_status_t *status);
@@ -125,7 +134,6 @@ uint32_t sac_cdc_pll_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd,
  *  @param[in]  size      Size in bytes of the audio payload.
  *  @param[out] data_out  Audio payload that has been processed.
  *  @param[out] status    Status code.
- *
  *  @return Size in bytes of the processed samples, 0 if no processing happened.
  */
 uint16_t sac_cdc_pll_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,

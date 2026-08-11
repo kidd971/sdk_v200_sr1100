@@ -127,12 +127,12 @@ void quasar_spi_transfer_full_duplex_blocking(quasar_spi_selection_t spi_selecti
 
     spi_handle->State = HAL_SPI_STATE_BUSY_TX_RX;
 
-    /* Set the number of data at current transfer */
+    /* Set the number of data at current transfer. */
     MODIFY_REG(spi_handle->Instance->CR2, SPI_CR2_TSIZE, data_size);
 
     __HAL_SPI_ENABLE(spi_handle);
 
-    /* Master transfer start */
+    /* Master transfer start. */
     SET_BIT(spi_handle->Instance->CR1, SPI_CR1_CSTART);
 
     while ((tx_size > 0) || (rx_size > 0)) {
@@ -149,14 +149,14 @@ void quasar_spi_transfer_full_duplex_blocking(quasar_spi_selection_t spi_selecti
 
     while (!(spi_handle->Instance->SR & SPI_FLAG_EOT));
 
-    /* Close Transfer */
+    /* Close Transfer. */
     __HAL_SPI_CLEAR_EOTFLAG(spi_handle);
     __HAL_SPI_CLEAR_TXTFFLAG(spi_handle);
 
-    /* Disable SPI peripheral */
+    /* Disable SPI peripheral. */
     __HAL_SPI_DISABLE(spi_handle);
 
-    /* Disable Tx DMA Request */
+    /* Disable Tx DMA Request. */
     CLEAR_BIT(spi_handle->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
 
     spi_handle->State = HAL_SPI_STATE_READY;
@@ -173,48 +173,48 @@ void quasar_spi_transfer_full_duplex_non_blocking(quasar_spi_selection_t spi_sel
 
     spi_handle->State = HAL_SPI_STATE_BUSY_TX_RX;
 
-    /* Reset the Tx/Rx DMA bits */
+    /* Reset the Tx/Rx DMA bits. */
     CLEAR_BIT(spi_handle->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
 
-    /* Disable the peripheral */
+    /* Disable the peripheral. */
     __HAL_DMA_DISABLE((spi_handle)->hdmarx);
 
-    /* Configure the DMA channel data size */
+    /* Configure the DMA channel data size. */
     MODIFY_REG((spi_handle)->hdmarx->Instance->CBR1, DMA_CBR1_BNDT, (data_size & DMA_CBR1_BNDT));
 
-    /* Configure DMA Channel source address */
+    /* Configure DMA Channel source address. */
     (spi_handle)->hdmarx->Instance->CSAR = (uint32_t)&(spi_handle)->Instance->RXDR;
 
-    /* Configure DMA Channel destination address */
+    /* Configure DMA Channel destination address. */
     (spi_handle)->hdmarx->Instance->CDAR = (uint32_t)rx_data;
 
-    /* Enable the peripheral */
+    /* Enable the peripheral. */
     __HAL_DMA_ENABLE((spi_handle)->hdmarx);
 
-    /* Enable Rx DMA Request */
+    /* Enable Rx DMA Request. */
     SET_BIT((spi_handle)->Instance->CFG1, SPI_CFG1_RXDMAEN);
 
-    /* Disable the peripheral */
+    /* Disable the peripheral. */
     __HAL_DMA_DISABLE((spi_handle)->hdmatx);
 
-    /* Configure the DMA channel data size */
+    /* Configure the DMA channel data size. */
     MODIFY_REG((spi_handle)->hdmatx->Instance->CBR1, DMA_CBR1_BNDT, (data_size & DMA_CBR1_BNDT));
 
-    /* Configure DMA Channel source address */
+    /* Configure DMA Channel source address. */
     (spi_handle)->hdmatx->Instance->CSAR = (uint32_t)tx_data;
 
-    /* Configure DMA Channel destination address */
+    /* Configure DMA Channel destination address. */
     (spi_handle)->hdmatx->Instance->CDAR = (uint32_t)&(spi_handle)->Instance->TXDR;
 
-    /* Enable the Peripheral */
+    /* Enable the Peripheral. */
     __HAL_DMA_ENABLE((spi_handle)->hdmatx);
 
     MODIFY_REG((spi_handle)->Instance->CR2, SPI_CR2_TSIZE, data_size);
 
-    /* Enable Tx DMA Request */
+    /* Enable Tx DMA Request. */
     SET_BIT((spi_handle)->Instance->CFG1, SPI_CFG1_TXDMAEN);
 
-    /* Enable SPI peripheral */
+    /* Enable SPI peripheral. */
     __HAL_SPI_ENABLE(spi_handle);
 
     SET_BIT(spi_handle->Instance->CR1, SPI_CR1_CSTART);

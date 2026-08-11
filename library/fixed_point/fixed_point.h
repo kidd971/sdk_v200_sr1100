@@ -24,22 +24,30 @@ extern "C" {
 #define FIXED_POINT_SIGN_BIT             1
 
 /* TYPES **********************************************************************/
+/** @brief Q number type.
+ */
 typedef int32_t q_num_t;
 
 /** @brief Fixed point format structure.
  */
 typedef struct fixed_point_format {
-    uint8_t precision;    /*!< Number of precision bits, between 1 and 31 */
-    uint8_t integer_bits; /*!< Number of bits for the integer */
+    /*! Number of precision bits, between 1 and 31. */
+    uint8_t precision;
+    /*! Number of bits for the integer. */
+    uint8_t integer_bits;
 } fixed_point_format_t;
 
 /** @brief Fixed point mean parameters structure.
  */
 typedef struct fixed_point_mean_format {
-    uint16_t max_mean_size;         /*!< Maximum mean size */
-    uint16_t mean_index;            /*!< Current mean value index */
-    int64_t mean_accumulated_value; /*!< Current mean accumulated value */
-    uint8_t mean_precision_bits;    /*!< Fixed point precision for division calculation in mean */
+    /*! Maximum mean size. */
+    uint16_t max_mean_size;
+    /*! Current mean value index. */
+    uint16_t mean_index;
+    /*! Current mean accumulated value. */
+    int64_t mean_accumulated_value;
+    /*! Fixed point precision for division calculation in mean. */
+    uint8_t mean_precision_bits;
 } fixed_point_mean_format_t;
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
@@ -53,16 +61,14 @@ fixed_point_format_t fixed_point_initialization(uint8_t precision_bits, uint8_t 
 
 /** @brief Convert float number to Q representation.
  *
- *  This function convert a number represented using the
- *  floating point representation to the QX.Y format, where
- *  X is the integer part and Y is the precision. Theses are setup
- *  with fixed_point_initialization().
+ *  @note This function convert a number represented using the floating point representation to the QX.Y format, where X
+ *        is the integer part and Y is the precision. Theses are setup with fixed_point_initialization().
  *
  *  @param[in] fixed_point_format  Fixed point parameters.
  *  @param[in] real_number         Number to be converted, in float.
  *  @return Number in QX.Y format.
  */
-q_num_t fixed_point_float_to_q_conv(fixed_point_format_t *fixed_point_format, float real_number);
+q_num_t fixed_point_float_to_q_conv(const fixed_point_format_t *fixed_point_format, float real_number);
 
 /** @brief Convert Q representation number to float number.
  *
@@ -70,7 +76,7 @@ q_num_t fixed_point_float_to_q_conv(fixed_point_format_t *fixed_point_format, fl
  *  @param[in] q_number            Number to be converted, in QX.Y format.
  *  @return Converted number, in floating point representation.
  */
-float fixed_point_q_to_float_conv(fixed_point_format_t *fixed_point_format, q_num_t q_number);
+float fixed_point_q_to_float_conv(const fixed_point_format_t *fixed_point_format, q_num_t q_number);
 
 /** @brief Convert Q representation number to 32 bits number.
  *
@@ -78,7 +84,7 @@ float fixed_point_q_to_float_conv(fixed_point_format_t *fixed_point_format, q_nu
  *  @param[in] q_number            Number to be converted, in QX.Y format.
  *  @return Converted integer number.
  */
-int32_t fixed_point_q_to_int_conv(fixed_point_format_t *fixed_point_format, q_num_t q_number);
+int32_t fixed_point_q_to_int_conv(const fixed_point_format_t *fixed_point_format, q_num_t q_number);
 
 /** @brief Convert 32 bit number to Q representation number.
  *
@@ -86,7 +92,7 @@ int32_t fixed_point_q_to_int_conv(fixed_point_format_t *fixed_point_format, q_nu
  *  @param[in] real_number         Real integer number.
  *  @return Converted QX.Y format number.
  */
-q_num_t fixed_point_int_to_q_conv(fixed_point_format_t *fixed_point_format, int32_t real_number);
+q_num_t fixed_point_int_to_q_conv(const fixed_point_format_t *fixed_point_format, int32_t real_number);
 
 /** @brief Add two Q represented number together.
  *
@@ -117,7 +123,7 @@ q_num_t fixed_point_sub(q_num_t q_num1, q_num_t q_num2);
  *  @param[in] q_num2              Second factor, in QX.Y format.
  *  @return Product, in QX.Y format.
  */
-q_num_t fixed_point_multiply(fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2);
+q_num_t fixed_point_multiply(const fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2);
 
 /** @brief Divided two Q represented number.
  *
@@ -128,25 +134,24 @@ q_num_t fixed_point_multiply(fixed_point_format_t *fixed_point_format, q_num_t q
  *  @param[in] q_num2              Divisor, in QX.Y format.
  *  @return Quotient, in QX.Y format.
  */
-q_num_t fixed_point_division(fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2);
+q_num_t fixed_point_division(const fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2);
 
 /** @brief Get the precision bits value.
  *
- *  Get the precision bits value in QX.Y format
- *  of the current initialize fixed point library.
+ *  @note Get the precision bits value in QX.Y format of the current initialize fixed point library.
  *
  *  @param[in] fixed_point_format  Fixed point parameters.
  *  @return Precision, in QX.Y format.
  */
-q_num_t fixed_point_get_precision_q(fixed_point_format_t *fixed_point_format);
+q_num_t fixed_point_get_precision_q(const fixed_point_format_t *fixed_point_format);
 
 /** @brief Initialize the Fixed point arithmetic mean .
  *
  *  @param[in] fixed_point_format  Fixed point parameters.
- *  @param[in] max_mean_size       Maximum mean size for the application.
+ *  @param[in] mean_size           Maximum mean size for the application.
  *  @return Fixed point mean parameters.
  */
-fixed_point_mean_format_t fixed_point_mean_init(fixed_point_format_t *fixed_point_format, uint16_t mean_size);
+fixed_point_mean_format_t fixed_point_mean_init(const fixed_point_format_t *fixed_point_format, uint16_t mean_size);
 
 /** @brief Add one element to the already initialized mean.
  *
@@ -158,8 +163,8 @@ int64_t fixed_point_mean_add(fixed_point_mean_format_t *fixed_point_mean_format,
 
 /** @brief Reset the mean for another calculation.
  *
- *  @note This should be call after every fixed_point_mean_calculate()
- *        to reset the accumulated mean value and the current index.
+ *  @note This should be call after every fixed_point_mean_calculate() to reset the accumulated mean value and the
+ *        current index.
  *
  *  @param[in] fixed_point_mean_format  Fixed point mean parameters.
  */
@@ -171,7 +176,7 @@ void fixed_point_mean_reset(fixed_point_mean_format_t *fixed_point_mean_format);
  *  @param[in] size                     Size of the mean, 0 for the size define in fixed_point_mean_init().
  *  @return Mean result, in QX.Y format.
  */
-q_num_t fixed_point_mean_calculate(fixed_point_mean_format_t *fixed_point_mean_format, uint16_t size);
+q_num_t fixed_point_mean_calculate(const fixed_point_mean_format_t *fixed_point_mean_format, uint16_t size);
 
 #ifdef __cplusplus
 }

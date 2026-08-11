@@ -27,11 +27,14 @@ extern "C" {
 /** @brief Error status returned by init functions in the library.
  */
 typedef enum filtering_functions_error {
+    /*! No error. */
     FILTERING_FUNCTION_ERR_NONE = 0,
+    /*! Configuration error. */
     FILTERING_FUNCTION_CFG_ERR,
 } filtering_functions_error_t;
 
-/** @brief FIR filter sample bit depth. */
+/** @brief FIR filter sample bit depth.
+ */
 typedef enum fir_bit_depth {
     /*! 16-bit FIR samples. */
     FIR_16BITS = 16,
@@ -72,7 +75,7 @@ typedef struct fir_decimate_instance {
     uint8_t divide_ratio;
     /*! Number of coefficients in the filter. */
     uint16_t num_taps;
-    /*! Points to the coefficient array. The array is of length num_taps.*/
+    /*! Points to the coefficient array. The array is of length num_taps. */
     const int32_t *p_coeffs;
     /*! Points to the state variable array. The array is of length num_taps+block_size-1. */
     int32_t *p_state;
@@ -100,7 +103,7 @@ typedef struct fir_interpolate_instance {
 } fir_interpolate_instance_t;
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
-/** @brief  Initialization function for the 16-bit FIR interpolator.
+/** @brief Initialization function for the 16-bit FIR interpolator.
  *
  *  @param[in] instance        Points to an instance of the 16-bit FIR interpolator structure.
  *  @param[in] multiply_ratio  Upsample factor.
@@ -114,7 +117,7 @@ filtering_functions_error_t fir_interpolate_init(fir_interpolate_instance_t *ins
                                                  uint16_t num_taps, const int32_t *p_coeffs, int32_t *p_state,
                                                  uint32_t block_size);
 
-/** @brief  Initialization function for the Q15 FIR decimator.
+/** @brief Initialization function for the Q15 FIR decimator.
  *
  *  @param[in,out] instance      points to an instance of the Q15 FIR decimator structure.
  *  @param[in]     num_taps      number of coefficients in the filter.
@@ -137,7 +140,7 @@ filtering_functions_error_t fir_decimate_init(fir_decimate_instance_t *instance,
  *  @param[in]  channel        Channel index to use.
  *  @param[in]  channel_count  Number of channels in the input data.
  *
- * @par           Scaling and Overflow Behavior
+ *  @par           Scaling and Overflow Behavior
  *                  The function is implemented using a 64-bit internal accumulator.
  *                  Both coefficients and state variables are represented in 1.15 format and multiplications yield a
  *                  2.30 result. The 2.30 intermediate results are accumulated in a 64-bit accumulator in 34.30 format.
@@ -146,7 +149,7 @@ filtering_functions_error_t fir_decimate_init(fir_decimate_instance_t *instance,
  *                  to 34.15 format by discarding low 15 bits. Lastly, the accumulator is saturated to yield a result
  *                  in 1.15 format.
  *
- *@remark
+ *  @remark
  *            Refer to \ref arm_fir_decimate_fast_q15() for a faster but less precise implementation of this function.
  */
 void fir_decimate(const fir_decimate_instance_t *instance, const uint8_t *src, uint8_t *dst, uint32_t block_size,

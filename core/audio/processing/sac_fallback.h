@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-/*! Array size holding buffer load values to calculate a rolling average */
+/*! Array size holding buffer load values to calculate a rolling average. */
 #ifndef SAC_FALLBACK_QUEUE_ARRAY_LENGTH
 #define SAC_FALLBACK_QUEUE_ARRAY_LENGTH 3
 #endif
@@ -34,6 +34,8 @@ extern "C" {
 #endif
 
 /* TYPES **********************************************************************/
+/** @brief Opaque handle to a SPARK Audio Core fallback instance.
+ */
 typedef struct sac_fallback_instance sac_fallback_instance_t;
 
 /** @brief The SPARK Audio Core fallback Queue Metrics.
@@ -163,8 +165,8 @@ typedef struct sac_fallback_mode_cfg {
     uint8_t cca_bad_fail_count_threshold_perc;
     /*! Amount of time in seconds the CCA fail count must be higher than the threshold to trigger the next mode. */
     float cca_bad_time_sec;
-    /*! Audio transmitting pipeline consumer buffer load above which the next fallback mode is triggered.
-     *   Value should be multiplied by 10. (ex: 1.3 is 13).
+    /*! Audio transmitting pipeline consumer buffer load above which the next fallback mode is triggered. Value should
+     *  be multiplied by 10. (ex: 1.3 is 13).
      */
     uint32_t consumer_buffer_load_threshold_tenths;
     /*! Number of samples to expect in a packet in this mode. This should be set to the expected number of samples of
@@ -257,7 +259,6 @@ bool sac_fallback_is_process_in_current_mode(sac_fallback_instance_t *instance, 
  *  @param[in]  size      Size in bytes of the audio payload.
  *  @param[out] data_out  Audio payload that has been processed.
  *  @param[out] status    Status code.
- *
  *  @return Size in bytes of the processed samples, 0 if no processing happened.
  */
 uint16_t sac_fallback_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,

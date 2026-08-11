@@ -10,16 +10,15 @@
 #define SWC_CFG_H_
 
 /* CONSTANTS ******************************************************************/
-
-/* SWC queue size */
+/* SWC queue size. */
 #define SWC_QUEUE_SIZE 3
 
-/* Schedule configuration */
+/* Schedule configuration. */
 #define SCHEDULE        {500, 500}
-#define COORD_TIMESLOTS {MAIN_TIMESLOT(0)}
-#define NODE_TIMESLOTS  {MAIN_TIMESLOT(1)}
+#define COORD_TIMESLOTS {SWC_MAIN_TIMESLOT(0)}
+#define NODE_TIMESLOTS  {SWC_MAIN_TIMESLOT(1)}
 
-/* Channels */
+/* Channels. */
 #define CHANNEL_FREQ     {163, 171, 179, 187, 195}
 #define CHANNEL_SEQUENCE {0, 1, 2, 3, 4}
 

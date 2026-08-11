@@ -31,7 +31,7 @@ const uint16_t step_size_table[STEP_SIZE_TABLE_LENGTH] = {
     2272, 2499,  2749,  3024,  3327,  3660,  4026,  4428,  4871,  5358,  5894,  6484,  7132,  7845, 8630,
     9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767};
 
-/* Table of index changes */
+/* Table of index changes. */
 const int8_t index_table[] = {-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8};
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -43,41 +43,41 @@ void adpcm_init_state(adpcm_state_t *state)
 
 uint8_t adpcm_encode(int32_t original_sample, adpcm_state_t *state)
 {
-    int32_t predicted_sample = (int32_t)state->state.predicted_sample; /* output of ADPCM predictor */
+    int32_t predicted_sample = (int32_t)state->state.predicted_sample; /* Output of ADPCM predictor. */
     int32_t difference = 0;
     uint16_t temp_step_size = 0;
-    uint16_t step_size = 0; /* quantizer step_size */
+    uint16_t step_size = 0; /* Quantizer step_size. */
     uint8_t new_sample = 0;
-    int16_t index = (int16_t)state->state.index; /* index into step_size_table */
+    int16_t index = (int16_t)state->state.index; /* Index into step_size_table. */
     uint8_t mask = 0;
 
     step_size = step_size_table[index];
 
-    /* find difference from predicted sample: */
+    /* Find difference from predicted sample:. */
     difference = original_sample - predicted_sample;
 
-    if (difference >= 0) { /* set sign bit and find absolute value of difference */
-        new_sample = 0;    /* set sign bit(new_sample[3]) to 0 */
+    if (difference >= 0) { /* Set sign bit and find absolute value of difference. */
+        new_sample = 0;    /* Set sign bit(new_sample[3]) to 0. */
     } else {
-        new_sample = 8;           /* set sign bit(new_sample[3]) to one */
-        difference = -difference; /* absolute value of negative difference */
+        new_sample = 8;           /* Set sign bit(new_sample[3]) to one. */
+        difference = -difference; /* Absolute value of negative difference. */
     }
 
-    mask = 4;                   /* used to set bits in new_sample */
-    temp_step_size = step_size; /* store quantizer step_size for later use */
+    mask = 4;                   /* Used to set bits in new_sample. */
+    temp_step_size = step_size; /* Store quantizer step_size for later use. */
 
-    for (uint8_t i = 0; i < 3; i++) {       /* quantize difference down to four bits */
+    for (uint8_t i = 0; i < 3; i++) {       /* Quantize difference down to four bits. */
         if (difference >= temp_step_size) { /* new_sample[2:0] = 4 * (difference/step_size) */
-            new_sample |= mask;             /* perform division ... */
-            difference -= temp_step_size;   /* ... through repeated subtraction */
+            new_sample |= mask;             /* Perform division ... */
+            difference -= temp_step_size;   /* ... through repeated subtraction. */
         }
-        temp_step_size >>= 1; /* adjust comparator for next iteration */
-        mask >>= 1;           /* adjust bit-set mask for next iteration */
+        temp_step_size >>= 1; /* Adjust comparator for next iteration. */
+        mask >>= 1;           /* Adjust bit-set mask for next iteration. */
     }
-    /* 4-bit new_sample can be stored at this point */
-    /* compute new sample estimate predicted_sample */
+    /* 4-bit new_sample can be stored at this point. */
+    /* Compute new sample estimate predicted_sample. */
     difference = 0;       /* calculate difference = (new_sample + ½) * step_size/4 */
-    if (new_sample & 4) { /* perform multiplication through repetitive addition */
+    if (new_sample & 4) { /* Perform multiplication through repetitive addition. */
         difference += step_size;
     }
     if (new_sample & 2) {
@@ -87,26 +87,25 @@ uint8_t adpcm_encode(int32_t original_sample, adpcm_state_t *state)
         difference += step_size >> 2;
     }
     difference += step_size >> 3;
-    /* (new_sample + ½) * step_size/4 = new_sample * step_size/4 + step_size/8 */
-    if (new_sample & 8) { /* account for sign bit */
+    /* (new_sample + ½) * step_size/4 = new_sample * step_size/4 + step_size/8. */
+    if (new_sample & 8) { /* Account for sign bit. */
         difference = -difference;
     }
-    /* adjust predicted sample based on calculated difference: */
+    /* Adjust predicted sample based on calculated difference:. */
     predicted_sample += difference;
-    if (predicted_sample > INT16_MAX) { /* check for overflow */
+    if (predicted_sample > INT16_MAX) { /* Check for overflow. */
         predicted_sample = INT16_MAX;
     } else if (predicted_sample < INT16_MIN) {
         predicted_sample = INT16_MIN;
     }
-    /* compute new step_size */
-    /* adjust index into step_size lookup table using new_sample */
+    /* Compute new step_size. */
+    /* Adjust index into step_size lookup table using new_sample. */
     index += index_table[new_sample];
-    if (index < 0) { /* check for index underflow */
+    if (index < 0) { /* Check for index underflow. */
         index = 0;
-    } else if (index > (STEP_SIZE_TABLE_LENGTH - 1)) { /* check for index overflow */
+    } else if (index > (STEP_SIZE_TABLE_LENGTH - 1)) { /* Check for index overflow. */
         index = (STEP_SIZE_TABLE_LENGTH - 1);
     }
-    step_size = step_size_table[index]; /* find new quantizer step_size */
 
     state->state.index = (uint8_t)index;
     state->state.predicted_sample = (int16_t)predicted_sample;
@@ -117,16 +116,15 @@ uint8_t adpcm_encode(int32_t original_sample, adpcm_state_t *state)
 int16_t adpcm_decode(uint8_t original_sample, adpcm_state_t *state)
 {
     int32_t difference = 0;
-    /* Reuse the state variable, predicted sample == decoding result */
+    /* Reuse the state variable, predicted sample == decoding result. */
     int32_t new_sample = (int32_t)state->state.predicted_sample;
     int16_t index = (int16_t)state->state.index;
-    /* Quantizer step_size */
+    /* Quantizer step_size. */
     uint16_t step_size = step_size_table[index];
 
-    /* compute predicted sample estimate new_sample */
-    /* calculate difference = (original_sample + ½) * step_size/4:
-     */
-    if (original_sample & 4) { /* perform multiplication through repetitive addition */
+    /* Compute predicted sample estimate new_sample. */
+    /* Calculate difference = (original_sample + ½) * step_size/4:. */
+    if (original_sample & 4) { /* Perform multiplication through repetitive addition. */
         difference += step_size;
     }
     if (original_sample & 2) {
@@ -135,25 +133,25 @@ int16_t adpcm_decode(uint8_t original_sample, adpcm_state_t *state)
     if (original_sample & 1) {
         difference += step_size >> 2;
     }
-    /* (original_sample + ½) * step_size/4 = original_sample * step_size/4 + step_size/8: */
+    /* (original_sample + ½) * step_size/4 = original_sample * step_size/4 + step_size/8:. */
     difference += step_size >> 3;
-    if (original_sample & 8) { /* account for sign bit */
+    if (original_sample & 8) { /* Account for sign bit. */
         difference = -difference;
     }
-    /* adjust predicted sample based on calculated difference: */
+    /* Adjust predicted sample based on calculated difference:. */
     new_sample += difference;
-    if (new_sample > INT16_MAX) { /* check for overflow */
+    if (new_sample > INT16_MAX) { /* Check for overflow. */
         new_sample = INT16_MAX;
     } else if (new_sample < INT16_MIN) {
         new_sample = INT16_MIN;
     }
-    /* 16-bit new_sample can be stored at this point */
-    /* compute new step_size */
-    /* adjust index into step_size lookup table using original_sample: */
+    /* 16-bit new_sample can be stored at this point. */
+    /* Compute new step_size. */
+    /* Adjust index into step_size lookup table using original_sample:. */
     index += index_table[original_sample];
-    if (index < 0) { /* check for index underflow */
+    if (index < 0) { /* Check for index underflow. */
         index = 0;
-    } else if (index > (STEP_SIZE_TABLE_LENGTH - 1)) { /* check for index overflow */
+    } else if (index > (STEP_SIZE_TABLE_LENGTH - 1)) { /* Check for index overflow. */
         index = (STEP_SIZE_TABLE_LENGTH - 1);
     }
 

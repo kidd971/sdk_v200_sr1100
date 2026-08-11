@@ -26,11 +26,6 @@ void sac_sample_accumulator_init(void *instance, const char *name, sac_pipeline_
 
     sac_sample_accumulator_instance_t *acc_inst = instance;
 
-    if (acc_inst == NULL) {
-        *status = SAC_ERR_PROCESSING_STAGE_INIT;
-        return;
-    }
-
     if (pipeline->cfg.max_payload_size < acc_inst->max_accumulator_size) {
         *status = SAC_ERR_PIPELINE_PAYLOAD_NOT_BIG_ENOUGH;
         return;
@@ -81,7 +76,7 @@ uint16_t sac_sample_accumulator_process(void *instance, sac_pipeline_t *pipeline
     if (acc_inst->get_accumulator_size) {
         current_target_size = acc_inst->get_accumulator_size(pipeline);
         if (current_target_size > acc_inst->max_accumulator_size) {
-            /* ERROR! */
+            /* ERROR!. */
             return 0;
         }
         if (current_target_size < acc_inst->_internal.accumulator_used_size) {
@@ -141,7 +136,7 @@ uint16_t sac_sample_accumulator_process(void *instance, sac_pipeline_t *pipeline
     /* Enqueue packet in producer to be processed later. */
     queue_node_t *node = NULL;
     uint8_t extra_packet_nb = 0;
-    /* Check if another packet is available */
+    /* Check if another packet is available. */
     extra_packet_nb = (input_size >= acc_inst->_internal.accumulator_size) ?
                           (input_size / acc_inst->_internal.accumulator_size) :
                           0;

@@ -25,14 +25,14 @@
 #define TX_AUDIO_FB_PULSE_WIDTH 6
 #define TX_AUDIO_FB_PULSE_GAIN  4
 
-/* Sets the output power configuration for transmitting acknowledgement data. */
+/* Sets the output power configuration for transmitting acknowledgment data. */
 #define TX_ACK_PULSE_COUNT 1
 #define TX_ACK_PULSE_WIDTH 6
 #define TX_ACK_PULSE_GAIN  0
 
 /* Sets the number of pulses of received data frames. */
 #define RX_DATA_PULSE_COUNT 1
-/* Sets the number of pulses for receiving acknowledgement data. */
+/* Sets the number of pulses for receiving acknowledgment data. */
 #define RX_ACK_PULSE_COUNT 1
 
 #endif /* SWC_CFG_COORD_H_ */

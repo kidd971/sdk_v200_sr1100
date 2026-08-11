@@ -27,7 +27,7 @@ sac_mixer_module_t *sac_mixer_module_init(sac_mixer_module_cfg_t cfg, mem_pool_t
         return NULL;
     }
 
-    /* Verify configurations */
+    /* Verify configurations. */
     if (cfg.nb_of_inputs < MIN_NB_OF_INPUTS || cfg.nb_of_inputs > MAX_NB_OF_INPUTS) {
         *sac_status = SAC_ERR_MIXER_INIT_FAILURE;
         return NULL;
@@ -43,7 +43,7 @@ sac_mixer_module_t *sac_mixer_module_init(sac_mixer_module_cfg_t cfg, mem_pool_t
         return NULL;
     }
 
-    /* Apply the configurations */
+    /* Apply the configurations. */
     sac_mixer_module->cfg = cfg;
 
     return sac_mixer_module;
@@ -58,17 +58,17 @@ void sac_mixer_module_mix_packets(sac_mixer_module_t *sac_mixer_module)
     sac_mixer_module_handle_remainder(sac_mixer_module);
 }
 
-void sac_mixer_module_append_samples(sac_mixer_queue_t *input_samples_queue, uint8_t *samples, uint8_t size)
+void sac_mixer_module_append_samples(sac_mixer_queue_t *input_samples_queue, const uint8_t *samples, uint8_t size)
 {
     uint8_t mem_offset = 0;
 
-    /* Use the current size for the memory offset */
+    /* Use the current size for the memory offset. */
     mem_offset = input_samples_queue->current_size;
 
-    /* Add the payload to the Input Samples Queue */
+    /* Add the payload to the Input Samples Queue. */
     memcpy(input_samples_queue->samples + mem_offset, samples, size);
 
-    /* Update Input Samples Queue size */
+    /* Update Input Samples Queue size. */
     input_samples_queue->current_size += size;
 }
 
@@ -76,25 +76,25 @@ void sac_mixer_module_append_silence(sac_mixer_queue_t *input_samples_queue, uin
 {
     uint8_t mem_offset = 0;
 
-    /* Use the current size for the memory offset */
+    /* Use the current size for the memory offset. */
     mem_offset = input_samples_queue->current_size;
 
-    /* Add the payload to the Input Samples Queue */
+    /* Add the payload to the Input Samples Queue. */
     memset(input_samples_queue->samples + mem_offset, 0, size);
 
-    /* Update Input Samples Queue size */
+    /* Update Input Samples Queue size. */
     input_samples_queue->current_size += size;
 }
 
 void sac_mixer_module_handle_remainder(sac_mixer_module_t *sac_mixer_module)
 {
-    uint8_t sample_remainder = 0;
-    uint8_t current_size = 0;
+    uint8_t sample_remainder;
+    uint8_t current_size;
     uint8_t sample_size = 0;
 
     sample_size = sac_mixer_module->cfg.payload_size;
 
-    /* Move the remaining input samples to the front of the queue */
+    /* Move the remaining input samples to the front of the queue. */
     for (uint8_t input = 0; input < sac_mixer_module->cfg.nb_of_inputs; input++) {
         current_size = sac_mixer_module->input_samples_queue[input].current_size;
         sample_remainder = current_size - sample_size;
@@ -141,6 +141,10 @@ static uint8_t get_audio_payload_samples_count(sac_mixer_module_t *sac_mixer_mod
 
     if (sac_mixer_module->cfg.bit_depth == 16) {
         size_type = sizeof(int16_t);
+    }
+
+    if (size_type == 0) {
+        return 0;
     }
 
     return sac_mixer_module->cfg.payload_size / size_type;
