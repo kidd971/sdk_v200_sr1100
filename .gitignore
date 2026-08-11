@@ -14,6 +14,10 @@ dist/
 # Local-only
 /.claude
 /document
+# Rewritten with this checkout's absolute pack paths by
+# .pixi/envs/spark-sdk/etc/conda/activate.d/update_pyocd.py on every activation,
+# and recreated from nothing if absent. Tracking it only churns the path.
+/pyocd.yml
 
 # Object files
 *.o
