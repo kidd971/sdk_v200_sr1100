@@ -66,9 +66,9 @@ typedef struct sac_mixer_module {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize the SPARK Audio Core Mixer Module.
  *
- *  @param[in]  cfg          Used to configure the SPARK Audio Core Mixer Module.
- *  @param[in]  mem_pool     Memory pool for memory allocation.
- *  @param[out] sac_status   Status code.
+ *  @param[in]  cfg         Used to configure the SPARK Audio Core Mixer Module.
+ *  @param[in]  mem_pool    Memory pool for memory allocation.
+ *  @param[out] sac_status  Status code.
  *  @return SPARK Audio Core Mixer Module instance.
  */
 sac_mixer_module_t *sac_mixer_module_init(sac_mixer_module_cfg_t cfg, mem_pool_t *mem_pool, sac_status_t *sac_status);
@@ -85,7 +85,7 @@ void sac_mixer_module_mix_packets(sac_mixer_module_t *sac_mixer_module);
  *  @param[in] samples              The stored audio samples.
  *  @param[in] size                 The stored audio samples size in bytes.
  */
-void sac_mixer_module_append_samples(sac_mixer_queue_t *input_samples_queue, uint8_t *samples, uint8_t size);
+void sac_mixer_module_append_samples(sac_mixer_queue_t *input_samples_queue, const uint8_t *samples, uint8_t size);
 
 /** @brief Silence samples are added to the input queue.
  *

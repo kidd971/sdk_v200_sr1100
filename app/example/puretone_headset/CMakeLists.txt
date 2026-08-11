@@ -1,5 +1,4 @@
-if (TRANSCEIVER STREQUAL "SR1000")
-    message("PureTone application is SR1100 only.")
+if (NOT TRANSCEIVER STREQUAL "SR1100")
     return()
 endif()
 
@@ -22,6 +21,8 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
             audio_core
             puretone_headset_backend
             swc
+            swc_backend
+            spark_pairing
             at_cmd_core
     )
     add_custom_command(TARGET puretone_dongle.elf
@@ -36,6 +37,8 @@ target_link_libraries(puretone_headset.elf
         audio_core
         puretone_headset_backend
         swc
+        swc_backend
+        spark_pairing
         at_cmd_core
 )
 add_custom_command(TARGET puretone_headset.elf

@@ -20,7 +20,9 @@ extern "C" {
 /** @brief Board's VDD selection.
  */
 typedef enum quasar_vdd_selection {
+    /*! Select 1.8V VDD. */
     QUASAR_VDD_SELECTION_1V8,
+    /*! Select 3.3V VDD. */
     QUASAR_VDD_SELECTION_3V3
 } quasar_vdd_selection_t;
 

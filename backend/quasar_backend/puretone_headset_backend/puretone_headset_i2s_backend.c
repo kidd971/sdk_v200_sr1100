@@ -19,10 +19,15 @@
 /** @brief SAI configuration structure.
  */
 typedef struct sai_cfg {
+    /*! Bit depth of the audio data. */
     uint8_t                bit_depth;
+    /*! Number of channels for the SAI TX. */
     uint8_t                tx_nb_ch;
+    /*! Number of channels for the SAI RX. */
     uint8_t                rx_nb_ch;
+    /*! SAI master/slave mode. */
     quasar_sai_mode_t      sai_mode;
+    /*! SAI frame frequency. */
     quasar_sai_frequency_t sai_frequency;
 } sai_cfg_t;
 
@@ -175,7 +180,7 @@ static void codec_i2c_read(uint8_t dev_addr, uint8_t mem_addr, uint8_t *data)
  */
 static void configure_max98091(bool input_enabled, bool output_enabled)
 {
-    /* Init codec and generate SCLK */
+    /* Init codec and generate SCLK. */
     max98091_codec_cfg_t cfg = {
         .record_enabled = input_enabled,
         .playback_enabled = output_enabled,

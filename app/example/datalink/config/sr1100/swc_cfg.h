@@ -10,19 +10,18 @@
 #define SWC_CFG_H_
 
 /* CONSTANTS ******************************************************************/
-
-/* SWC queue size */
+/* SWC queue size. */
 #define SWC_QUEUE_SIZE 2
 
-/* Schedule configuration */
+/* Schedule configuration. */
 #define SCHEDULE        {250}
-#define COORD_TIMESLOTS {MAIN_TIMESLOT(0)}
+#define COORD_TIMESLOTS {SWC_MAIN_TIMESLOT(0)}
 
-/* Channels */
+/* Channels. */
 #define CHANNEL_FREQ     {162, 172, 182, 192, 202}
 #define CHANNEL_SEQUENCE {0, 1, 2, 3, 4}
 
-/* CCA settings */
+/* CCA settings. */
 #define SWC_CCA_RETRY_TIME 190 /* 9.28 us CCA intervals. */
 #define SWC_CCA_TRY_COUNT  13  /* 111.324 us total CCA time. */
 

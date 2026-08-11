@@ -45,8 +45,8 @@ void quasar_fifo_init(quasar_fifo_t *fifo_to_init);
 
 /** @brief Pushes a byte into the Quasar FIFO buffer.
  *
- *  @param[in] fifo     Quasar FIFO buffer to push data into.
- *  @param[in] new_data New byte to be added to the FIFO buffer.
+ *  @param[in] fifo      Quasar FIFO buffer to push data into.
+ *  @param[in] new_data  New byte to be added to the FIFO buffer.
  *  @return Return 0 if the push was successful or non-zero value if the buffer is full.
  */
 uint8_t quasar_fifo_push(quasar_fifo_t *fifo, uint8_t new_data);
@@ -62,8 +62,8 @@ uint8_t quasar_fifo_push_bytes(quasar_fifo_t *fifo, uint8_t *new_data_array, uin
 
 /** @brief Pull a byte from a Quasar FIFO buffer.
  *
- *  @param[in,out] fifo     Quasar FIFO buffer from which data will be pulled.
- *  @param[out] pulled_data Pointer to store the pulled data element.
+ *  @param[in,out] fifo         Quasar FIFO buffer from which data will be pulled.
+ *  @param[out]    pulled_data  Pointer to store the pulled data element.
  *  @return Returns 0 if the pull was successful or non-zero value if the buffer is empty.
  */
 uint8_t quasar_fifo_pull(quasar_fifo_t *fifo, uint8_t *pulled_data);

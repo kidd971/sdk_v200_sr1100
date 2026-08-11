@@ -1,0 +1,2 @@
+target_link_libraries(dev_board_io_test_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(dev_board_io_test_backend PRIVATE dev_board_io_test_backend.c)

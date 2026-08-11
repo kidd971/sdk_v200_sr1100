@@ -20,25 +20,25 @@ extern "C" {
 #endif
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
-/** @brief Fill an array with pseudo generated data and CRC
+/** @brief Fill an array with pseudo generated data and CRC.
  *
- *  @param[in] data   Pointer to array to put data.
- *  @param[in] size  Size of array
+ *  @param[in] data  Pointer to array to put data.
+ *  @param[in] size  Size of array.
  */
 void pseudo_data_generate(uint8_t *data, size_t size);
 
 /** @brief Validate the CRC of a packet received generated with pseudo data.
  *
- *  @param[in] data   Pointer to array to put data.
- *  @param[in] size  Size of array
- *  @return  True if CRC is match, False otherwise.
+ *  @param[in] data  Pointer to array to put data.
+ *  @param[in] size  Size of array.
+ *  @return True if CRC is match, False otherwise.
  */
-bool pseudo_data_validate(uint8_t *data, size_t size);
+bool pseudo_data_validate(const uint8_t *data, size_t size);
 
 /** @brief Validate if CRC is present.
  *
- *  @param[in] size  Size of payload received
- *  @return  True if CRC is present, False otherwise.
+ *  @param[in] size  Size of payload received.
+ *  @return True if CRC is present, False otherwise.
  */
 bool pseudo_data_is_crc_populated(size_t size);
 

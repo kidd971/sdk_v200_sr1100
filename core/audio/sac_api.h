@@ -49,24 +49,29 @@ extern "C" {
 
 /* MACROS *********************************************************************/
 /*! Get the audio payload size in the audio packet. */
-#define sac_node_get_payload_size(node) (*((uint16_t *)(queue_get_data_ptr(node, SAC_NODE_PAYLOAD_SIZE_OFFSET))))
+#define sac_node_get_payload_size(node) (*((uint16_t *)(queue_get_data_ptr((node), SAC_NODE_PAYLOAD_SIZE_OFFSET))))
 
 /*! Set the audio payload size in the audio packet. */
 #define sac_node_set_payload_size(node, payload_size) \
-    ((*((uint16_t *)(queue_get_data_ptr(node, SAC_NODE_PAYLOAD_SIZE_OFFSET)))) = (payload_size))
+    ((*((uint16_t *)(queue_get_data_ptr((node), SAC_NODE_PAYLOAD_SIZE_OFFSET)))) = (payload_size))
 
 /*! Get a pointer to the audio header in the audio packet. */
-#define sac_node_get_header(node) ((sac_header_t *)(queue_get_data_ptr(node, SAC_PACKET_HEADER_OFFSET)))
+#define sac_node_get_header(node) ((sac_header_t *)(queue_get_data_ptr((node), SAC_PACKET_HEADER_OFFSET)))
 
 /*! Get a pointer to the packet data in the audio packet. */
-#define sac_node_get_data(node) ((uint8_t *)(queue_get_data_ptr(node, SAC_PACKET_DATA_OFFSET)))
+#define sac_node_get_data(node) ((uint8_t *)(queue_get_data_ptr((node), SAC_PACKET_DATA_OFFSET)))
 
 /*! Return an array size aligned on a specific type. */
 #define sac_align_data_size(current_size, type_to_align) \
     (sizeof(type_to_align) - ((current_size) % sizeof(type_to_align)))
 
 /* TYPES **********************************************************************/
+/** @brief Audio pipeline structure forward declaration.
+ */
 typedef struct sac_pipeline sac_pipeline_t;
+
+/** @brief Audio processing instance forward declaration.
+ */
 typedef struct sac_processing sac_processing_t;
 
 /** @brief Audio Core Configuration.
@@ -96,8 +101,8 @@ typedef enum sac_bit_depth {
 /** @brief Audio Core sample encoding attributes.
  */
 typedef enum sac_sample_encoding {
-    /*! The audio samples are encoded in a word with a size of SAC_WORD_SIZE_BITS.
-     *  The valid bits of the sample are right aligned (LSB aligned) in the word.
+    /*! The audio samples are encoded in a word with a size of SAC_WORD_SIZE_BITS. The valid bits of the sample are
+     *  right aligned (LSB aligned) in the word.
      */
     SAC_SAMPLE_UNPACKED,
     /*! The audio samples are encoded with a size corresponding to the bit depth. */
@@ -119,7 +124,7 @@ typedef struct sac_header {
     /*! For clock drift compensation. Used by the recorder to notify the player that its TX audio buffer is filling up.
      */
     uint8_t tx_queue_level_high : 1;
-    /*! Indicates the fallback mode of a packet.*/
+    /*! Indicates the fallback mode of a packet. */
     uint8_t fallback : 3;
     /*! CRC4 of the header. */
     uint8_t crc4 : 4;
@@ -185,7 +190,7 @@ typedef struct sac_endpoint_cfg {
      */
     bool use_encapsulation;
     /*! True if the endpoint requires a complete cycle to produce or consume data. False if the endpoint produces or
-     * consumes instantly.
+     *  consumes instantly.
      */
     bool delayed_action;
     /*! 1 if the endpoint produces or consumes mono audio payloads and 2 for interleaved stereo. */
@@ -232,8 +237,8 @@ typedef struct sac_pipeline_cfg {
     bool do_initial_buffering;
     /*! Configure the pipeline with mixer's specific options. */
     sac_mixer_option_t mixer_option;
-    /*! Max payload size supported in the pipeline.
-     *  (Defaults to the maximum payload size between the producer and the consumer)
+    /*! Max payload size supported in the pipeline. (Defaults to the maximum payload size between the producer and the
+     *  consumer).
      */
     uint16_t max_payload_size;
 } sac_pipeline_cfg_t;
@@ -335,34 +340,37 @@ sac_endpoint_t *sac_endpoint_init(void *instance, const char *name, sac_endpoint
 
 /** @brief Link the queue of a consumer endpoint with a producer endpoint.
  *
- *  @note  This can be used to share processes between two pipelines:
+ *  @note This can be used to share processes between two pipelines:
  *
- *         (PROD1) -> [pipeline1] -> (CONS1) ->- (PROD2) -> [pipeline2] -> (CONS3)
- *                                      |
- *                                   (CONS2) ->- (PROD3) -> [pipeline3] -> (CONS4)
+ *  @note (PROD1) -> [pipeline1] -> (CONS1) ->- (PROD2) -> [pipeline2] -> (CONS3)
+ *                                     |
+ *                                  (CONS2) ->- (PROD3) -> [pipeline3] -> (CONS4)
  *
- *          (<name>) represents an Enpoint.
- *          [<name>] represents a pipeline.
- *          ->  represents the connection between Endpoint and pipelines.
- *          ->- represents the links made by 'sac_endpoint_link' between endpoints.
- *           |  represents the link made by 'sac_pipeline_add_extra_consumer' between endpoints.
  *
- *         Code example:
- *         -------------
- *         pipeline1 = sac_pipeline_init("", PROD1, cfg, CONS1, &status);
- *         // Create 2 consumers for the first pipeline.
- *         sac_pipeline_add_extra_consumer(pipeline1, CONS2, &status);
- *         sac_setup(pipeline1);
+ *  @note - `(name)` represents an Endpoint.
+ *        - `[name]` represents a pipeline.
+ *        - -> represents the connection between endpoint and pipelines.
+ *        - ->- represents the links made by 'sac_endpoint_link' between endpoints.
+ *        - | represents the link made by 'sac_pipeline_add_extra_consumer' between endpoints.
  *
- *         pipeline2 = sac_pipeline_init("", PROD2, cfg, CONS3, &status);
- *         // Link the first pipeline consumer to this pipeline's producer.
- *         sac_endpoint_link(CONS1, PROD2, &status);
- *         sac_setup(pipeline2);
+ *  @note Code example:
  *
- *         pipeline3 = sac_pipeline_init("", PROD3, cfg, CONS4, &status);
- *         // Link the second pipeline consumer to this pipeline's producer.
- *         sac_endpoint_link(CONS2, PROD3, &status);
- *         sac_setup(pipeline3);
+ *  @code
+ *        pipeline1 = sac_pipeline_init("", PROD1, cfg, CONS1, &status);
+ *        // Create 2 consumers for the first pipeline.
+ *        sac_pipeline_add_extra_consumer(pipeline1, CONS2, &status);
+ *        sac_setup(pipeline1);
+ *
+ *        pipeline2 = sac_pipeline_init("", PROD2, cfg, CONS3, &status);
+ *        // Link the first pipeline consumer to this pipeline's producer.
+ *        sac_endpoint_link(CONS1, PROD2, &status);
+ *        sac_setup(pipeline2);
+ *
+ *        pipeline3 = sac_pipeline_init("", PROD3, cfg, CONS4, &status);
+ *        // Link the second pipeline consumer to this pipeline's producer.
+ *        sac_endpoint_link(CONS2, PROD3, &status);
+ *        sac_setup(pipeline3);
+ *  @endcode
  *
  *  @param[in]  consumer  Consumer endpoint instance to be linked.
  *  @param[in]  producer  Producer endpoint instance to be linked.
@@ -427,8 +435,7 @@ void sac_pipeline_add_input_pipeline(sac_pipeline_t *pipeline, sac_pipeline_t *i
 
 /** @brief Setup the Audio Core pipeline.
  *
- *  This makes the pipeline ready to use. It must be called last,
- *  after every other initialization functions.
+ *  @note This makes the pipeline ready to use. It must be called last, after every other initialization functions.
  *
  *  @param[in]  pipeline  Pipeline instance.
  *  @param[out] status    Status code.
@@ -437,25 +444,25 @@ void sac_pipeline_setup(sac_pipeline_t *pipeline, sac_status_t *status);
 
 /** @brief Start the Audio Core pipeline.
  *
- *  @param[in] pipeline  Pipeline instance.
- *  @param[out] status   Status code.
+ *  @param[in]  pipeline  Pipeline instance.
+ *  @param[out] status    Status code.
  */
 void sac_pipeline_start(sac_pipeline_t *pipeline, sac_status_t *status);
 
 /** @brief Stop the Audio Core pipeline.
  *
- *  @param[in] pipeline  Pipeline instance.
- *  @param[out] status   Status code.
+ *  @param[in]  pipeline  Pipeline instance.
+ *  @param[out] status    Status code.
  */
 void sac_pipeline_stop(sac_pipeline_t *pipeline, sac_status_t *status);
 
 /** @brief Execute process specific control.
  *
- *  @param[in]  sac_processing    SAC processing structure.
- *  @param[in]  pipeline          Pipeline instance.
- *  @param[in]  cmd               Command specific to the processing stage.
- *  @param[in]  arg               Argument specific to the processing stage.
- *  @param[out] status            Status code.
+ *  @param[in]  sac_processing  SAC processing structure.
+ *  @param[in]  pipeline        Pipeline instance.
+ *  @param[in]  cmd             Command specific to the processing stage.
+ *  @param[in]  arg             Argument specific to the processing stage.
+ *  @param[out] status          Status code.
  *  @return A value specific to the control function.
  */
 uint32_t sac_processing_ctrl(sac_processing_t *sac_processing, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg,
@@ -511,13 +518,13 @@ uint16_t sac_node_data_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t s
 
 /** @brief Set endpoint internal queue extra.
  *
- *  This may be used by multiple processes. Each process defines the number of additional nodes it requires, and the
- *  sum of them is used to initialize the endpoint queue size. This approach allows for more nodes to be allocated
- *  while maintaining the user-specified size configuration.
+ *  @note This may be used by multiple processes. Each process defines the number of additional nodes it requires, and
+ *        the sum of them is used to initialize the endpoint queue size. This approach allows for more nodes to be
+ *        allocated while maintaining the user-specified size configuration.
  *
- *  @param[in] endpoint         Endpoint instance.
- *  @param[in] extra_queue_size Extra queue size required.
- *  @param[out] status          Status code.
+ *  @param[in]  endpoint          Endpoint instance.
+ *  @param[in]  extra_queue_size  Extra queue size required.
+ *  @param[out] status            Status code.
  */
 void sac_set_extra_queue_size(sac_endpoint_t *endpoint, uint8_t extra_queue_size, sac_status_t *status);
 

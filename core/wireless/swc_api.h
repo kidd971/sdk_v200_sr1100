@@ -10,18 +10,17 @@
 #define SWC_API_H_
 
 /* INCLUDES *******************************************************************/
+#include <stddef.h>
 #include <stdint.h>
 #include "swc_def.h"
 #include "swc_error.h"
-#include "wps.h"
-#include "wps_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* CONSTANTS ******************************************************************/
-/*! Destination address to use for broadcasting */
+/*! Destination address to use for broadcasting. */
 #define SWC_BROADCAST_ADDRESS 0xFF
 /*! Legacy PAN ID is only 12-bit. The 4 MSBs are invalid and can't be used. */
 #define SWC_LEGACY_PAN_ID_INVALID_RANGE 0xF000
@@ -33,8 +32,14 @@ extern "C" {
 #define SWC_NETWORK_ID_MASK 0xFF
 /*! Broadcast address is invalid during normal operation in network ID. */
 #define SWC_INVALID_BROADCAST_NETWORK_ID 0xFF
+/*! Wireless Core phase offset byte count definition. */
+#define SWC_PHASE_OFFSET_BYTE_COUNT 16
 
 /* TYPES **********************************************************************/
+/** @brief Opaque wps_connection structures from the wps layer.
+ */
+typedef struct wps_connection wps_connection_t;
+
 /** @brief Wireless Core configuration.
  */
 typedef struct swc_cfg {
@@ -54,6 +59,8 @@ typedef struct swc_cfg {
     uint32_t memory_pool_size;
     /*! Chip rate. */
     swc_chip_rate_t chip_rate;
+    /*! Personal area network ID. */
+    uint16_t pan_id;
 } swc_cfg_t;
 
 /** @brief Wireless Core concurrency configuration.
@@ -67,13 +74,16 @@ typedef struct swc_concurrency_cfg {
     bool ddcm_enabled;
 } swc_concurrency_cfg_t;
 
+/** @brief SPARK Radio handle structure combining a single radio instance and its associated calibration data. It is
+ *         used to manage radio configuration, calibration, and runtime state within the SPARK Wireless Core.
+ */
+typedef struct swc_radio_handle swc_radio_handle_t;
+
 /** @brief Wireless node configuration.
  */
 typedef struct swc_node_cfg {
     /*! Network role. */
     swc_role_t role;
-    /*! Personal area network 12-bit ID. */
-    uint16_t pan_id;
     /*! Coordinator device's 8-bit address; Same as local_address if local device is the Coordinator. */
     uint8_t coordinator_address;
     /*! Local device's 8-bit address. */
@@ -105,8 +115,7 @@ typedef struct swc_statistics {
     uint32_t no_packet_reception_count;
     /*! Increments for every RX timeslot the connection goes through. */
     uint32_t rx_timeslot_occurrence;
-    /*! Increments when a packet is received but is discarded because it is a
-     *   duplicate of a previously received packet.
+    /*! Increments when a packet is received but is discarded because it is a duplicate of a previously received packet.
      */
     uint32_t packet_duplicated_count;
     /*! Increments when a packet is received but is discarded because the frame data size is invalid. */
@@ -188,14 +197,13 @@ typedef struct swc_qos_indicators {
     /*! CCA on time, in PLL cycles. */
     uint32_t cca_on_time_pll_cycles;
     /*! Phase offset data. */
-    uint32_t phase_offset_data[PHASE_OFFSET_BYTE_COUNT];
+    uint32_t phase_offset_data[SWC_PHASE_OFFSET_BYTE_COUNT];
 } swc_qos_indicators_t;
 
 /** @brief Identifies each radio unit by a unique ID.
  *
- *  Each enum value corresponds to a specific radio HAL structure index, simplifying
- *  the selection and management of the appropriate radio hardware abstraction layer
- *  based on the radio ID.
+ *  @note Each enum value corresponds to a specific radio HAL structure index, simplifying the selection and management
+ *        of the appropriate radio hardware abstraction layer based on the radio ID.
  */
 typedef enum swc_radio_id {
     /*! Radio 1 HAL structure index. */
@@ -205,6 +213,19 @@ typedef enum swc_radio_id {
     /*!  Always keep this last to know the count of radio. */
     SWC_RADIO_ID_MAX = 2,
 } swc_radio_id_t;
+
+/** @brief SWC radio selections.
+ */
+typedef enum swc_multi_radio_select_mode {
+    /*! Let the multi radio algorithm select the radio. */
+    SWC_MULTI_RADIO_SELECT_MODE_ALGO,
+    /*! Always select radio 1. */
+    SWC_MULTI_RADIO_SELECT_MODE_RADIO1,
+    /*! Always select radio 2. */
+    SWC_MULTI_RADIO_SELECT_MODE_RADIO2,
+    /*! Radio selection mode count. */
+    SWC_MULTI_RADIO_SELECT_MODE_COUNT,
+} swc_multi_radio_select_mode_t;
 
 /** @brief Wireless connection configuration.
  */
@@ -232,16 +253,20 @@ typedef struct swc_connection_concurrency_cfg {
     bool enabled;
     /*! Number of energy readings to do before the fail action is executed.
      *
-     *  Maximum value is 16 if fail_action is set to SWC_CCA_ABORT_TX, 15 for SWC_CCA_FORCE_TX.
+     *  Maximum value is 16 when fail_action is SWC_CCA_ABORT_TX, 15 when it is SWC_CCA_FORCE_TX.
      */
     uint8_t try_count;
     /*! Amount of time between energy readings in increments of radio's PHY rate period (e.g. 48.8 ns at 20.48 MHz).
      *  This time include the energy reading measurement duration.
      *
      *  Maximum value is 2048 cycles + the number of cycles required for the energy reading.
+     *
+     *  @note On SR1120, this value is quantized to multiples of 32 PLL cycles at the register level
+     *        (truncated down; values below 32 become 0). Prefer using a multiple of 32 so the
+     *        configured value matches what the radio applies.
      */
     uint16_t retry_time;
-    /*! Action to do when the energy level sensed is still too high after the last energy sensing try. */
+    /*! Action to execute when all CCA attempts fail (channel still busy). See swc_cca_fail_action_t. */
     swc_cca_fail_action_t fail_action;
 } swc_connection_concurrency_cfg_t;
 
@@ -252,15 +277,14 @@ typedef struct swc_connection_fallback_cfg {
     bool enabled;
     /*! Number of fallback modes. */
     uint8_t fallback_mode_count;
-    /*! Array of payload size fallback threshold. in descending order. Array size must be equal to
-     *   fallback_mode_count
+    /*! Array of payload size fallback threshold. in descending order. Array size must be equal to fallback_mode_count.
      */
-    uint8_t *thresholds;
-    /*! Array of number of CCA tries. Array size must be equal to fallback_mode_count
+    const uint8_t *thresholds;
+    /*! Array of number of CCA tries. Array size must be equal to fallback_mode_count.
      *
-     *  Maximum CCA try value is 16 if fail_action is set to SWC_CCA_ABORT_TX, 15 for SWC_CCA_FORCE_TX.
+     *  Maximum CCA try value is 16 when fail_action is SWC_CCA_ABORT_TX, 15 when it is SWC_CCA_FORCE_TX.
      */
-    uint8_t *cca_try_count;
+    const uint8_t *cca_try_count;
 } swc_connection_fallback_cfg_t;
 
 /** @brief Wireless connection.
@@ -273,7 +297,7 @@ typedef struct swc_connection {
     /*! Wireless connection statistics. */
     swc_statistics_t stats;
 #if WPS_ENABLE_PHY_STATS_PER_BANDS
-    /*! Wireless connection statistics per. bands*/
+    /*! Wireless connection statistics per bands. */
     swc_statistics_t *stats_per_bands;
     /*! Wireless connection QOS Indicators per bands. */
     swc_qos_indicators_t *qos_indicators_per_bands;
@@ -286,6 +310,10 @@ typedef struct swc_connection {
     bool slot_prio_enabled;
 } swc_connection_t;
 
+/** @brief Wireless channel object.
+ */
+typedef struct wps_channel swc_channel_t;
+
 /** @brief Wireless channel configuration.
  */
 typedef struct swc_channel_cfg {
@@ -297,8 +325,7 @@ typedef struct swc_channel_cfg {
     uint8_t tx_pulse_width;
     /*! Pulses amplitude of the transmitted frames, from 0 (max gain: 0 dB) to 3 (min gain: -1.8 dB). */
     uint8_t tx_pulse_gain;
-    /*! Pulses number of the received frames, from 1 to 3, corresponding to the tx_pulse_count
-     *   of the incoming frames
+    /*! Pulses number of the received frames, from 1 to 3, corresponding to the tx_pulse_count of the incoming frames.
      */
     uint8_t rx_pulse_count;
 } swc_channel_cfg_t;
@@ -344,8 +371,8 @@ typedef enum swc_status {
  *  This is the first API call that needs to be made when initializing and
  *  configuring the Wireless Core.
  *
- *  @param[in]  cfg       Wireless Core configuration.
- *  @param[in]  node_cfg  Wireless radio configuration.
+ *  @param[in]  cfg       Wireless Core network configuration.
+ *  @param[in]  node_cfg  Wireless Core local node configuration.
  *  @param[in]  callback  A function pointer to the logic initiating context switches.
  *  @param[out] err       Wireless Core error code.
  */
@@ -353,12 +380,12 @@ void swc_init(swc_cfg_t cfg, swc_node_cfg_t node_cfg, void (*callback)(void), sw
 
 /** @brief Enable certification mode for the SWC.
  *
- *  @note This feature utilizes the application configuration to activate certification mode
- *        for the radio. In this mode, the radio transmits at maximum power and emulates acknowledgments
- *        according to the application's settings.
+ *  @note This feature utilizes the application configuration to activate certification mode for the radio. In this
+ *        mode, the radio transmits at maximum power and emulates acknowledgments according to the application's
+ *        settings.
  *
- *  @note Enabling certification mode disables any features that modify the radio's wake-up behavior,
- *        such as concurrency and latency optimization, to ensure proper acknowledgment emulation.
+ *  @note Enabling certification mode disables any features that modify the radio's wake-up behavior, such as
+ *        concurrency and latency optimization, to ensure proper acknowledgment emulation.
  *
  *  @note By default, certification mode is disabled.
  *
@@ -378,6 +405,18 @@ void swc_set_certification_mode(bool enabled, swc_error_t *const err);
  */
 void swc_set_fast_sync(bool enabled, swc_error_t *const err);
 
+/** @brief Enable/disable legacy byte-aligned header packing for backward compatibility.
+ *
+ *  @note When enabled, all protocol header fields use their original fixed byte-aligned sizes instead of optimized
+ *        bit-packed sizes. This ensures wire-level compatibility with SDK version 2.3 and earlier.
+ *
+ *  @note By default, legacy header packing is disabled.
+ *
+ *  @param[in]  enabled  Whether or not legacy header packing is enabled.
+ *  @param[out] err      Wireless Core error code.
+ */
+void swc_set_legacy_header_packing(bool enabled, swc_error_t *const err);
+
 /** @brief Advance configuration for concurrency mechanism.
  *
  *  @note By default, random channel sequence and DDCM are enabled, while RDO is disabled.
@@ -394,23 +433,47 @@ void swc_set_concurrency_cfg(swc_concurrency_cfg_t cfg, swc_error_t *const err);
  */
 void swc_node_enable_legacy_sfd(uint16_t legacy_pan_id, swc_error_t *const err);
 
-/** @brief Initializes a specified radio module within the given node.
+/** @brief Performs calibration on a SPARK radio module.
  *
- *  @note This function configures a radio module with default settings and performs necessary initializations
- *        including power cycling, reading from non-volatile memory (NVM), and calibrating the radio according
- *        to these settings. This must be called for every radio module connected to the device. Most systems
- *        operate a single radio, but a dual radio configuration is also supported for specific use cases.
+ *  @note Sets up a internal static radio handle for the given radio ID, powers up and configures the radio, initializes
+ *        its NVM, and executes the calibration procedure. The calibration results are stored in internal static radio
+ *        handle.
  *
- *
- *  @param[in]  radio_id   The identifier of the radio module to initialize.
- *  @param[in]  calibrate  Choose between re-calibrating the module afresh or using previously saved calibration data.
- *  @param[out] err        Wireless Core error code.
+ *  @param[in]  radio_id  ID of the radio to calibrate.
+ *  @param[out] err       Wireless Core error code.
+ *  @return The calibrated radio instance with NVM and spectral data.
  */
-void swc_radio_module_init(swc_radio_id_t radio_id, bool calibrate, swc_error_t *const err);
+swc_radio_handle_t *swc_radio_module_calib(swc_radio_id_t radio_id, swc_error_t *err);
+
+/** @brief Loads radio calibration data into the internal static radio handle.
+ *
+ *  @note Copies the calibration data from a byte buffer into the internal static radio handle. The input buffer is
+ *        expected to contain data previously exported from a calibrated radio handle. This function avoids direct
+ *        casting from a byte buffer to swc_radio_handle_t, preventing possible unaligned access on architectures that
+ *        do not support it.
+ *
+ *  @param[in]  radio_id  ID of the radio to calibrate.
+ *  @param[in]  data      Pointer to the buffer containing the stored radio calibration data.
+ *  @param[in]  size      Size of the calibration data buffer in bytes.
+ *  @param[out] err       Wireless Core error code.
+ *  @return The restored radio instance with NVM and spectral calibration data.
+ */
+swc_radio_handle_t *swc_radio_module_load_calib_data(swc_radio_id_t radio_id, const uint8_t *data, size_t size,
+                                                     swc_error_t *err);
+
+/** @brief Initialize a specified SWC node radio module with calibration, NVM, and radio data.
+ *
+ *  @note Powers up the radio, attaches NVM and calibration data, and allocates memory if needed.
+ *
+ *  @param[in]  radio_handle           The calibrated radio instance with NVM and spectral data.
+ *  @param[in]  pwr_cycle_saved_calib  Flag to prepare the radio for receive saved calibration after a power cycle.
+ *  @param[out] err                    Wireless Core error code.
+ */
+void swc_radio_module_init(swc_radio_handle_t *radio_handle, bool pwr_cycle_saved_calib, swc_error_t *err);
 
 /** @brief Set the state of the radio IRQ pin when asserted.
  *
- *  @note This function must be invoked after `swc_radio_module_init` to take affect.
+ *  @note This function must be invoked after `swc_radio_module_init` to take effect.
  *
  *  @note By default, SWC_IRQ_ACTIVE_HIGH is used if this function is not called.
  *
@@ -474,8 +537,8 @@ bool swc_node_is_low_power_allowed(swc_error_t *const err);
 
 /** @brief Get the radio's 64-bit serial number.
  *
- *  The serial number has been assigned during manufacturing and is unique
- *  among all SPARK transceivers of the same model.
+ *  @note The serial number has been assigned during manufacturing and is unique among all SPARK transceivers of the
+ *        same model.
  *
  *  @param[out] err  Wireless Core error code.
  *  @return Serial number.
@@ -484,8 +547,8 @@ uint64_t swc_node_get_radio_serial_number(swc_error_t *const err);
 
 /** @brief Get the radio's 8-bit product model.
  *
- *  The serial number has been assigned during manufacturing and is unique
- *  among all SPARK transceivers of the same model.
+ *  @note The serial number has been assigned during manufacturing and is unique among all SPARK transceivers of the
+ *        same model.
  *
  *  @param[out] err  Wireless Core error code.
  *  @return Product model.
@@ -494,8 +557,8 @@ uint8_t swc_node_get_radio_product_model(swc_error_t *const err);
 
 /** @brief Get the radio's 8-bit product version.
  *
- *  The serial number has been assigned during manufacturing and is unique
- *  among all SPARK transceivers of the same model.
+ *  @note The serial number has been assigned during manufacturing and is unique among all SPARK transceivers of the
+ *        same model.
  *
  *  @param[out] err  Wireless Core error code.
  *  @return Product version.
@@ -511,11 +574,19 @@ uint8_t swc_node_get_radio_product_version(swc_error_t *const err);
  */
 int swc_format_radio_nvm(char *const buffer, uint16_t size, swc_error_t *const err);
 
+/** @brief Verify if the radio's model is SR1x10.
+ *
+ *  @param[out] err  Wireless Core error code.
+ *  @retval true   Radio model is sr1x10.
+ *  @retval false  Radio model is not sr1x10.
+ */
+bool swc_is_radio_model_sr1x10(swc_error_t *const err);
+
 #if (WPS_RADIO_COUNT == 2)
 /** @brief Get the second radio's 64-bit serial number.
  *
- *  The serial number has been assigned during manufacturing and is unique
- *  among all SPARK transceivers of the same model.
+ *  @note The serial number has been assigned during manufacturing and is unique among all SPARK transceivers of the
+ *        same model.
  *
  *  @param[out] err  Wireless Core error code.
  *  @return Serial number.
@@ -524,8 +595,8 @@ uint64_t swc_node_get_radio2_serial_number(swc_error_t *const err);
 
 /** @brief Get the second radio's 8-bit product model.
  *
- *  The serial number has been assigned during manufacturing and is unique
- *  among all SPARK transceivers of the same model.
+ *  @note The serial number has been assigned during manufacturing and is unique among all SPARK transceivers of the
+ *        same model.
  *
  *  @param[out] err  Wireless Core error code.
  *  @return Product model.
@@ -534,8 +605,8 @@ uint8_t swc_node_get_radio2_product_model(swc_error_t *const err);
 
 /** @brief Get the second radio's 8-bit product version.
  *
- *  The serial number has been assigned during manufacturing and is unique
- *  among all SPARK transceivers of the same model.
+ *  @note The serial number has been assigned during manufacturing and is unique among all SPARK transceivers of the
+ *        same model.
  *
  *  @param[out] err  Wireless Core error code.
  *  @return Product version.
@@ -550,11 +621,19 @@ uint8_t swc_node_get_radio2_product_version(swc_error_t *const err);
  *  @return The formated string length, excluding the NULL terminator.
  */
 int swc_format_radio2_nvm(char *const buffer, uint16_t size, swc_error_t *const err);
+
+/** @brief Verify if the second radio's model is SR1x10.
+ *
+ *  @param[out] err  Wireless Core error code.
+ *  @retval true   Radio model is sr1x10.
+ *  @retval false  Radio model is not sr1x10.
+ */
+bool swc_is_radio2_model_sr1x10(swc_error_t *const err);
 #endif
 
 /** @brief Initialize a connection.
  *
- *  A connection abstracts a one-way data flow between 2 devices (e.g., a coordinator and a node).
+ *  @note A connection abstracts a one-way data flow between 2 devices (e.g., a coordinator and a node).
  *
  *  @param[in]  cfg  Wireless connection configuration.
  *  @param[out] err  Wireless Core error code.
@@ -567,7 +646,6 @@ swc_connection_t *swc_connection_init(swc_connection_cfg_t cfg, swc_error_t *con
  *  @param[in] source_address  Source address/beacon transmitter's address.
  *  @param[in] timeslot_id     Array of timeslot IDs used by the connection.
  *  @param[in] timeslot_count  Number of timeslots used by the connection.
- *
  *  @return Pre-configured SWC connection configuration instance for a beacon.
  */
 swc_connection_cfg_t swc_get_beacon_connection_config(uint8_t source_address, const int32_t *const timeslot_id,
@@ -575,15 +653,53 @@ swc_connection_cfg_t swc_get_beacon_connection_config(uint8_t source_address, co
 
 /** @brief Configure channels to use for a wireless connection.
  *
+ *  @note This is a legacy function. It is recommended to use `swc_connection_set_channels` or
+ *        `swc_channel_list_init_from_base` instead to configure channels. This function cannot be used after
+ *        `swc_connection_set_channels` is called on the same connection.
+ *
  *  @param[in]  conn  Connection handle.
  *  @param[in]  cfg   Wireless channel configuration.
  *  @param[out] err   Wireless Core error code.
  */
 void swc_connection_add_channel(swc_connection_t *const conn, swc_channel_cfg_t cfg, swc_error_t *const err);
 
+/** @brief Initialize a list of wireless channels from the pool.
+ *
+ *  @param[in]  cfgs   Array of wireless channel configurations.
+ *  @param[in]  count  Number of channel configurations.
+ *  @param[out] err    Wireless Core error code.
+ *  @return Array of channel handles.
+ */
+swc_channel_t *swc_channel_list_init(const swc_channel_cfg_t *cfgs, uint8_t count, swc_error_t *const err);
+
+/** @brief Initialize a list of channels from a single base configuration and an array of frequencies.
+ *
+ *  @note To initialize a list of channel with different pulse configuration, use `swc_channel_list_init` instead.
+ *
+ *  @param[in]  base_cfg  Base channel configuration.
+ *  @param[in]  freqs     Array of channel frequencies.
+ *  @param[in]  count     Number of channels.
+ *  @param[out] err       Wireless Core error code.
+ *  @return Array of channel handles.
+ */
+swc_channel_t *swc_channel_list_init_from_base(swc_channel_cfg_t base_cfg, const uint32_t *const freqs, uint8_t count,
+                                               swc_error_t *const err);
+
+/** @brief Set the channels to use for a wireless connection.
+ *
+ *  @param[in]  conn      Connection handle.
+ *  @param[in]  channels  Array of channel handles.
+ *  @param[in]  count     Number of channel handles.
+ *  @param[out] err       Wireless Core error code.
+ */
+void swc_connection_set_channels(swc_connection_t *const conn, swc_channel_t *channels, uint8_t count,
+                                 swc_error_t *const err);
+
 /** @brief Configure a fallback channel to use for a wireless connection.
  *
- *  @note This function can only be used on TX connections.
+ *
+ *  @note This is a legacy function. It is recommended to use `swc_connection_add_fallback_channel` instead to configure
+ *        channels. This function can only be used on TX connections.
  *
  *  @param[in]  conn            Connection handle.
  *  @param[in]  main_cfg        Base channel configuration without fallback.
@@ -595,6 +711,19 @@ void swc_connection_add_channel(swc_connection_t *const conn, swc_channel_cfg_t 
 void swc_connection_add_fallback_channel(const swc_connection_t *const conn, swc_channel_cfg_t main_cfg,
                                          swc_fallback_channel_cfg_t cfg, uint8_t channel_index, uint8_t fallback_index,
                                          swc_error_t *const err);
+
+/** @brief Configure fallback channels to use for a wireless connection using the pool.
+ *
+ *  @note This function can only be used on TX connections.
+ *
+ *  @param[in]  conn            Connection handle.
+ *  @param[in]  channels        Array of channel handles.
+ *  @param[in]  count           Number of channels in the array.
+ *  @param[in]  fallback_index  Fallback index. 0 is the fallback with the highest payload size threshold.
+ *  @param[out] err             Wireless Core error code.
+ */
+void swc_connection_set_fallback_channels(swc_connection_t *const conn, swc_channel_t *channels, uint8_t count,
+                                          uint8_t fallback_index, swc_error_t *const err);
 
 /** @brief Set the callback function to execute after a successful transmission.
  *
@@ -703,17 +832,16 @@ void swc_connection_set_event_callback(swc_connection_t *const conn, void (*cb)(
 
 /** @brief Optimize latency in target connection.
  *
- *  @note This feature delays the wakeup of the transceiver each time the queue is empty,
- *        allowing more time for the application context to generate a frame. This results
- *        in an overall better latency by reducing the minimum time it takes for the SWC
- *        to process a frame.
+ *  @note This feature delays the wakeup of the transceiver each time the queue is empty, allowing more time for the
+ *        application context to generate a frame. This results in an overall better latency by reducing the minimum
+ *        time it takes for the SWC to process a frame.
  *
- *  @note The delay resulting from this feature is equal to the sum of the CCA time and the
- *        air time of the frame, which include the auto-reply part. The CCA time is based on
- *        the cca_try_count and the cca_retry_time, which are part of the connection_cfg.
+ *  @note The delay resulting from this feature is equal to the sum of the CCA time and the air time of the frame, which
+ *        include the auto-reply part. The CCA time is based on the cca_try_count and the cca_retry_time, which are part
+ *        of the connection_cfg.
  *
- *  @note This feature can't be enabled when certification mode is enabled since it modify the
- *        wake up of the radio which is critical to properly emulate acknowledge.
+ *  @note This feature can't be enabled when certification mode is enabled since it modify the wake up of the radio
+ *        which is critical to properly emulate acknowledge.
  *
  *  @param[in]  conn                     Connection handle.
  *  @param[in]  auto_reply_payload_size  Size of the payload in the auto-reply(if any).
@@ -725,13 +853,11 @@ void swc_connection_optimized_latency(const swc_connection_t *const conn, uint8_
 #if !WPS_DISABLE_FRAGMENTATION
 /** @brief Enable fragmentation on the target connection.
  *
- *  @note This needs to be implemented on both sides of the connection so that
- *        the transmitter (TX) can fragment the packet, and the receiver (RX)
- *        can aggregate the received payload.
+ *  @note This needs to be implemented on both sides of the connection so that the transmitter (TX) can fragment the
+ *        packet, and the receiver (RX) can aggregate the received payload.
  *
- *  @note Once this feature is enabled, users will be able to send payloads
- *        larger than the provided maximum payload size during connection configuration
- *        when using the swc_connection_send method.
+ *  @note Once this feature is enabled, users will be able to send payloads larger than the provided maximum payload
+ *        size during connection configuration when using the swc_connection_send method.
  *
  *  @note By default, fragmentation is disabled. Fragmentation compilation flag must be enabled to use this feature.
  *
@@ -739,20 +865,25 @@ void swc_connection_optimized_latency(const swc_connection_t *const conn, uint8_
  *  @param[out] err   Wireless Core error code.
  */
 void swc_connection_set_fragmentation(const swc_connection_t *const conn, swc_error_t *const err);
+
+/** @brief Get the connection frag enable state.
+ *
+ *  @param[in]  conn  SWC connection instance.
+ *  @param[out] err   Wireless Core error code.
+ *  @return bool True if the frag is enable false if not.
+ */
+bool swc_connection_get_fragmentation_enable_state(const swc_connection_t *const conn, swc_error_t *err);
 #endif
 
 /** @brief Enable/disable ACK exchange on target connection.
  *
- *  @note This need to be enable on both device (TX and RX) in order to have
- *        proper ACK exchange.
+ *  @note This need to be enable on both device (TX and RX) in order to have proper ACK exchange.
  *
- *  @note To send payload inside the ACK of a RX connection, configure a TX connection
- *        that share the same timeslot as the RX connection and make sure that the AUTO_TIMESLOT macro
- *        is used when defining the timeslot.
+ *  @note To send payload inside the ACK of a RX connection, configure a TX connection that share the same timeslot as
+ *        the RX connection and make sure that the AUTO_TIMESLOT macro is used when defining the timeslot.
  *
- *  @note To receive payload inside the ACK of TX connection, configure a RX connection
- *        that share the same timeslot as the TX connection and make sure that the AUTO_TIMESLOT macro
- *        is used when defining the timeslot.
+ *  @note To receive payload inside the ACK of TX connection, configure a RX connection that share the same timeslot as
+ *        the TX connection and make sure that the AUTO_TIMESLOT macro is used when defining the timeslot.
  *
  *  @note By default, a main timeslot has an acknowledge. An auto-reply never has an acknowledge.
  *
@@ -760,11 +891,11 @@ void swc_connection_set_fragmentation(const swc_connection_t *const conn, swc_er
  *  @param[in]  enabled  Whether or not ACK frames are sent (RX connection) or receive (TX connection).
  *  @param[out] err      Wireless Core error code.
  */
-void swc_connection_set_acknowledgement(const swc_connection_t *const conn, bool enabled, swc_error_t *const err);
+void swc_connection_set_acknowledgment(const swc_connection_t *const conn, bool enabled, swc_error_t *const err);
 
 /** @brief Enable/disable credit flow control on target connection.
  *
- *  @note This function must be called after swc_connection_set_acknowledgement.
+ *  @note This function must be called after swc_connection_set_acknowledgment.
  *
  *  @note By default, credit flow control is disabled.
  *
@@ -778,10 +909,9 @@ void swc_connection_set_credit_flow_ctrl(const swc_connection_t *const conn, boo
  *
  *  @note Setting `try_deadline` and `time_deadline` to 0 will result in a Guaranteed delivery transmission mode.
  *
- *  @note Do nothing if ACK is disabled using `swc_connection_set_acknowledgement`.
+ *  @note Do nothing if ACK is disabled using `swc_connection_set_acknowledgment`.
  *
- *  @note The time increment for the parameter `time_deadline` is in number of tick from the
- *        get_tick() hal function.
+ *  @note The time increment for the parameter `time_deadline` is in number of tick from the get_tick() hal function.
  *
  *  @note By default, the retransmission is set to 0, which means infinite retries (guaranteed delivery).
  *
@@ -810,10 +940,9 @@ swc_error_t swc_get_event_error(const swc_connection_t *const conn);
 
 /** @brief Set the percentage of allocated timeslots to use.
  *
- *  @note The throttling feature reduces the usable bandwidth in order to reduce power consumption.
- *        By default, the active ratio is set to 100%. For example. if a ratio of 50% is set, only
- *        1 timeslot out of 2 will be usable by the connection. The transceiver will stay asleep
- *        in unused timeslots.
+ *  @note The throttling feature reduces the usable bandwidth in order to reduce power consumption. By default, the
+ *        active ratio is set to 100%. For example. if a ratio of 50% is set, only 1 timeslot out of 2 will be usable by
+ *        the connection. The transceiver will stay asleep in unused timeslots.
  *
  *  @param[in]  conn          Connection handle.
  *  @param[in]  active_ratio  Percentage of the allocated timeslots to use, from 0 to 100.
@@ -821,6 +950,17 @@ swc_error_t swc_get_event_error(const swc_connection_t *const conn);
  */
 void swc_connection_set_throttling_active_ratio(const swc_connection_t *const conn, uint8_t active_ratio,
                                                 swc_error_t *const err);
+
+/** @brief Change the destination address of a remote node at runtime.
+ *
+ *  @note The address change is deferred via the request queue and applied between timeslots to avoid interfering with
+ *        ongoing transmissions. All connections associated with the remote node will be affected by this change.
+ *
+ *  @param[in]  current_address  Current 8-bit device address of the remote node.
+ *  @param[in]  new_address      New 8-bit device address to assign to the remote node.
+ *  @param[out] err              Wireless Core error code.
+ */
+void swc_set_remote_node_address(uint8_t current_address, uint8_t new_address, swc_error_t *const err);
 
 /** @brief Set the frame forward error correction (FEC) ratio for a connection.
  *
@@ -864,11 +1004,11 @@ void swc_connection_set_throttling(const swc_connection_t *const conn, swc_error
 
 /** @brief Enable connection priority on a connection.
  *
- *  @note The same priority is used for all the assigned slots of the connection.
- *        'priority' and 'slots_priority' cannot be used at the same time.
+ *  @note The same priority is used for all the assigned slots of the connection. 'priority' and 'slots_priority' cannot
+ *        be used at the same time.
  *
- *  @note The connection priority feature should be the last API call to configure the connection.
- *        Everything that is set after this call will result in an error.
+ *  @note The connection priority feature should be the last API call to configure the connection. Everything that is
+ *        set after this call will result in an error.
  *
  *  @note By default, there is no priority between the connections. The first connection added in a timeslot will always
  *        have the highest priority.
@@ -881,11 +1021,11 @@ void swc_connection_set_connection_priority(swc_connection_t *const conn, uint8_
 
 /** @brief Enable slots priority on a connection.
  *
- *  @note Priorities for the particular timeslots is used by the connection.
- *        'priority' and 'slots_priority' cannot be used at the same time.
+ *  @note Priorities for the particular timeslots is used by the connection. 'priority' and 'slots_priority' cannot be
+ *        used at the same time.
  *
- *  @note The slots priority feature should be the last API call to configure the connection.
- *        Everything that is set after this call will result in an error.
+ *  @note The slots priority feature should be the last API call to configure the connection. Everything that is set
+ *        after this call will result in an error.
  *
  *  @note By default, this type of priority is not used.
  *
@@ -918,11 +1058,9 @@ void swc_connection_set_concurrency_cfg(const swc_connection_t *const conn,
 void swc_connection_set_fallback_cfg(swc_connection_t *const conn, const swc_connection_fallback_cfg_t *const cfg,
                                      swc_error_t *const err);
 
-/** @brief Enable or disable sending of sync frame on syncing when the connection queue
- *         is not empty.
+/** @brief Enable or disable sending of sync frame on syncing when the connection queue is not empty.
  *
- *  @note This prevents the device from polluting the channel with full packet when
- *        unsync.
+ *  @note This prevents the device from polluting the channel with full packet when unsync.
  *
  *  @note This feature is enabled by default and disabled when doing certification.
  *
@@ -935,18 +1073,27 @@ void swc_connection_set_fallback_cfg(swc_connection_t *const conn, const swc_con
 void swc_connection_set_tx_sync_frame_on_syncing(const swc_connection_t *const conn, bool enabled,
                                                  swc_error_t *const err);
 
-/** @brief Set sleep level for each individual time slots.
+/** @brief Set sleep level for each individual time slot.
  *
- *  @note By default, the sleep level is IDLE.
+ *  @note By default (no sleep-level API call), all timeslots use ``SWC_SLEEP_IDLE``.
  *
- *  @param[in]  sleep_level  Sleep level table.
- *  @param[out] err          Wireless Core error code.
+ *  @note The sleep_level array must contain exactly one entry per timeslot in the configured schedule. The API
+ *        validates every entry before touching the schedule configuration; on failure the previous per-timeslot sleep
+ *        levels are left unchanged.
+ *
+ *  @param[in]  sleep_level  Sleep level table sized to match the configured schedule (one entry per timeslot). Each
+ *                           entry must be ``SWC_SLEEP_IDLE``, ``SWC_SLEEP_SHALLOW``, or ``SWC_SLEEP_DEEP``.
+ *  @param[out] err          Wireless Core error code:
+ *                           - ``SWC_ERR_NONE`` on success.
+ *                           - ``SWC_ERR_NULL_PTR`` if sleep_level is NULL.
+ *                           - ``SWC_ERR_INVALID_TIMESLOT_SLEEP_LEVEL`` if any entry is not a valid sleep level.
  */
 void swc_set_time_slots_sleep_level(const swc_sleep_level_t *const sleep_level, swc_error_t *const err);
 
 /** @brief Get a buffer from the connection queue.
  *
- *  This function allocates a buffer of the predefined maximum payload size, regardless of the current packet size.
+ *  @note This function allocates a buffer of the predefined maximum payload size, regardless of the current packet
+ *        size.
  *
  *  @param[in]  conn            Connection handle.
  *  @param[out] payload_buffer  Free payload buffer if available, NULL otherwise.
@@ -957,14 +1104,15 @@ void swc_connection_get_payload_buffer(const swc_connection_t *const conn, uint8
 
 /** @brief Allocate a buffer from the connection queue with required size.
  *
- *  This function treats the queue as a continuous memory block, allocating only the exact memory required for each
- *  packet. The pointer progresses within the queue's memory space as packets are allocated one after another. This
- *  behavior could allow an application to split its payload into multiple packets to reduce their size.
+ *  @note This function treats the queue as a continuous memory block, allocating only the exact memory required for
+ *        each packet. The pointer progresses within the queue's memory space as packets are allocated one after
+ *        another. This behavior could allow an application to split its payload into multiple packets to reduce their
+ *        size.
  *
- *  Since the pointer advances by variable sizes, the allocated memory might not be aligned to the max payload size.
- *  For example, if the queue is sized for two 64-byte packets but the first is 2 bytes and the second is 64 bytes,
- *  freeing the 2-byte packet only leaves space for 62 bytes due to the 2-byte offset of the second packet. The queue
- *  fails to allocate memory for the third packet even if total memory is available.
+ *  @note Since the pointer advances by variable sizes, the allocated memory might not be aligned to the max payload
+ *        size. For example, if the queue is sized for two 64-byte packets but the first is 2 bytes and the second is 64
+ *        bytes, freeing the 2-byte packet only leaves space for 62 bytes due to the 2-byte offset of the second packet.
+ *        The queue fails to allocate memory for the third packet even if total memory is available.
  *
  *  @param[in]  conn            Connection handle.
  *  @param[out] payload_buffer  Free payload buffer with required size if available, NULL otherwise.
@@ -975,6 +1123,12 @@ void swc_connection_allocate_payload_buffer(const swc_connection_t *const conn, 
                                             uint16_t payload_size, swc_error_t *const err);
 
 /** @brief Enqueue a payload buffer in the connection transmission queue.
+ *
+ *  @note The payload buffer can be allocated using swc_connection_get_payload_buffer or
+ *        swc_connection_allocate_payload_buffer.
+ *
+ *  @note The user can also pass a buffer from the user space memory. In this case, the SWC will copy the content of the
+ *        user buffer into the connection queue. The user space memory is thus freed once the function returns.
  *
  *  @param[in]  conn            Connection handle.
  *  @param[in]  payload_buffer  Buffer containing the payload to transmit.
@@ -1055,8 +1209,7 @@ void swc_connection_flush_queue(const swc_connection_t *conn, swc_error_t *err);
 
 /** @brief Wireless Core setup.
  *
- *  This is the last API call that needs to be made when initializing and
- *  configuring the Wireless Core.
+ *  @note This is the last API call that needs to be made when initializing and configuring the Wireless Core.
  *
  *  @param[out] err  Wireless Core error code.
  */
@@ -1070,8 +1223,7 @@ swc_status_t swc_get_status(void);
 
 /** @brief Start Wireless Core process.
  *
- *  This is called once the Wireless Core initialization and configuration
- *  is done (i.e., after swc_setup()).
+ *  @note This is called once the Wireless Core initialization and configuration is done (i.e., after swc_setup()).
  *
  *  @param[out] err  Wireless Core error code.
  */
@@ -1085,10 +1237,8 @@ void swc_disconnect(swc_error_t *const err);
 
 /** @brief Get information used when the fallback mode is enabled.
  *
- *  This is used by a node receiving data through a connection
- *  with fallback enabled. The information retrieved here must
- *  be sent back to the original sender usually through an
- *  auto-reply timeslot.
+ *  @note This is used by a node receiving data through a connection with fallback enabled. The information retrieved
+ *        here must be sent back to the original sender usually through an auto-reply timeslot.
  *
  *  @param[in]  conn  Connection handle.
  *  @param[out] err   Wireless Core error code.
@@ -1108,10 +1258,9 @@ void swc_free_memory(void);
 
 /** @brief Function to call to process the Wireless Core callback queue.
  *
- *  The callbacks are TX ACK, TX NACK and RX. It is suggested to configure
- *  a software interrupt (SWI) and put this function into its IRQ handler.
- *  The Wireless Core can then trigger it with a call to the context_switch()
- *  function from its HAL structure.
+ *  @note The callbacks are TX ACK, TX NACK and RX. It is suggested to configure a software interrupt (SWI) and put this
+ *        function into its IRQ handler. The Wireless Core can then trigger it with a call to the context_switch()
+ *        function from its HAL structure.
  */
 void swc_connection_callbacks_processing_handler(void);
 
@@ -1181,31 +1330,69 @@ void swc_radio2_spi_receive_complete_handler(void);
  */
 void swc_radio_synchronization_timer_callback(void);
 
-/** @brief Set the Multi-Radio selection mode to use.
+/** @brief Set the SWC Multi-Radio selection mode to use.
  *
- *  @note By default, MULTI_RADIO_SELECT_MODE_ALGO is used which enables automatic radio selection.
+ *  @note By default, SWC_MULTI_RADIO_SELECT_MODE_ALGO is used which enables automatic radio selection.
  *
- *  @param[in]  multi_radio_select_mode  Multi-Radio selection mode.
- *  @param[out] err                      Wireless Core error code.
+ *  @param[in]  swc_multi_radio_select_mode  SWC Multi-Radio selection mode.
+ *  @param[out] err                          Wireless Core error code.
  */
-void swc_set_multi_radio_select_mode(multi_radio_select_mode_t multi_radio_select_mode, swc_error_t *const err);
+void swc_set_multi_radio_select_mode(swc_multi_radio_select_mode_t swc_multi_radio_select_mode, swc_error_t *const err);
 
-/** @brief Get the Multi-Radio selection mode.
+/** @brief Get the SWC Multi-Radio selection mode.
  *
  *  @param[out] err  Wireless Core error code.
- *  @return Multi-Radio Selection mode.
+ *  @return SWC Multi-Radio Selection mode.
  */
-multi_radio_select_mode_t swc_get_multi_radio_select_mode(swc_error_t *const err);
+swc_multi_radio_select_mode_t swc_get_multi_radio_select_mode(swc_error_t *const err);
 #else
 #error "Number of radios must be either 1 or 2"
 #endif
 
 /** @brief Links the necessary functions to allow the wireless core interact with the radio(s).
  *
- *  @retval true  Link success.
- *  @retval false Link fail.
+ *  @retval true   Link success.
+ *  @retval false  Link fail.
  */
 bool swc_config_hardware_interface(void);
+
+/** @brief Get the maximum cca try count of a connection.
+ *
+ *  @param[in]  conn  Connection handle.
+ *  @param[out] err   Wireless Core error code.
+ *  @return CCA max try count.
+ */
+uint8_t swc_connection_get_cca_max_try(swc_connection_t *conn, swc_error_t *err);
+
+/** @brief Get the CCA fail action of a connection.
+ *
+ *  @param[in]  conn  SWC connection instance.
+ *  @param[out] err   Wireless Core error code.
+ *  @return The CCA fail action of the connection.
+ */
+swc_cca_fail_action_t swc_connection_get_cca_fail_action(const swc_connection_t *const conn, swc_error_t *err);
+
+/** @brief Check if the connection is a TX connection.
+ *
+ *  @param[in]  conn  SWC connection instance.
+ *  @param[out] err   Wireless Core error code.
+ *  @return bool True if the connection is a TX connection.
+ */
+bool swc_connection_is_tx(const swc_connection_t *const conn, swc_error_t *err);
+
+/** @brief Check if the connection is a RX connection.
+ *
+ *  @param[in]  conn  SWC connection instance.
+ *  @param[out] err   Wireless Core error code.
+ *  @return bool True if the connection is a RX connection.
+ */
+bool swc_connection_is_rx(const swc_connection_t *const conn, swc_error_t *err);
+
+/** @brief Return the swc_radio_handle_t struct size in bytes.
+ *
+ *  @return The swc_radio_handle_t struct size in bytes.
+ */
+size_t swc_get_radio_handle_size(void);
 
 #ifdef __cplusplus
 }

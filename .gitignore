@@ -1,10 +1,35 @@
-.micromamba/
+# Build output
 build/
+/build
 bin/
 dist/
+/app/usb_hid_host/build
+
+# Toolchain / environment
+.micromamba/
+/.micromamba
+/.environment
+/.pixi
+
+# Local-only
 /.claude
-/pyocd.yml
 /document
+
+# Object files
+*.o
+*.ko
+*.obj
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel module compile results
+*.mod*
+*.cmd
+.tmp_versions/
 
 # Python bytecode cache
 __pycache__/

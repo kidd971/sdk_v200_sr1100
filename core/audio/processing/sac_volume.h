@@ -71,23 +71,25 @@ void sac_volume_init(void *instance, const char *name, sac_pipeline_t *pipeline,
 
 /** @brief Process volume on each audio sample.
  *
- *  @param[in]  volume       Volume instance.
- *  @param[in]  header       Audio header.
- *  @param[in]  data_in      Data in to be processed.
- *  @param[in]  bytes_count  Number of bytes to process.
- *  @param[out] data_out     Processed samples out.
- *  @param[out] status       Status code.
- *  @return Number of samples processed. Return 0 if no samples processed.
+ *  @param[in]  instance  Volume instance.
+ *  @param[in]  pipeline  Pipeline instance.
+ *  @param[in]  header    Audio header.
+ *  @param[in]  data_in   Data in to be processed.
+ *  @param[in]  size      Size in bytes of the data to process.
+ *  @param[out] data_out  Processed samples out.
+ *  @param[out] status    Status code.
+ *  @return Number of bytes processed. Return 0 if no samples processed.
  */
 uint16_t sac_volume_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,
                             uint16_t size, uint8_t *data_out, sac_status_t *status);
 
 /** @brief Volume Control function.
  *
- *  @param[in]  volume  Volume instance.
- *  @param[in]  cmd     Control command.
- *  @param[in]  arg     Control argument.
- *  @param[out] status  Status code.
+ *  @param[in]  instance  Volume instance.
+ *  @param[in]  pipeline  Pipeline instance.
+ *  @param[in]  cmd       Control command.
+ *  @param[in]  arg       Control argument.
+ *  @param[out] status    Status code.
  *  @return Value returned dependent on command.
  */
 uint32_t sac_volume_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg, sac_status_t *status);

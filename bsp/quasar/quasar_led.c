@@ -93,7 +93,7 @@ static void led_deinit(quasar_led_peripherals_t led_peripheral)
 
 /** @brief Get the configuration of the LED peripheral.
  *
- *  All LEDs are controlled by software with inverted logic.
+ *  @note All LEDs are controlled by software with inverted logic.
  *
  *  @param[in] led_peripheral  Selected LED peripheral.
  *  @return The LED peripheral configuration.

@@ -322,11 +322,11 @@ static void timer_disable_clock(quasar_timer_selection_t timer_selection)
 
 /** @brief Calculate the maximum count and the prescaler based on the time period and the system clock.
  *
- *  Formula: update_event (Hz) = system_clock / ((prescaler + 1) * (max_count + 1))
+ *  @note Formula: update_event (Hz) = system_clock / ((prescaler + 1) * (max_count + 1))
  *
- *  @param[out] prescaler    Calculated prescaler value.
- *  @param[out] max_count    Calculated maximum count value.
- *  @param[in]  timer_config Configuration for the time base and time period.
+ *  @param[out] prescaler     Calculated prescaler value.
+ *  @param[out] max_count     Calculated maximum count value.
+ *  @param[in]  timer_config  Configuration for the time base and time period.
  */
 static void calculate_max_count_and_prescaler(uint16_t *prescaler, uint16_t *max_count,
                                               quasar_timer_config_t timer_config)
@@ -415,8 +415,8 @@ static IRQn_Type timer_get_selected_irq(quasar_timer_selection_t timer_selection
 /** @brief Configure the basic parameters of a timer.
  *
  *  @param[in]  timer_selection  Selected timer to configure parameters.
- *  @param[out] prescaler        Calculated prescaler value.
- *  @param[out] period           Calculated period value.
+ *  @param[out] prescaler        Prescaler value.
+ *  @param[out] max_count        Maximum count value.
  */
 static void timer_configure_basic_parameters(quasar_timer_selection_t timer_selection, uint16_t prescaler,
                                              uint16_t max_count)

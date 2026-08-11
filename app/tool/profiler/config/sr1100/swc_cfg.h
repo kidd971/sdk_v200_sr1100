@@ -19,26 +19,26 @@ extern "C" {
 #define TX_DATA_PULSE_WIDTH 6
 #define TX_DATA_PULSE_GAIN  1
 
-/* Sets the output power configuration for transmitting acknowledgement. */
+/* Sets the output power configuration for transmitting acknowledgment. */
 #define TX_ACK_PULSE_COUNT 1
 #define TX_ACK_PULSE_WIDTH 6
 #define TX_ACK_PULSE_GAIN  1
 
-/* Input power configuration */
+/* Input power configuration. */
 #define RX_ACK_PULSE_COUNT  1 /* Pulses configuration of received ACK frames */
 #define RX_DATA_PULSE_COUNT 1 /* Pulses configuration of received data frames */
 
-/* SWC queue size */
+/* SWC queue size. */
 #define SWC_QUEUE_SIZE 2
 
-/* Schedule configuration */
+/* Schedule configuration. */
 #define TIMESLOT_SIZE     1000
 #define SCHEDULE          {TIMESLOT_SIZE}
-#define TIMESLOTS         {MAIN_TIMESLOT(0)}
+#define TIMESLOTS         {SWC_MAIN_TIMESLOT(0)}
 
 #define BIDIR_SCHEDULE    {TIMESLOT_SIZE, TIMESLOT_SIZE}
-#define BIDIR_TIMESLOTS_0 {MAIN_TIMESLOT(0)}
-#define BIDIR_TIMESLOTS_1 {MAIN_TIMESLOT(1)}
+#define BIDIR_TIMESLOTS_0 {SWC_MAIN_TIMESLOT(0)}
+#define BIDIR_TIMESLOTS_1 {SWC_MAIN_TIMESLOT(1)}
 
 /* Channels */
 #define CHANNEL_FREQ     {163, 171, 179, 187, 195}

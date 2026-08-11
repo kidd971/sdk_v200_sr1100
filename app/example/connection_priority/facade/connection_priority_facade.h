@@ -29,11 +29,17 @@ extern "C" {
 /** @brief Certification modes.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
+    /*! Connection ID 0 certification mode. */
     FACADE_CERTIF_CONNECTION_ID_0,
+    /*! Connection ID 1 certification mode. */
     FACADE_CERTIF_CONNECTION_ID_1,
+    /*! Connection ID 2 certification mode. */
     FACADE_CERTIF_CONNECTION_ID_2,
+    /*! Connection ID 3 certification mode. */
     FACADE_CERTIF_CONNECTION_ID_3,
+    /*! Connection ID 4 certification mode. */
     FACADE_CERTIF_CONNECTION_ID_4,
 } facade_certification_mode_t;
 

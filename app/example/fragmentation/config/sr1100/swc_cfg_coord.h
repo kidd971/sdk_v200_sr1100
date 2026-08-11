@@ -10,13 +10,12 @@
 #define SWC_CFG_COORD_H_
 
 /* CONSTANTS ******************************************************************/
-
 /* Sets the output power configuration for transmitting data. */
 #define TX_DATA_PULSE_COUNT 1
 #define TX_DATA_PULSE_WIDTH 3
 #define TX_DATA_PULSE_GAIN  3
 
-/* Input power configuration */
+/* Input power configuration. */
 #define RX_AUTO_REPLY_PULSE_COUNT 1 /* Pulses configuration of received auto-reply frames */
 
 #endif /* SWC_CFG_COORD_H_ */

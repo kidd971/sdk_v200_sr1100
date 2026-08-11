@@ -25,8 +25,7 @@ typedef enum quasar_rgb_peripherals {
 
 /** @brief Structure for managing RGB LED.
  *
- *  This structure stores pointers to functions that set or clear the
- *  LED depending to the desired color.
+ *  @note This structure stores pointers to functions that set or clear the LED depending to the desired color.
  */
 typedef struct rgb_status {
     /*! Allow storing whether the RGB is turned off or on. */
@@ -164,6 +163,10 @@ static void rgb_deinit(quasar_rgb_peripherals_t rgb_peripheral)
     quasar_gpio_deinit(rgb_config.port, rgb_config.pin);
 }
 
+/** @brief Set the selected RGB peripheral.
+ *
+ *  @param[in] rgb_peripheral  Selected RGB peripheral.
+ */
 static void rgb_set(quasar_rgb_peripherals_t rgb_peripheral)
 {
     quasar_gpio_config_t rgb_config = rgb_get_config(rgb_peripheral);
@@ -171,6 +174,10 @@ static void rgb_set(quasar_rgb_peripherals_t rgb_peripheral)
     quasar_gpio_clear(rgb_config.port, rgb_config.pin);
 }
 
+/** @brief Clear the selected RGB peripheral.
+ *
+ *  @param[in] rgb_peripheral  Selected RGB peripheral.
+ */
 static void rgb_clear(quasar_rgb_peripherals_t rgb_peripheral)
 {
     quasar_gpio_config_t rgb_config = rgb_get_config(rgb_peripheral);
@@ -180,7 +187,7 @@ static void rgb_clear(quasar_rgb_peripherals_t rgb_peripheral)
 
 /** @brief Get the configuration of the RGB peripheral.
  *
- *  All RGBs are controled by software with inverted logic.
+ *  @note All RGBs are controlled by software with inverted logic.
  *
  *  @param[in] rgb_peripheral  Selected RGB peripheral.
  *  @return The RGB peripheral configuration.

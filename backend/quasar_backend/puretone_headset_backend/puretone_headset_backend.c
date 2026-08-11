@@ -90,7 +90,9 @@
 /** @brief Structure tracking a button's state.
  */
 typedef struct button_handle {
+    /*! The ID of the button. */
     quasar_button_selection_t button_id;
+    /*! Indicates whether the button is active. */
     bool active;
 } button_handle_t;
 
@@ -105,7 +107,7 @@ void facade_i2s_backend_track_mux(quasar_i2s_mux_select_t select);
 static facade_button_callbacks_t local_button_callbacks;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-facade_certification_mode_t facade_coord_get_certification_mode(void)
+facade_certification_mode_t facade_get_coord_certification_mode(void)
 {
 #ifdef CERTIF_FORCE_MODE
     /* ST-Link-only cert bench: boot straight into a fixed certification mode without
@@ -123,7 +125,7 @@ facade_certification_mode_t facade_coord_get_certification_mode(void)
 
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* Button held for less than 1 delay period.
-         * -> Entering in audio 96k 24 bit certification mode.
+         * -> Entering in audio 96kHz 24-bit certification mode.
          */
         return FACADE_CERTIF_AUDIO_96k_24_BIT;
     }
@@ -133,7 +135,7 @@ facade_certification_mode_t facade_coord_get_certification_mode(void)
 
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* Button held for less than 2 delay periods.
-         * -> Entering in audio 48k 24 bit certification mode.
+         * -> Entering in audio 48kHz 24-bit certification mode.
          */
         return FACADE_CERTIF_AUDIO_48k_24_BIT;
     }
@@ -143,7 +145,7 @@ facade_certification_mode_t facade_coord_get_certification_mode(void)
 
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* Button held for less than 3 delay periods.
-         * -> Entering in audio 48k 16 bit certification mode.
+         * -> Entering in audio 48kHz 16-bit certification mode.
          */
         return FACADE_CERTIF_AUDIO_48k_16_BIT;
     }
@@ -153,7 +155,7 @@ facade_certification_mode_t facade_coord_get_certification_mode(void)
 
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* Button held for less than 4 delay periods.
-         * -> Entering in audio 48k ADPCM certification mode.
+         * -> Entering in audio 48kHz ADPCM certification mode.
          */
         return FACADE_CERTIF_AUDIO_48k_ADPCM;
     }
@@ -162,10 +164,11 @@ facade_certification_mode_t facade_coord_get_certification_mode(void)
      * -> Entering in data certification mode.
      */
     led1_blink(LED_BLINK_CERTIFICATION_MODE_5);
+
     return FACADE_CERTIF_DATA;
 }
 
-facade_certification_mode_t facade_node_get_certification_mode(void)
+facade_certification_mode_t facade_get_node_certification_mode(void)
 {
 #ifdef CERTIF_FORCE_MODE
     /* ST-Link-only cert bench: boot straight into a fixed certification mode without
@@ -183,7 +186,7 @@ facade_certification_mode_t facade_node_get_certification_mode(void)
 
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* Button held for less than 1 delay period.
-         * -> Entering in audio 48k 16 bit certification mode.
+         * -> Entering in audio 48kHz 16-bit certification mode.
          */
         return FACADE_CERTIF_AUDIO_48k_16_BIT;
     }
@@ -227,6 +230,9 @@ void facade_tx_audio_conn_status(void)
 {
     static uint32_t count;
 
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     if (++count >= CONN_STATUS_LED_TOGGLE_DIVIDER) {
         count = 0;
         quasar_led_toggle(QUASAR_LED_USER_1);
@@ -241,6 +247,9 @@ void facade_rx_audio_conn_status(void)
 {
     static uint32_t count;
 
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     if (++count >= CONN_STATUS_LED_TOGGLE_DIVIDER) {
         count = 0;
         quasar_led_toggle(QUASAR_LED_USER_2);
@@ -335,11 +344,17 @@ void facade_data_timer_stop(void)
 
 void facade_empty_payload_received_status(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     quasar_led_clear(QUASAR_LED_USER_4);
 }
 
 void facade_payload_received_status(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     quasar_led_set(QUASAR_LED_USER_4);
 }
 
@@ -350,6 +365,9 @@ bool facade_read_button_state(void)
 
 void facade_notify_pairing_successful(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
 #ifdef QUASAR_U535
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
 #else
@@ -744,7 +762,7 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
     } else {
         /* If the button is active (pressed), do nothing for now, it remains pressed. */
         if (!quasar_button_read_state(button_handle->button_id)) {
-            /* The button is released, desactivate the button. */
+            /* The button is released, deactivate the button. */
             button_handle->active = false;
         }
     }

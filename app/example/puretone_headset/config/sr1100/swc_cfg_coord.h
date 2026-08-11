@@ -27,7 +27,7 @@
         2,                  \
     }
 
-/* Sets the output power configuration for transmitting data and acknowledgement. */
+/* Sets the output power configuration for transmitting data and acknowledgment. */
 #define TX_DATA_PULSE_WIDTH \
     {                       \
         6,                  \
@@ -44,7 +44,7 @@
         0,                 \
     }
 
-/* Sets the output power configuration for transmitting acknowledgement data. */
+/* Sets the output power configuration for transmitting acknowledgment data. */
 #define TX_DATA_ACK_PULSE_WIDTH \
     {                           \
         6,                      \
@@ -61,7 +61,7 @@
         0,                     \
     }
 
-/* Sets the output power configuration for transmitting acknowledgement data. */
+/* Sets the output power configuration for transmitting acknowledgment data. */
 #define TX_ACK_PULSE_WIDTH \
     {                      \
         5,                 \

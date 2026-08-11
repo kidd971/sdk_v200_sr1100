@@ -17,11 +17,17 @@ extern "C" {
 #endif
 
 /* TYPES **********************************************************************/
+/** @brief Packing command enumeration.
+ */
 typedef enum sac_packing_cmd {
+    /*! Set packing mode. */
     SAC_PACKING_SET_MODE,
+    /*! Get packing mode. */
     SAC_PACKING_GET_MODE
 } sac_packing_cmd_t;
 
+/** @brief Packing mode enumeration.
+ */
 typedef enum sac_packing_mode {
     /*! Packing 32-bit words containing 18-bit audio samples into 18-bit audio samples. */
     SAC_PACK_18BITS,
@@ -65,7 +71,10 @@ typedef enum sac_packing_mode {
     SAC_EXTEND_24BITS,
 } sac_packing_mode_t;
 
+/** @brief Packing instance structure.
+ */
 typedef struct sac_packing_instance {
+    /*! Packing mode. */
     sac_packing_mode_t packing_mode;
 } sac_packing_instance_t;
 
@@ -86,9 +95,8 @@ void sac_packing_init(void *instance, const char *name, sac_pipeline_t *pipeline
  *  @param[in]  instance  Packing instance.
  *  @param[in]  pipeline  Pipeline instance.
  *  @param[in]  cmd       Command.
- *  @param[in]  args      Argument.
+ *  @param[in]  arg       Argument.
  *  @param[out] status    Status code.
- *
  *  @return Command specific value.
  */
 uint32_t sac_packing_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg, sac_status_t *status);
@@ -102,7 +110,6 @@ uint32_t sac_packing_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd,
  *  @param[in]  size      Size in bytes of the audio payload.
  *  @param[out] data_out  Audio payload that has been processed.
  *  @param[out] status    Status code.
- *
  *  @return Size in bytes of the processed samples, 0 if no processing happened.
  */
 uint16_t sac_packing_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,

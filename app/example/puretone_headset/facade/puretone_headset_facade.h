@@ -30,11 +30,17 @@ extern "C" {
 /** @brief Certification modes.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
+    /*! Audio 96kHz 24-bit certification mode. */
     FACADE_CERTIF_AUDIO_96k_24_BIT,
+    /*! Audio 48kHz 24-bit certification mode. */
     FACADE_CERTIF_AUDIO_48k_24_BIT,
+    /*! Audio 48kHz 16-bit certification mode. */
     FACADE_CERTIF_AUDIO_48k_16_BIT,
+    /*! Audio 48kHz ADPCM certification mode. */
     FACADE_CERTIF_AUDIO_48k_ADPCM,
+    /*! Data certification mode. */
     FACADE_CERTIF_DATA,
 } facade_certification_mode_t;
 
@@ -139,13 +145,13 @@ void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_cal
  *
  *  @return The certification mode to be applied.
  */
-facade_certification_mode_t facade_coord_get_certification_mode(void);
+facade_certification_mode_t facade_get_coord_certification_mode(void);
 
 /** @brief Read Node's button state to define if certification mode is required.
  *
  *  @return The certification mode to be applied.
  */
-facade_certification_mode_t facade_node_get_certification_mode(void);
+facade_certification_mode_t facade_get_node_certification_mode(void);
 
 /** @brief Set button function callbacks.
  *

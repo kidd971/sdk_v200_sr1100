@@ -20,6 +20,12 @@
 /* CONSTANTS ******************************************************************/
 #define ERROR_MESSAGE_BUFFER_SIZE 50
 
+/* PRIVATE FUNCTION PROTOTYPES ************************************************/
+static void led_all_off(void);
+
+/* PRIVATE GLOBALS ************************************************************/
+static bool certification_mode_active;
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 __attribute__((weak)) void facade_context_switch_trigger(void)
 {
@@ -57,11 +63,17 @@ __attribute__((weak)) void facade_board_init(void)
 
 __attribute__((weak)) void facade_tx_conn_status(void)
 {
+    if (certification_mode_active) {
+        return;
+    }
     quasar_led_toggle(QUASAR_LED_USER_1);
 }
 
 __attribute__((weak)) void facade_rx_conn_status(void)
 {
+    if (certification_mode_active) {
+        return;
+    }
     quasar_led_toggle(QUASAR_LED_USER_2);
 }
 
@@ -76,6 +88,11 @@ __attribute__((weak)) void facade_print_string(char *string)
         tud_cdc_write_str(string);
         tud_cdc_write_flush();
     }
+}
+
+__attribute__((weak)) bool facade_is_usb_connected(void)
+{
+    return tud_cdc_connected();
 }
 
 __attribute__((weak)) void facade_print_error_string(char *string)
@@ -122,8 +139,28 @@ __attribute__((weak)) void facade_notify_not_paired(void)
 
 __attribute__((weak)) void facade_notify_pairing_successful(void)
 {
+    if (certification_mode_active) {
+        return;
+    }
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
     quasar_rgb_set();
+}
+
+__attribute__((weak)) void facade_notify_certification_mode(void)
+{
+    certification_mode_active = true;
+
+    /* Steady yellow RGB indicates the application is running in certification mode. All activity status LEDs are
+     * turned off and suppressed so the certification indicator stays unambiguous.
+     */
+    led_all_off();
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_YELLOW);
+    quasar_rgb_set();
+}
+
+__attribute__((weak)) bool facade_is_certification_mode_active(void)
+{
+    return certification_mode_active;
 }
 
 __attribute__((weak)) void facade_led_all_off(void)
@@ -142,6 +179,17 @@ __attribute__((weak)) uint32_t facade_get_tick_ms(void)
 __attribute__((weak)) void facade_wait_for_interrupt(void)
 {
     __WFI();
+}
+
+/* PRIVATE FUNCTIONS **********************************************************/
+/** @brief Turn off all LEDs.
+ */
+static void led_all_off(void)
+{
+    quasar_led_clear(QUASAR_LED_USER_1);
+    quasar_led_clear(QUASAR_LED_USER_2);
+    quasar_led_clear(QUASAR_LED_USER_3);
+    quasar_led_clear(QUASAR_LED_USER_4);
 }
 
 void quasar_bsp_error_handler(quasar_bsp_status_t quasar_err)

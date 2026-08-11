@@ -106,17 +106,15 @@ void sac_cdc_init(void *instance, const char *name, sac_pipeline_t *pipeline, me
  *  @param[in]  instance  CDC instance.
  *  @param[in]  pipeline  Pipeline instance.
  *  @param[in]  cmd       Command.
- *  @param[in]  args      Argument.
+ *  @param[in]  arg       Argument.
  *  @param[out] status    Status code.
- *
  *  @return Command specific value.
  */
 uint32_t sac_cdc_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg, sac_status_t *status);
 
 /** @brief Process the CDC processing state.
  *
- *  This uses interpolation (resampling) in order to create or drop a sample
- *  to correct the audio clock drift.
+ *  @note This uses interpolation (resampling) in order to create or drop a sample to correct the audio clock drift.
  *
  *  @param[in]  instance  CDC instance.
  *  @param[in]  pipeline  Pipeline instance.
@@ -125,7 +123,6 @@ uint32_t sac_cdc_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uin
  *  @param[in]  size      Size in bytes of the audio payload.
  *  @param[out] data_out  Audio payload that has been processed.
  *  @param[out] status    Status code.
- *
  *  @return Size in bytes of the processed samples, 0 if no processing happened.
  */
 uint16_t sac_cdc_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,
@@ -139,7 +136,7 @@ uint16_t sac_cdc_process(void *instance, sac_pipeline_t *pipeline, sac_header_t 
  *  @param[out] status  Status code.
  *  @return The formatted string length, excluding the NULL terminator.
  */
-int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status);
+int sac_cdc_format_stats(const sac_cdc_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status);
 
 /** @brief Calculate the queue average size to support max_drift_ppm.
  *
@@ -147,7 +144,7 @@ int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size, s
  *  @param[in] sample_rate        Sample rate at which CDC will be processed.
  *  @param[in] sample_count       Number of samples per payload processed by the CDC.
  *  @param[in] resampling_length  Total number of sample over which the resampling algorithm is executed.
- *  @return
+ *  @return The queue average size to support max_drift_ppm.
  */
 uint32_t sac_cdc_calculate_queue_average_size(uint8_t max_drift_ppm, uint32_t sample_rate, uint32_t sample_count,
                                               uint32_t resampling_length);

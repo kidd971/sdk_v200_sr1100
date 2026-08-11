@@ -85,7 +85,7 @@ typedef enum quasar_irq_priority {
     QUASAR_IRQ_PRIORITY_14 = 14,
     /*! Interrupt request priority 15 (lowest priority). */
     QUASAR_IRQ_PRIORITY_15 = 15,
-    /*! Disable interrupt */
+    /*! Disable interrupt. */
     QUASAR_IRQ_PRIORITY_NONE = 0xFFFF,
 } quasar_irq_priority_t;
 
@@ -278,15 +278,15 @@ void quasar_it_set_timer17_callback(void (*irq_callback)(void));
 
 /** @brief Enter a critical section by disabling interrupts.
  *
- *  This function is used to ensure atomic operations by preventing
- *  interrupts from occurring. Always pair with "quasar_it_exit_critical".
+ *  @note This function is used to ensure atomic operations by preventing interrupts from occurring. Always pair with
+ *        "quasar_it_exit_critical".
  */
 void quasar_it_enter_critical(void);
 
 /** @brief Exit a critical section by re-enabling interrupts.
  *
- *  This function re-enables the interrupts after a critical section.
- *  It should always be used in pair with "quasar_it_enter_critical".
+ *  @note This function re-enables the interrupts after a critical section. It should always be used in pair with
+ *        "quasar_it_enter_critical".
  */
 void quasar_it_exit_critical(void);
 

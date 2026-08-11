@@ -30,7 +30,9 @@ extern "C" {
 /** @brief Certification modes.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
+    /*! Fragmentation certification mode. */
     FACADE_CERTIF_FRAGMENTATION,
 } facade_certification_mode_t;
 

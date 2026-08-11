@@ -22,11 +22,11 @@ extern "C" {
 /* TYPES **********************************************************************/
 /** @brief List of all available clock sources for the I2C instances.
  *
- *  @note From the reference manual.
- *      - `0b00` : PCLK1    -> set 0
- *      - `0b01` : SYSCLK   -> set 1
- *      - `0b10` : HSI16    -> set 2
- *      - `0b11` : MSIK     -> set 3
+ *  @note From the reference manual:
+ *        - `0b00` : PCLK1    -> set 0
+ *        - `0b01` : SYSCLK   -> set 1
+ *        - `0b10` : HSI16    -> set 2
+ *        - `0b11` : MSIK     -> set 3
  */
 typedef enum quasar_i2c_clk_source {
     /*! Select PCLK1 as clock source. */
@@ -39,8 +39,7 @@ typedef enum quasar_i2c_clk_source {
     QUASAR_I2C_CLK_SOURCE_MSIK = 3,
 } quasar_i2c_clk_source_t;
 
-/** @brief List of all available I2C instances and used as an index into Quasar
- *         FIFO buffer array.
+/** @brief List of all available I2C instances and used as an index into Quasar FIFO buffer array.
  */
 typedef enum quasar_i2c_selection {
     /*! Select I2C1 instance. */

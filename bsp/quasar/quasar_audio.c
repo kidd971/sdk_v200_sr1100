@@ -57,7 +57,7 @@ DMA_HandleTypeDef hdma_sai_tx = {
     .Init.BlkHWRequest = DMA_BREQ_SINGLE_BURST,
     .Init.Direction = DMA_MEMORY_TO_PERIPH,
     .Init.SrcInc = DMA_SINC_INCREMENTED, /* Memory */
-    .Init.DestInc = DMA_DINC_FIXED,      /* SAI periph */
+    .Init.DestInc = DMA_DINC_FIXED,      /* SAI periph. */
     .Init.SrcDataWidth = DMA_SRC_DATAWIDTH_HALFWORD,
     .Init.DestDataWidth = DMA_DEST_DATAWIDTH_HALFWORD,
     .Init.Priority = DMA_HIGH_PRIORITY,
@@ -72,7 +72,7 @@ DMA_HandleTypeDef hdma_sai_rx = {
     .Init.Request = GPDMA1_REQUEST_SAI1_B,
     .Init.BlkHWRequest = DMA_BREQ_SINGLE_BURST,
     .Init.Direction = DMA_PERIPH_TO_MEMORY,
-    .Init.SrcInc = DMA_SINC_FIXED,        /* SAI periph */
+    .Init.SrcInc = DMA_SINC_FIXED,        /* SAI periph. */
     .Init.DestInc = DMA_DINC_INCREMENTED, /* Memory */
     .Init.SrcDataWidth = DMA_SRC_DATAWIDTH_HALFWORD,
     .Init.DestDataWidth = DMA_DEST_DATAWIDTH_HALFWORD,
@@ -84,12 +84,18 @@ DMA_HandleTypeDef hdma_sai_rx = {
     .Init.Mode = DMA_NORMAL,
 };
 
-/* Enables retrieval of all the necessary GPIOs for the audio SAI during initialization and deinitialization. */
+/** @brief Enables retrieval of all the necessary GPIOs for the audio SAI during initialization and deinitialization.
+ */
 typedef struct audio_sai_gpios_config {
+    /*! MCLK GPIO configuration. */
     quasar_gpio_config_t gpio_mclk_config;
+    /*! SCK GPIO configuration. */
     quasar_gpio_config_t gpio_sck_config;
+    /*! FS GPIO configuration. */
     quasar_gpio_config_t gpio_fs_config;
+    /*! SDA GPIO configuration. */
     quasar_gpio_config_t gpio_sda_config;
+    /*! SDB GPIO configuration. */
     quasar_gpio_config_t gpio_sdb_config;
 } audio_sai_gpios_config_t;
 
@@ -190,7 +196,7 @@ void quasar_audio_init_sai(quasar_sai_config_t sai_config, quasar_bsp_status_t *
      * 32-bit words by the DMA. Data will be padded with zeros.
      */
     if (sai_config.sai_bit_depth != QUASAR_SAI_BIT_DEPTH_16BITS) {
-        /* If not aligned on half word, align on word */
+        /* If not aligned on half word, align on word. */
         hdma_sai_tx.Init.SrcDataWidth = DMA_SRC_DATAWIDTH_WORD;
         hdma_sai_tx.Init.DestDataWidth = DMA_DEST_DATAWIDTH_WORD;
         hdma_sai_rx.Init.SrcDataWidth = DMA_SRC_DATAWIDTH_WORD;
@@ -330,10 +336,10 @@ void quasar_audio_sai_write_non_blocking(uint8_t *data, uint16_t size)
 
     sai_dma_start_it(&hdma_sai_tx, (uint32_t)data, (uint32_t)&hsai_tx.Instance->DR, size);
 
-    /* Enable SAI DMA Request */
+    /* Enable SAI DMA Request. */
     hsai_tx.Instance->CR1 |= SAI_xCR1_DMAEN;
 
-    /* Enable SAI peripheral */
+    /* Enable SAI peripheral. */
     __HAL_SAI_ENABLE(&hsai_tx);
 }
 
@@ -357,10 +363,10 @@ void quasar_audio_sai_read_non_blocking(uint8_t *data, uint16_t size)
 
     sai_dma_start_it(&hdma_sai_rx, (uint32_t)&hsai_rx.Instance->DR, (uint32_t)data, size);
 
-    /* Enable SAI DMA Request */
+    /* Enable SAI DMA Request. */
     hsai_rx.Instance->CR1 |= SAI_xCR1_DMAEN;
 
-    /* Enable SAI peripheral */
+    /* Enable SAI peripheral. */
     __HAL_SAI_ENABLE(&hsai_rx);
 }
 
@@ -405,9 +411,10 @@ void quasar_audio_sai_stop_read_non_blocking(void)
 /* PRIVATE FUNCTIONS **********************************************************/
 /** @brief Initialize the SAI clock.
  *
- *  The HSE is at 16 MHz. The clock source of SAI peripheral is PLL2 of the
- *  clock tree, and in order to achieve a frequency of 12.288 MHz for the codec,
- *  a PLL fractional multiplier is used.
+ *  @note The HSE is at 16 MHz. The clock source of SAI peripheral is PLL2 of the clock tree, and in order to achieve a
+ *        frequency of 12.288 MHz for the codec, a PLL fractional multiplier is used.
+ *
+ *  @param[out] err  Pointer to the error variable.
  */
 static void audio_init_sai_clocks(quasar_bsp_status_t *err)
 {
@@ -477,7 +484,9 @@ static void audio_deinit_sai_nvic(void)
 
 /** @brief Initialize the DMA controller for the SAI peripheral.
  *
- *  Initialize the SAI into Master Tx and Master Rx.
+ *  @note Initialize the SAI into Master Tx and Master Rx.
+ *
+ *  @param[out] err  Pointer to the error variable.
  */
 static void audio_init_sai_dma(quasar_bsp_status_t *err)
 {
@@ -492,7 +501,9 @@ static void audio_init_sai_dma(quasar_bsp_status_t *err)
 
 /** @brief Deinitialize the DMA controller for the SAI peripheral.
  *
- *  Initialize the SAI into Master Tx and Master Rx.
+ *  @note Initialize the SAI into Master Tx and Master Rx.
+ *
+ *  @param[out] err  Pointer to the error variable.
  */
 static void audio_deinit_sai_dma(quasar_bsp_status_t *err)
 {
@@ -506,50 +517,54 @@ static void audio_deinit_sai_dma(quasar_bsp_status_t *err)
 
 /** @brief Start the DMA transfer to or from the SAI peripheral.
  *
- *  @param[in] hdma              Pointer of the DMA_handler of the SAI.
- *  @param[in] source_addr       The source memory Buffer address
- *  @param[in] destination_addr  The destination memory Buffer address
+ *  @param[in] hdma              Pointer to the DMA handler of the SAI.
+ *  @param[in] source_addr       The source memory Buffer address.
+ *  @param[in] destination_addr  The destination memory Buffer address.
  *  @param[in] size              The number of bytes to transfer.
  */
 static void sai_dma_start_it(DMA_HandleTypeDef *hdma, uint32_t source_addr, uint32_t destination_addr, uint32_t size)
 {
-    /* Disable the peripheral */
+    /* Disable the peripheral. */
     __HAL_DMA_DISABLE(hdma);
 
-    /* Configure DMA Channel data length */
+    /* Configure DMA Channel data length. */
     MODIFY_REG(hdma->Instance->CBR1, DMA_CBR1_BNDT, (size & DMA_CBR1_BNDT));
 
-    /* Clear all interrupt flags */
+    /* Clear all interrupt flags. */
     __HAL_DMA_CLEAR_FLAG(hdma, DMA_FLAG_TC | DMA_FLAG_HT | DMA_FLAG_DTE | DMA_FLAG_ULE | DMA_FLAG_USE | DMA_FLAG_SUSP |
                                    DMA_FLAG_TO);
 
-    /* Configure DMA Channel destination address */
+    /* Configure DMA Channel destination address. */
     hdma->Instance->CDAR = destination_addr;
 
-    /* Configure DMA Channel source address */
+    /* Configure DMA Channel source address. */
     hdma->Instance->CSAR = source_addr;
 
-    /* Enable the Half transfer complete interrupt as well */
+    /* Enable the Half transfer complete interrupt as well. */
     __HAL_DMA_ENABLE_IT(hdma, DMA_IT_TC);
 
-    /* Enable the Peripheral */
+    /* Enable the Peripheral. */
     __HAL_DMA_ENABLE(hdma);
 }
 
 /** @brief SAI DMA TX complete callback implementation.
+ *
+ *  @param[in] hdma  Pointer to the DMA handler of the SAI.
  */
 static void sai_dma_tx_complete_callback(DMA_HandleTypeDef *hdma)
 {
-    /* Disable SAI Tx DMA Request */
+    /* Disable SAI Tx DMA Request. */
     hdma->Instance->CCR &= (uint32_t)(~SAI_xCR1_DMAEN);
     sai_dma_tx_irq_callback();
 }
 
 /** @brief SAI DMA RX complete callback implementation.
+ *
+ *  @param[in] hdma  Pointer to the DMA handler of the SAI RX.
  */
 static void sai_dma_rx_complete_callback(DMA_HandleTypeDef *hdma)
 {
-    /* Disable SAI Rx DMA Request */
+    /* Disable SAI Rx DMA Request. */
     hdma->Instance->CCR &= (uint32_t)(~SAI_xCR1_DMAEN);
     sai_dma_rx_irq_callback();
 }
@@ -647,6 +662,7 @@ static audio_sai_gpios_config_t audio_get_sai_gpios_config(void)
         .gpio_sda_config = gpio_sda_config,
         .gpio_sdb_config = gpio_sdb_config,
     };
+
     return sai_gpios_config;
 }
 

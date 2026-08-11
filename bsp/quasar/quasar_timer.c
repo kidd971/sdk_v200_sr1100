@@ -114,7 +114,7 @@ uint32_t quasar_timer_multi_radio_get_freq_hz(void)
     clock_frequency = quasar_clock_get_system_clock_freq();
     prescaler = quasar_timer_get_prescaler(QUASAR_DEF_TIMER_SELECTION_MULTI_RADIO);
 
-    return (clock_frequency / prescaler);
+    return clock_frequency / prescaler;
 }
 
 void quasar_timer_multi_radio_start(void)
@@ -137,14 +137,14 @@ static void free_running_timer_ms_tick_callback(void)
 
 /* ST HAL WEAK FUNCTIONS IMPLEMENTATION ***************************************/
 /** @brief This function configures the TIM2 as a time base source.
- *         The time source is configured to have 1ms time base with a dedicated
- *         Tick interrupt priority.
  *
- *  @note This function is called automatically at the beginning of program after
- *        reset by HAL_Init() or at any time when clock is configured, by HAL_RCC_ClockConfig().
+ *  @note The time source is configured to have 1ms time base with a dedicated Tick interrupt priority.
+ *
+ *  @note This function is called automatically at the beginning of program after reset by HAL_Init() or at any time
+ *        when clock is configured, by HAL_RCC_ClockConfig().
  *
  *  @param[in] TickPriority  Tick interrupt priority.
- *  @retval HAL status.
+ *  @return HAL status.
  */
 HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 {
@@ -161,7 +161,7 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
  */
 void HAL_SuspendTick(void)
 {
-    /* Disable TIM2 update Interrupt */
+    /* Disable TIM2 update Interrupt. */
     quasar_timer_disable_interrupt(QUASAR_DEF_TIMER_SELECTION_BLOCKING_DELAY);
 }
 

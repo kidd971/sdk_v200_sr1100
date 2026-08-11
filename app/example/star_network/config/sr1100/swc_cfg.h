@@ -10,15 +10,15 @@
 #define SWC_CFG_H_
 
 /* CONSTANTS ******************************************************************/
-/* SWC queue size */
+/* SWC queue size. */
 #define SWC_QUEUE_SIZE 2
 
-/* Schedule configuration */
+/* Schedule configuration. */
 #define SCHEDULE                {250, 250, 250, 250}
-#define TX_TO_NODE1_TIMESLOTS   {MAIN_TIMESLOT(0)}
-#define RX_FROM_NODE1_TIMESLOTS {MAIN_TIMESLOT(1)}
-#define TX_TO_NODE2_TIMESLOTS   {MAIN_TIMESLOT(2)}
-#define RX_FROM_NODE2_TIMESLOTS {MAIN_TIMESLOT(3)}
+#define TX_TO_NODE1_TIMESLOTS   {SWC_MAIN_TIMESLOT(0)}
+#define RX_FROM_NODE1_TIMESLOTS {SWC_MAIN_TIMESLOT(1)}
+#define TX_TO_NODE2_TIMESLOTS   {SWC_MAIN_TIMESLOT(2)}
+#define RX_FROM_NODE2_TIMESLOTS {SWC_MAIN_TIMESLOT(3)}
 
 /* Channels */
 #define CHANNEL_FREQ     {163, 171, 179, 187, 195}

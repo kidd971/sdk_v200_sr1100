@@ -45,9 +45,9 @@ typedef struct sac_fallback_process {
 /** @brief The audio fallback mode instance.
  */
 typedef struct sac_fallback_mode {
-    /* Name of the mode. */
+    /*! Name of the mode. */
     const char *name;
-    /* Whether the mode is active or inactive. (This affect only automatic fallback mode). */
+    /*! Whether the mode is active or inactive. (This affect only automatic fallback mode). */
     bool is_active;
     /*! Fallback mode configuration. */
     sac_fallback_mode_cfg_t cfg;
@@ -160,6 +160,7 @@ uint8_t sac_fallback_add_mode(sac_fallback_instance_t *instance, const char *nam
                               sac_status_t *status)
 {
     *status = SAC_OK;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(name == NULL, status, SAC_ERR_NULL_PTR, return 0);
@@ -206,7 +207,9 @@ uint8_t sac_fallback_add_mode(sac_fallback_instance_t *instance, const char *nam
             mode->cca.trigger_bad_count_threshold = 1;
         }
 
-        uint8_t max_try_count = instance->connection->wps_conn_handle->cca.max_try_count;
+        uint8_t max_try_count = swc_connection_get_cca_max_try(instance->connection, &swc_err);
+
+        SAC_CHECK_STATUS(swc_err == SWC_ERR_NULL_PTR, status, SAC_ERR_NULL_PTR, return 0);
 
         mode->cca.recovery_fail_count_threshold = max_try_count * cfg.cca_good_fail_count_threshold_perc;
         mode->cca.trigger_fail_count_threshold = max_try_count * cfg.cca_bad_fail_count_threshold_perc;
@@ -283,6 +286,8 @@ bool sac_fallback_mode_get_active_state(sac_fallback_instance_t *instance, uint8
 {
     sac_fallback_mode_t *mode = NULL;
 
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return false);
     SAC_CHECK_STATUS(instance->_internal.current_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return false);
     SAC_CHECK_STATUS(mode_index >= instance->_internal.mode_count, status, SAC_ERR_FALLBACK_MODE_COUNT, return false);
@@ -297,6 +302,8 @@ void sac_fallback_mode_set_active_state(sac_fallback_instance_t *instance, uint8
                                         sac_status_t *status)
 {
     sac_fallback_mode_t *mode = NULL;
+
+    *status = SAC_OK;
 
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return);
     SAC_CHECK_STATUS(instance->_internal.current_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return);
@@ -343,6 +350,8 @@ uint8_t sac_fallback_get_current_mode(sac_fallback_instance_t *instance, sac_sta
 {
     sac_fallback_mode_t *current_mode = NULL;
 
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(instance->_internal.current_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return 0);
 
@@ -355,6 +364,8 @@ void sac_fallback_set_current_mode(sac_fallback_instance_t *instance, uint8_t mo
 {
     uint8_t prev_mode_index = 0;
     sac_fallback_mode_t *current_mode = NULL;
+
+    *status = SAC_OK;
 
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return);
     SAC_CHECK_STATUS(instance->_internal.current_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return);
@@ -390,6 +401,8 @@ uint16_t sac_fallback_process(void *instance, sac_pipeline_t *pipeline, sac_head
 
     sac_fallback_instance_t *inst = (sac_fallback_instance_t *)instance;
 
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(inst->_internal.current_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return 0);
 
@@ -418,6 +431,8 @@ uint16_t sac_fallback_process(void *instance, sac_pipeline_t *pipeline, sac_head
 
 uint8_t sac_fallback_get_rx_link_margin(sac_fallback_instance_t *instance, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return 0);
 
     return instance->_internal.link_margin_metrics.accumulator_average;
@@ -426,6 +441,8 @@ uint8_t sac_fallback_get_rx_link_margin(sac_fallback_instance_t *instance, sac_s
 void sac_fallback_set_rx_link_margin(sac_fallback_instance_t *instance, uint8_t rx_lm, sac_status_t *status)
 {
     sac_fallback_link_margin_metrics_t *link_margin_metrics = NULL;
+
+    *status = SAC_OK;
 
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return);
 
@@ -439,6 +456,8 @@ void sac_fallback_set_rx_link_margin(sac_fallback_instance_t *instance, uint8_t 
 
 bool sac_fallback_get_manual_mode(sac_fallback_instance_t *instance, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return false);
 
     return instance->_internal.manual_mode;
@@ -446,6 +465,8 @@ bool sac_fallback_get_manual_mode(sac_fallback_instance_t *instance, sac_status_
 
 void sac_fallback_set_manual_mode(sac_fallback_instance_t *instance, bool manual_mode_enabled, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return);
 
     reset_link_stats(instance);
@@ -455,6 +476,8 @@ void sac_fallback_set_manual_mode(sac_fallback_instance_t *instance, bool manual
 
 sac_fallback_cca_metrics_t *sac_fallback_get_cca_metrics(sac_fallback_instance_t *instance, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return NULL);
 
     return &instance->_internal.cca_metrics;
@@ -463,6 +486,8 @@ sac_fallback_cca_metrics_t *sac_fallback_get_cca_metrics(sac_fallback_instance_t
 sac_fallback_link_margin_metrics_t *sac_fallback_get_link_margin_metrics(sac_fallback_instance_t *instance,
                                                                          sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return NULL);
 
     return &instance->_internal.link_margin_metrics;
@@ -478,6 +503,8 @@ int sac_fallback_format_stats(sac_fallback_instance_t *instance, char *buffer, u
     sac_pipeline_t *pipeline = NULL;
     int string_length = 0;
     uint8_t i = 0;
+
+    *status = SAC_OK;
 
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(instance->_internal.current_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return 0);
@@ -563,6 +590,8 @@ void sac_fallback_reset_stats(sac_fallback_instance_t *instance, sac_status_t *s
 {
     sac_fallback_mode_t *mode = NULL;
 
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return);
     SAC_CHECK_STATUS(instance->_internal.first_mode == NULL, status, SAC_ERR_FALLBACK_INIT_FAILURE, return);
 
@@ -578,6 +607,8 @@ void sac_fallback_reset_stats(sac_fallback_instance_t *instance, sac_status_t *s
 
 bool sac_fallback_is_tx_device(sac_fallback_instance_t *instance, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(instance == NULL, status, SAC_ERR_NULL_PTR, return false);
 
     return instance->is_tx_device;
@@ -586,8 +617,8 @@ bool sac_fallback_is_tx_device(sac_fallback_instance_t *instance, sac_status_t *
 /* PRIVATE FUNCTIONS **********************************************************/
 /** @brief Get a mode instance from its index.
  *
- *  @param[in]  instance    Fallback processing stage instance.
- *  @param[in]  mode_index  Fallback mode index.
+ *  @param[in] instance    Fallback processing stage instance.
+ *  @param[in] mode_index  Fallback mode index.
  *  @return Pointer to the mode instance.
  */
 static sac_fallback_mode_t *get_mode_from_index(sac_fallback_instance_t *instance, uint8_t mode_index)
@@ -681,10 +712,9 @@ static void trigger_next_mode(sac_fallback_instance_t *instance)
 
 /** @brief Function for coordinator to update the fallback state machine.
  *
- *  @note  This function should be in sync with the producer packet generation.
+ *  @note This function should be in sync with the producer packet generation.
  *
- *  @param[in]  instance  Pointer to fallback instance.
- *  @param[out] status    Status code.
+ *  @param[in] instance  Pointer to fallback instance.
  */
 static void update_state(sac_fallback_instance_t *instance)
 {
@@ -764,6 +794,8 @@ static void init_consumer_queue_metrics(sac_fallback_instance_t *instance)
 }
 
 /** @brief Reset the link stats.
+ *
+ *  @param[in] instance  Pointer to fallback instance.
  */
 static void reset_link_stats(sac_fallback_instance_t *instance)
 {
@@ -936,7 +968,7 @@ static bool is_link_queue_size_high(sac_fallback_instance_t *instance)
         return false;
     }
 
-    return (consumer_queue_metrics->queue_length_avg_tenths > current_mode->cfg.consumer_buffer_load_threshold_tenths);
+    return consumer_queue_metrics->queue_length_avg_tenths > current_mode->cfg.consumer_buffer_load_threshold_tenths;
 }
 
 /** @brief Return if link CCA usage is high enough to trigger the next mode.
@@ -953,7 +985,7 @@ static bool is_link_cca_bad(sac_fallback_instance_t *instance)
         return false;
     }
 
-    return (cca_metrics->trigger_bad_count >= current_mode->cca.trigger_bad_count_threshold);
+    return cca_metrics->trigger_bad_count >= current_mode->cca.trigger_bad_count_threshold;
 }
 
 /** @brief Return if link is bad enough to trigger the next mode.
@@ -1000,7 +1032,7 @@ static bool is_link_good_fast_recovery(sac_fallback_instance_t *instance)
  */
 static bool is_first_mode(sac_fallback_mode_t *mode)
 {
-    return (mode->prev_mode == NULL);
+    return mode->prev_mode == NULL;
 }
 
 /** @brief Check if the given fallback mode is the last mode.
@@ -1010,7 +1042,7 @@ static bool is_first_mode(sac_fallback_mode_t *mode)
  */
 static bool is_last_mode(sac_fallback_mode_t *mode)
 {
-    return (mode->next_mode == NULL);
+    return mode->next_mode == NULL;
 }
 
 /** @brief Reset peak value statistics.

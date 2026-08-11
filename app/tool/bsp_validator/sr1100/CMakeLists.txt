@@ -2,7 +2,11 @@ add_library(bsp_validator_backend "")
 target_link_libraries(bsp_validator_backend PUBLIC common_backend)
 
 target_include_directories(bsp_validator_backend PUBLIC facade)
-target_link_libraries(bsp_validator_backend PUBLIC swc)
+target_link_libraries(bsp_validator_backend
+    PUBLIC
+        swc
+        swc_backend
+)
 
 add_executable(bsp_validator.elf "")
 target_sources(bsp_validator.elf

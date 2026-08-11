@@ -12,6 +12,13 @@
 #include "sac_compression.h"
 #include "sac_utils.h"
 
+/*
+ * Configuration guide:
+ *   - MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH: 20 or 24 bits.
+ *       Packing stages are automatically enabled or bypassed depending on this value.
+ *   - MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH: Fallback mode 2 packed depth.
+ *       Current application support is 16-bit.
+ */
 /* CONSTANTS ******************************************************************/
 /* **** Sine Wave Debug Capture (optional) **** */
 /* Enabled via CMake preset "puretone-headset-quasar-u5a5-slave-rjf-sine-dbg",
@@ -25,12 +32,16 @@
  * (e.g. OneOdio customer board). Skips MAX98091 I2C init/config and I2S mux GPIO control. */
 /* #define NO_CODEC */
 
+/* **** OTA SWC settings. **** */
+#define MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH 24
+#define MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH       16
 /* **** Main Channel Settings. **** */
-
-#define MAIN_CHANNEL_SAMPLE_RATE_HZ 96000
-#define MAIN_CHANNEL_SAMPLE_COUNT   40
-#define MAIN_CHANNEL_CHANNEL_COUNT  2
-#define MAIN_CHANNEL_BIT_DEPTH      24
+#define MAIN_CHANNEL_SAMPLE_RATE_HZ        96000
+#define MAIN_CHANNEL_SAMPLE_COUNT          40
+#define MAIN_CHANNEL_CHANNEL_COUNT         2
+#define MAIN_CHANNEL_SAMPLE_RATE_HZ        96000
+#define MAIN_CHANNEL_CHANNEL_COUNT         2
+#define MAIN_CHANNEL_AUDIO_IFACE_BIT_DEPTH 24
 /* Maximum Latency. */
 #define MAIN_CHANNEL_MAX_LATENCY_MS 15
 /* Fallback modes Latency. */
@@ -51,8 +62,11 @@
     (sizeof(sac_header_t) + SAC_COMPRESSION_HEADER_SIZE(MAIN_CHANNEL_CHANNEL_COUNT))
 
 /* Calculated values. */
-#define MAIN_CHANNEL_SWC_PAYLOAD_SIZE \
-    SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, MAIN_CHANNEL_BIT_DEPTH)
+#define MAIN_CHANNEL_SWC_PAYLOAD_SIZE                                                 \
+    SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
+                               MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH)
+#define MAIN_CHANNEL_USB_PAYLOAD_SIZE \
+    SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, MAIN_CHANNEL_USB_BIT_DEPTH)
 #define MAIN_CHANNEL_I2S_PAYLOAD_SIZE \
     SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, I2S_DMA_BIT_DEPTH)
 /* Size of the latency queue used by the Audio Core for the main channel. */
@@ -73,15 +87,17 @@
                                      MAIN_CHANNEL_SAMPLE_RATE_HZ)
 
 /* Fallback modes payload size. */
-#define MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE                                                            \
-    {                                                                                                 \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_1_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, 24) + \
-            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                        \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_2_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, 16) + \
-            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                        \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_3_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,       \
-                                   SAC_COMPRESSION_SAMPLE_RESOLUTION) +                               \
-            MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE,                                            \
+#define MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE                                                      \
+    {                                                                                           \
+        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_1_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
+                                   MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH) +                   \
+            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                  \
+        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_2_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
+                                   MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH) +                         \
+            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                  \
+        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_3_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
+                                   SAC_COMPRESSION_SAMPLE_RESOLUTION) +                         \
+            MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE,                                      \
     }
 
 /* Accumulator settings. */
@@ -113,12 +129,12 @@
     }
 
 /* Fallback latency fifo size. */
-#define MAIN_CHANNEL_FALLBACK_LATENCY_FIFO_SIZE                                                        \
-    {                                                                                                  \
-        (MAIN_CHANNEL_FBK_0_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
-        (MAIN_CHANNEL_FBK_1_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
-        (MAIN_CHANNEL_FBK_2_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
-        (MAIN_CHANNEL_FBK_3_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
+#define MAIN_CHANNEL_FALLBACK_LATENCY_USB_FIFO_SIZE                                                            \
+    {                                                                                                      \
+        (MAIN_CHANNEL_FBK_0_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_USB_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
+        (MAIN_CHANNEL_FBK_1_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_USB_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
+        (MAIN_CHANNEL_FBK_2_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_USB_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
+        (MAIN_CHANNEL_FBK_3_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_USB_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
     }
 
 /* **** Back Channel Settings. **** */
@@ -185,7 +201,7 @@
     }
 
 /* Fallback latency fifo size. */
-#define BACK_CHANNEL_FALLBACK_LATENCY_FIFO_SIZE                                                        \
+#define BACK_CHANNEL_FALLBACK_LATENCY_USB_FIFO_SIZE                                                        \
     {                                                                                                  \
         (BACK_CHANNEL_FBK_0_LATENCY_QUEUE_SIZE * ((BACK_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
         (BACK_CHANNEL_FBK_1_LATENCY_QUEUE_SIZE * ((BACK_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
@@ -200,7 +216,7 @@
 /* The I2S bit depth will be shared by all audio streams.
  * Packing Audio processing is required if a stream uses a different bit depth.
  */
-#define I2S_BIT_DEPTH MAIN_CHANNEL_BIT_DEPTH
+#define I2S_BIT_DEPTH MAIN_CHANNEL_AUDIO_IFACE_BIT_DEPTH
 /* I2S DMA bit depth is defined by the capabilities of the DMA transfer.
  * The DMA can transport data on either a byte (8-bit), a half-word (16-bit) or a word (32-bit)
  * Packing Audio processing is required if a stream uses a bit depth smaller than the DMA bit depth.
@@ -210,6 +226,7 @@
 #define CODEC_LATENCY_MS 1
 
 /* **** USB Settings. **** */
+#define MAIN_CHANNEL_USB_BIT_DEPTH MAIN_CHANNEL_AUDIO_IFACE_BIT_DEPTH
 /* Number of extra packets to buffer when receiving from USB FS. */
 #define MAIN_CHANNEL_USB_FS_PRODUCER_BUFFERING (((MAIN_CHANNEL_SAMPLE_RATE_HZ / 1000) / MAIN_CHANNEL_SAMPLE_COUNT))
 /* Number of extra packets to buffer when receiving from USB FS. */

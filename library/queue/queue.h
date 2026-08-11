@@ -20,9 +20,9 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /*! Calculate number of bytes required for the queue. */
-#define QUEUE_NB_BYTES_NEEDED(num_queues, num_nodes, data_size) \
-    ((num_nodes) *                                              \
-     (sizeof(queue_node_t) + data_size + (sizeof(queue_node_t *) * num_queues) + (sizeof(queue_t *) * num_queues)))
+#define QUEUE_NB_BYTES_NEEDED(num_queues, num_nodes, data_size)                                    \
+    ((num_nodes) * (sizeof(queue_node_t) + (data_size) + (sizeof(queue_node_t *) * (num_queues)) + \
+                    (sizeof(queue_t *) * (num_queues))))
 
 /* TYPES **********************************************************************/
 /** @brief Node instance.
@@ -53,7 +53,7 @@ typedef struct queue {
     queue_node_t *head;
     /*! Pointer to the last node in the queue. */
     queue_node_t *tail;
-     /*! Current number of nodes in the queue. */
+    /*! Current number of nodes in the queue. */
     uint16_t length;
     /*! Maximum number of nodes allowed in the queue. */
     uint16_t limit;
@@ -84,7 +84,7 @@ typedef struct queue_stats {
  *  @param[in] _node    Specified node.
  *  @param[in] _offset  Offset added to the data pointer.
  */
-#define queue_get_data_ptr(_node, _offset) (&(_node)->data[_offset])
+#define queue_get_data_ptr(_node, _offset) (&(_node)->data[(_offset)])
 
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize queue management module.
@@ -171,15 +171,15 @@ uint16_t queue_get_limit(queue_t *queue);
 
 /** @brief Free any existing nodes in the queue.
  *
- *  @param[in] queue  Desired queue to flush.
+ *  @param[in] queue_to_flush  Desired queue to flush.
  */
 void queue_flush(queue_t *queue_to_flush);
 
 /** @brief Unlink the queue from the linked list of queues.
  *
- *  @param[in] queue_to_flush  Desired queue.
+ *  @param[in] queue  Queue to be unlinked.
  */
-void queue_unlink(queue_t *queue);
+void queue_unlink(const queue_t *queue);
 
 /** @brief Get the queue statistics.
  *

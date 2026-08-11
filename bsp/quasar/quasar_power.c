@@ -34,7 +34,7 @@ void quasar_power_init_gpios(void)
     /* Configuration of the GPIO that drives the pin to enable the 3v3 LDO for MCU's USB and analog circuitry. */
 
     /* Both GPIOs are set to power up the ADC circuitry to allow getting the board revision. */
-    /*  REV A board use PD4 as LDO enable GPIO. */
+    /* REV A board use PD4 as LDO enable GPIO. */
     quasar_gpio_config_t gpio_config_ldo_mcu_reva = {
         .port = QUASAR_DEF_LDO_MCU_EN_PORT_REVA,
         .pin = QUASAR_DEF_LDO_MCU_EN_PIN_REVA,
@@ -47,7 +47,7 @@ void quasar_power_init_gpios(void)
     quasar_gpio_init(gpio_config_ldo_mcu_reva);
     quasar_gpio_clear(gpio_config_ldo_mcu_reva.port, gpio_config_ldo_mcu_reva.pin);
 
-    /*  REV B board use PB15 as LDO enable GPIO. */
+    /* REV B board use PB15 as LDO enable GPIO. */
     quasar_gpio_config_t gpio_config_ldo_mcu_revb = {
         .port = QUASAR_DEF_LDO_MCU_EN_PORT_REVB,
         .pin = QUASAR_DEF_LDO_MCU_EN_PIN_REVB,

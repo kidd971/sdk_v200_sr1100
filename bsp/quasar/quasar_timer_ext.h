@@ -117,8 +117,8 @@ TIM_TypeDef *quasar_timer_get_instance(quasar_timer_selection_t timer_selection)
 
 /** @brief Manually set the period (Auto-Reload Register) register value.
  *
- *  This function is used when the timer needs to be fine tuned.
- *  This function automatically adds the -1 to the period value.
+ *  @note This function is used when the timer needs to be fine tuned. This function automatically adds the -1 to the
+ *        period value.
  *
  *  @param[in] timer_selection  Available timer selection.
  *  @param[in] period           Period (Auto-Reload Register) value.
@@ -127,7 +127,7 @@ void quasar_timer_set_period(quasar_timer_selection_t timer_selection, uint16_t 
 
 /** @brief Get the selected timer period (Auto-Reload Register) register value.
  *
- *  This function automatically adds the +1 to the period value.
+ *  @note This function automatically adds the +1 to the period value.
  *
  *  @param[in] timer_selection  Available timer selection.
  *  @return Period register value.
@@ -136,8 +136,8 @@ uint32_t quasar_timer_get_period(quasar_timer_selection_t timer_selection);
 
 /** @brief Manually set the prescaler register value.
  *
- *  This function is used when the timer needs to be fine tuned.
- *  This function automatically adds the -1 to the prescaler value.
+ *  @note This function is used when the timer needs to be fine tuned. This function automatically adds the -1 to the
+ *        prescaler value.
  *
  *  @param[in] timer_selection  Available timer selection.
  *  @param[in] prescaler        Prescaler register value.
@@ -146,7 +146,7 @@ void quasar_timer_set_prescaler(quasar_timer_selection_t timer_selection, uint16
 
 /** @brief Get the selected timer prescaler register value.
  *
- *  This function automatically adds the +1 to the prescaler value.
+ *  @note This function automatically adds the +1 to the prescaler value.
  *
  *  @param[in] timer_selection  Available timer selection.
  *  @return Prescaler register value.

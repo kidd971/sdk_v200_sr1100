@@ -62,7 +62,7 @@ void quasar_timer_blocking_delay_init(quasar_irq_priority_t irq_priority);
 
 /** @brief Get the multi-radio timer frequency from the system clock and prescaler.
  *
- *  @return  Multi-radio timer frequency.
+ *  @return Multi-radio timer frequency.
  */
 uint32_t quasar_timer_multi_radio_get_freq_hz(void);
 

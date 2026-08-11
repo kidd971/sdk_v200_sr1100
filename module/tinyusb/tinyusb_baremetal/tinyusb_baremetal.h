@@ -19,8 +19,8 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize and set up the TinyUSB module.
  *
- * This function is responsible for the initial setup of the baremetal TinyUSB module.
- * It initializes the USB peripheral and configures a periodic timer interrupt.
+ *  @note This function is responsible for the initial setup of the baremetal TinyUSB module. It initializes the USB
+ *        peripheral and configures a periodic timer interrupt.
  */
 void tinyusb_baremetal_setup(void);
 

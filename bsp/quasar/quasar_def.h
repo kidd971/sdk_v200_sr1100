@@ -90,7 +90,7 @@ extern "C" {
 #define QUASAR_DEF_RADIO_2_QSPI_IO_3_PORT GPIOH
 #define QUASAR_DEF_RADIO_2_QSPI_IO_3_PIN  QUASAR_GPIO_PIN_8
 
-/*! Audio module     I2C2 // SAI1. */
+/*! Audio module     I2C2 / SAI1. */
 #define QUASAR_DEF_AUDIO_I2C_SDA_PORT  GPIOF
 #define QUASAR_DEF_AUDIO_I2C_SDA_PIN   QUASAR_GPIO_PIN_0
 #define QUASAR_DEF_AUDIO_I2C_SCL_PORT  GPIOF
@@ -280,49 +280,54 @@ extern "C" {
 
 /* MACROS *********************************************************************/
 /*! Set a specific bit in a register. */
-#define QUASAR_SET_BIT(REG, BIT_MASK) (REG |= (BIT_MASK))
+#define QUASAR_SET_BIT(REG, BIT_MASK) ((REG) |= (BIT_MASK))
 /*! Clear a specific bit in a register. */
-#define QUASAR_CLEAR_BIT(REG, BIT_MASK) (REG &= ~(BIT_MASK))
+#define QUASAR_CLEAR_BIT(REG, BIT_MASK) ((REG) &= ~(BIT_MASK))
 /*! Read a specific bit in a register at a given position. */
-#define QUASAR_READ_BIT(REG, BIT_POS) ((REG >> BIT_POS) & 1)
+#define QUASAR_READ_BIT(REG, BIT_POS) (((REG) >> (BIT_POS)) & 1)
 /*! Write a specific value in specific bytes at a specific position. */
-#define QUASAR_WRITE_BITS(BYTES, BITS_MASK, BITS_POS, VALUE) (BYTES |= (BITS_MASK & (VALUE << BITS_POS)))
+#define QUASAR_WRITE_BITS(BYTES, BITS_MASK, BITS_POS, VALUE) ((BYTES) |= ((BITS_MASK) & ((VALUE) << (BITS_POS))))
 
 /*
  * EXTI mapping:
  *
- * EXTI0:   User Button 4
- * EXTI1:   Audio codec IRQ -> Not used
- * EXTI2:
- * EXTI3:
- * EXTI4:   Line in detect
- * EXTI5:
- * EXTI6:
- * EXTI7:   Radio 2 IRQ
- * EXTI8:   Radio 1 IRQ
- * EXTI9:
- * EXTI10:  User Button 1
- * EXTI11:
- * EXTI12:  User Button 2
- * EXTI13:
- * EXTI14:
- * EXTI15:  User Button 3 || USB detect
+ *   - EXTI0:   User Button 4
+ *   - EXTI1:   Audio codec IRQ -> Not used
+ *   - EXTI2:
+ *   - EXTI3:
+ *   - EXTI4:   Line in detect
+ *   - EXTI5:
+ *   - EXTI6:
+ *   - EXTI7:   Radio 2 IRQ
+ *   - EXTI8:   Radio 1 IRQ
+ *   - EXTI9:
+ *   - EXTI10:  User Button 1
+ *   - EXTI11:
+ *   - EXTI12:  User Button 2
+ *   - EXTI13:
+ *   - EXTI14:
+ *   - EXTI15:  User Button 3 || USB detect
+ *
+ * NOTE: At equal NVIC priority, EXTI7 (Radio 2) is always serviced before EXTI8 (Radio 1) because lower vector numbers
+ *       win the tie-break. This applies when both interrupts are pending simultaneously (e.g. both trigger on the same
+ *       cycle, or both become pending while a higher-priority ISR is running). Radio 2 cannot preempt Radio 1 since
+ *       equal priority prevents preemption; instead Radio 1 tail-chains immediately after Radio 2 completes.
  */
 
 /*
  * Timer mapping:
- *                  BSP
- *  TIMER1 :
- *  TIMER2 :
- *  TIMER3 :
- *  TIMER4 :        Multi radio
- *  TIMER5 :
- *  TIMER6 :
- *  TIMER7 :
- *  TIMER8 :        Free running timer ms
- *  TIMER15 :
- *  TIMER16 :
- *  TIMER17 :
+ *
+ *  - TIMER1:
+ *  - TIMER2:
+ *  - TIMER3:
+ *  - TIMER4:        Multi radio
+ *  - TIMER5:
+ *  - TIMER6:
+ *  - TIMER7:
+ *  - TIMER8:        Free running timer ms
+ *  - TIMER15:
+ *  - TIMER16:
+ *  - TIMER17:
  */
 #ifdef __cplusplus
 }

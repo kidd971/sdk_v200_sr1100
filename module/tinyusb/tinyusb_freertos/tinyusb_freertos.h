@@ -19,9 +19,8 @@ extern "C" {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize and set up the TinyUSB module.
  *
- * This function is responsible for the initial setup of the TinyUSB module. It performs
- * three main tasks: initializing the USB peripheral, setting the USB interrupt callback,
- * and initializing the TinyUSB RTOS thread.
+ *  @note This function is responsible for the initial setup of the TinyUSB module. It performs three main tasks:
+ *        initializing the USB peripheral, setting the USB interrupt callback, and initializing the TinyUSB RTOS thread.
  */
 void tinyusb_freertos_task_setup(void);
 

@@ -21,78 +21,100 @@ extern "C" {
 /** @brief The SAI mono/stereo modes.
  */
 typedef enum quasar_sai_mono_stereo {
+    /*! SAI is in mono mode. */
     QUASAR_SAI_MODE_MONO = 1,
+    /*! SAI is in stereo mode. */
     QUASAR_SAI_MODE_STEREO = 2
 } quasar_sai_mono_stereo_t;
 
 /** @brief The supported SAI bit depth.
  */
 typedef enum quasar_sai_bit_depth {
+    /*! 16-bit audio depth. */
     QUASAR_SAI_BIT_DEPTH_16BITS = SAI_PROTOCOL_DATASIZE_16BIT,
+    /*! 16-bit extended audio depth. */
     QUASAR_SAI_BIT_DEPTH_16BITS_EXT = SAI_PROTOCOL_DATASIZE_16BITEXTENDED,
+    /*! 24-bit audio depth. */
     QUASAR_SAI_BIT_DEPTH_24BITS = SAI_PROTOCOL_DATASIZE_24BIT,
+    /*! 32-bit audio depth. */
     QUASAR_SAI_BIT_DEPTH_32BITS = SAI_PROTOCOL_DATASIZE_32BIT,
 } quasar_sai_bit_depth_t;
 
 /** @brief SAI modes.
  */
 typedef enum quasar_sai_mode {
-    /* SAI is master. */
+    /*! SAI is master. */
     QUASAR_SAI_MASTER_MODE,
-    /* SAI is slave. */
+    /*! SAI is slave. */
     QUASAR_SAI_SLAVE_MODE,
-    /* SAI is slave and the SAI clock is output on the MCLK to drive an external peripheral. */
+    /*! SAI is slave and the SAI clock is output on the MCLK to drive an external peripheral. */
     QUASAR_SAI_SLAVE_MODE_MCLK,
 } quasar_sai_mode_t;
 
 /** @brief I2S MUX selections.
  */
 typedef enum quasar_i2s_mux_select {
+    /*! On-board codec selection. */
     QUASAR_SELECT_ON_BOARD_CODEC,
+    /*! External codec selection. */
     QUASAR_SELECT_EXT_CODEC,
 } quasar_i2s_mux_select_t;
 
 /** @brief The supported SAI audio frequencies.
  */
 typedef enum quasar_sai_frequency {
+    /*! 96 kHz audio frequency. */
     QUASAR_SAI_AUDIO_FREQUENCY_96K = SAI_AUDIO_FREQUENCY_96K,
+    /*! 48 kHz audio frequency. */
     QUASAR_SAI_AUDIO_FREQUENCY_48K = SAI_AUDIO_FREQUENCY_48K,
+    /*! 32 kHz audio frequency. */
     QUASAR_SAI_AUDIO_FREQUENCY_32K = SAI_AUDIO_FREQUENCY_32K,
+    /*! 16 kHz audio frequency. */
     QUASAR_SAI_AUDIO_FREQUENCY_16K = SAI_AUDIO_FREQUENCY_16K,
+    /*! 8 kHz audio frequency. */
     QUASAR_SAI_AUDIO_FREQUENCY_8K = SAI_AUDIO_FREQUENCY_8K,
+    /*! Use the master clock divider to set audio frequency. */
     QUASAR_SAI_AUDIO_FREQUENCY_MCKDIV = SAI_AUDIO_FREQUENCY_MCKDIV,
 } quasar_sai_frequency_t;
 
 /** @brief The supported SAI audio protocols.
  */
 typedef enum quasar_sai_protocol {
+    /*! I2S standard protocol. */
     QUASAR_SAI_PROTOCOL_I2S_STANDARD = SAI_I2S_STANDARD,
+    /*! I2S MSB justified protocol. */
     QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED = SAI_I2S_MSBJUSTIFIED,
+    /*! I2S LSB justified protocol. */
     QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED = SAI_I2S_LSBJUSTIFIED,
 } quasar_sai_protocol_t;
 
 /** @brief SAI global configuration structure.
  */
 typedef struct quasar_sai_config {
+    /*! RX SAI mono/stereo mode. */
     quasar_sai_mono_stereo_t rx_sai_mono_stereo;
+    /*! TX SAI mono/stereo mode. */
     quasar_sai_mono_stereo_t tx_sai_mono_stereo;
+    /*! SAI bit depth. */
     quasar_sai_bit_depth_t sai_bit_depth;
+    /*! SAI mode. */
     quasar_sai_mode_t sai_mode;
+    /*! SAI audio frequency. */
     quasar_sai_frequency_t sai_audio_frequency;
+    /*! SAI protocol. */
     quasar_sai_protocol_t sai_protocol;
 } quasar_sai_config_t;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 /** @brief Configure the Audio's SAI peripheral and initialize it.
  *
- *  This function configures and initialized multiple peripherals sequentially.
- *
- *      1. Enable SAI clocks.
- *      2. Initialize SAI GPIOs.
- *      3. Configure SAI mono stereo mode.
- *      4. Initialize SAI block configuration.
- *      5. Initialize SAI DMA NVIC.
- *      6. Initialize SAI DMA peripherals.
+ *  @note This function configures and initializes multiple peripherals sequentially.
+ *        1. Enable SAI clocks.
+ *        2. Initialize SAI GPIOs.
+ *        3. Configure SAI mono stereo mode.
+ *        4. Initialize SAI block configuration.
+ *        5. Initialize SAI DMA NVIC.
+ *        6. Initialize SAI DMA peripherals.
  *
  *  @param[in]  sai_config  SAI global configuration structure.
  *  @param[out] err         Pointer to store error status.
@@ -107,11 +129,10 @@ void quasar_audio_deinit_sai(quasar_bsp_status_t *err);
 
 /** @brief Configure the CODEC I2C peripheral and initialize it.
  *
- *  The following steps are performed.
- *
- *      1. Enable I2C clock.
- *      2. Initialize I2C GPIOs.
- *      3. Initialize I2C peripheral.
+ *  @note The following steps are performed.
+ *        1. Enable I2C clock.
+ *        2. Initialize I2C GPIOs.
+ *        3. Initialize I2C peripheral.
  */
 void quasar_audio_init_i2c(void);
 

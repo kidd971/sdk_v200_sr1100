@@ -153,16 +153,16 @@ static void pwm_configure_channel(TIM_TypeDef *timer_instance, quasar_pwm_channe
         break;
 
     case QUASAR_PWM_CHANNEL_3:
-        /* Select mode 1 asymmetric PWM for comparison output.  */
+        /* Select mode 1 asymmetric PWM for comparison output. */
         QUASAR_CLEAR_BIT(timer_instance->CCMR2, TIM_CCMR2_OC3M_0);
         QUASAR_SET_BIT(timer_instance->CCMR2, TIM_CCMR2_OC3M_1);
         QUASAR_SET_BIT(timer_instance->CCMR2, TIM_CCMR2_OC3M_2);
         QUASAR_SET_BIT(timer_instance->CCMR2, TIM_CCMR2_OC3M_3);
 
-        /* Configure the comparison for the selected channel as output.*/
+        /* Configure the comparison for the selected channel as output. */
         QUASAR_CLEAR_BIT(timer_instance->CCMR2, TIM_CCMR2_CC3S);
 
-        /* Enable the auto-reload register for the selected channel.*/
+        /* Enable the auto-reload register for the selected channel. */
         QUASAR_SET_BIT(timer_instance->CCMR2, TIM_CCMR2_OC3PE);
 
         /* Set signal polarity to high level (high at the beginning of each cycle). */

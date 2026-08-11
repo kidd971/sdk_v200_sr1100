@@ -329,8 +329,10 @@ static void validate_sac_bit_depth(sac_bit_depth_t bit_depth, sac_status_t *stat
 }
 
 /** @brief Increment the PLL2 fractional part by 1.
+ *
+ *  @param[in] cdc  CDC instance.
  */
-void device_clock_incr_pll2_fracn(sac_cdc_pll_instance_t *cdc)
+static void device_clock_incr_pll2_fracn(sac_cdc_pll_instance_t *cdc)
 {
     uint32_t current_fracn = cdc->cdc_pll_hal.get_fracn();
 
@@ -338,8 +340,10 @@ void device_clock_incr_pll2_fracn(sac_cdc_pll_instance_t *cdc)
 }
 
 /** @brief Decrement the PLL2 fractional part by 1.
+ *
+ *  @param[in] cdc  CDC instance.
  */
-void device_clock_decr_pll2_fracn(sac_cdc_pll_instance_t *cdc)
+static void device_clock_decr_pll2_fracn(sac_cdc_pll_instance_t *cdc)
 {
     uint32_t current_fracn = cdc->cdc_pll_hal.get_fracn();
 

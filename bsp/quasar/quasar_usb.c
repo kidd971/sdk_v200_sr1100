@@ -33,11 +33,11 @@ void quasar_usb_init(quasar_bsp_status_t *err)
     /* Set the OTG PHY reference clock selection. */
     HAL_SYSCFG_SetOTGPHYReferenceClockSelection(SYSCFG_OTG_HS_PHY_CLK_SELECT_1);
 
-    /* Peripheral clock enable/ */
+    /* Peripheral clock enable. */
     __HAL_RCC_USB_OTG_HS_CLK_ENABLE();
     __HAL_RCC_USBPHYC_CLK_ENABLE();
 
-    /* Enable VDDUSB */
+    /* Enable VDDUSB. */
     if (__HAL_RCC_PWR_IS_CLK_DISABLED()) {
         __HAL_RCC_PWR_CLK_ENABLE();
         HAL_PWREx_EnableVddUSB();

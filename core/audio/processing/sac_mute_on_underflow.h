@@ -32,7 +32,7 @@ typedef enum sac_mute_on_underflow_cmd {
 /** @brief SPARK Audio Core Mute on Underflow Instance.
  */
 typedef struct sac_mute_on_underflow_instance {
-    /*! Number of packets that will be muted after the last underflow occured. */
+    /*! Number of packets that will be muted after the last underflow occurred. */
     uint32_t reload_value;
     struct {
         /*! Internal: Counter used to keep track of how many muted packets are left. */
@@ -59,9 +59,8 @@ void sac_mute_on_underflow_init(void *instance, const char *name, sac_pipeline_t
  *  @param[in]  instance  Process instance.
  *  @param[in]  pipeline  Pipeline instance.
  *  @param[in]  cmd       Command.
- *  @param[in]  args      Argument.
+ *  @param[in]  arg       Argument.
  *  @param[out] status    Status code.
- *
  *  @return Command specific value.
  */
 uint32_t sac_mute_on_underflow_ctrl(void *instance, sac_pipeline_t *pipeline, uint8_t cmd, uint32_t arg,
@@ -76,7 +75,6 @@ uint32_t sac_mute_on_underflow_ctrl(void *instance, sac_pipeline_t *pipeline, ui
  *  @param[in]  size      Size in bytes of the audio payload.
  *  @param[out] data_out  Audio payload that has been processed.
  *  @param[out] status    Status code.
- *
  *  @return Size in bytes of the processed samples, 0 if no processing happened.
  */
 uint16_t sac_mute_on_underflow_process(void *instance, sac_pipeline_t *pipeline, sac_header_t *header, uint8_t *data_in,

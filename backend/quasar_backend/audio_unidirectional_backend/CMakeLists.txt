@@ -1,3 +1,7 @@
+if (NOT TRANSCEIVER STREQUAL "SR1100")
+    return()
+endif()
+
 target_link_libraries(audio_unidirectional_backend PRIVATE hardware module_tinyusb_baremetal)
 target_sources(audio_unidirectional_backend PRIVATE audio_unidirectional_backend.c)
 

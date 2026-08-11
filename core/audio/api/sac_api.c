@@ -23,7 +23,7 @@
 #define EP_ACTION_NODE_COUNT 1
 /* Number of free nodes required for audio process input. */
 #define PROCESS_INPUT_NODE_COUNT 1
-/* Minimum number of queues in a system */
+/* Minimum number of queues in a system. */
 #define MIN_QUEUE_NUM 1
 
 /* PRIVATE GLOBALS ************************************************************/
@@ -523,6 +523,8 @@ uint32_t sac_get_allocated_bytes(sac_status_t *status)
 
 uint16_t sac_node_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(data == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(dest_node == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(dest_node->data == NULL, status, SAC_ERR_NULL_PTR, return 0);
@@ -536,6 +538,8 @@ uint16_t sac_node_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, 
 
 uint16_t sac_node_data_memcpy(queue_node_t *dest_node, uint8_t *data, uint16_t size, sac_status_t *status)
 {
+    *status = SAC_OK;
+
     SAC_CHECK_STATUS(data == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(dest_node == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(dest_node->data == NULL, status, SAC_ERR_NULL_PTR, return 0);
@@ -598,7 +602,7 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
      * If the producer queue is already initialized, it is linked to another endpoint.
      */
     if (producer->_internal.queue == NULL) {
-        /* Calculate producer initial queue data size.  */
+        /* Calculate producer initial queue data size. */
         ep_queue_data_size = producer->cfg.audio_payload_size;
         ep_queue_data_size += queue_data_inflation_size;
         ep_queue_data_size += sac_align_data_size(ep_queue_data_size, uint32_t); /* Align nodes on 32bits. */
@@ -635,7 +639,7 @@ static void init_audio_queues(sac_pipeline_t *pipeline, sac_status_t *status)
      * If the consumer queue is already initialized, it is linked to another endpoint.
      */
     if (consumer->_internal.queue == NULL) {
-        /* Calculate consumer initial queue data size.  */
+        /* Calculate consumer initial queue data size. */
         ep_queue_data_size = consumer->cfg.audio_payload_size;
         ep_queue_data_size += queue_data_inflation_size;
         ep_queue_data_size += sac_align_data_size(ep_queue_data_size, uint32_t); /* Align nodes on 32bits. */
@@ -756,7 +760,7 @@ static void move_audio_packet_to_consumer_queue(sac_pipeline_t *pipeline, queue_
 
     *status = SAC_OK;
 
-    /* Detect overflow */
+    /* Detect overflow. */
     do {
         if (is_consumer_overflowing(consumer)) {
             pipeline->_statistics.consumer_buffer_overflow_count++;
@@ -832,10 +836,10 @@ static bool is_process_exec_required(sac_processing_t *process, sac_pipeline_t *
 
 /** @brief Apply all processing stages to a producer queue node.
  *
- *  @param[in]  pipeline          Pipeline instance.
- *  @param[in]  input_node        Input node from the producer queue. This node could be shared with another pipeline,
- *                                so it should be read then freed.
- *  @param[out] status            Status code.
+ *  @param[in]  pipeline    Pipeline instance.
+ *  @param[in]  input_node  Input node from the producer queue. This node could be shared with another pipeline, so it
+ *                          should be read then freed.
+ *  @param[out] status      Status code.
  *  @return Pointer to a producer queue node containing the processed data.
  */
 static queue_node_t *process_samples(sac_pipeline_t *pipeline, queue_node_t *input_node, sac_status_t *status)
@@ -900,6 +904,7 @@ static void enqueue_producer_node(sac_pipeline_t *pipeline, sac_status_t *status
 {
     sac_endpoint_t *producer = pipeline->producer;
     queue_node_t *current_node = pipeline->producer->_internal.current_node;
+
     *status = SAC_OK;
 
     if (producer->cfg.use_encapsulation) {

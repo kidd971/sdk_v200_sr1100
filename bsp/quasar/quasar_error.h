@@ -25,12 +25,12 @@ enum {
  */
 #define ASSERT_QUASAR_BSP_STATUS(quasar_status)        \
     do {                                               \
-        if (quasar_status == QUASAR_OK) {              \
+        if ((quasar_status) == QUASAR_OK) {            \
             /* Exit early. */                          \
             break;                                     \
         }                                              \
                                                        \
-        if (quasar_status > QUASAR_OK) {               \
+        if ((quasar_status) > QUASAR_OK) {             \
             /* Handle warning. */                      \
             quasar_bsp_warning_handler(quasar_status); \
             break;                                     \

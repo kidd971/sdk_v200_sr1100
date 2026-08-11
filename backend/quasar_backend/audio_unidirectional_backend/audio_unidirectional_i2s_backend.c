@@ -19,10 +19,15 @@
 /** @brief SAI configuration structure.
  */
 typedef struct sai_cfg {
+    /*! Bit depth of the audio data. */
     uint8_t                bit_depth;
+    /*! Number of channels for the SAI TX. */
     uint8_t                tx_nb_ch;
+    /*! Number of channels for the SAI RX. */
     uint8_t                rx_nb_ch;
+    /*! SAI master/slave mode. */
     quasar_sai_mode_t      sai_mode;
+    /*! SAI frame frequency. */
     quasar_sai_frequency_t sai_frequency;
 } sai_cfg_t;
 

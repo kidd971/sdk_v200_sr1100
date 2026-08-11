@@ -29,7 +29,9 @@ extern "C" {
 /** @brief Certification modes.
  */
 typedef enum facade_certification_mode {
+    /*! No certification mode. */
     FACADE_CERTIF_NONE,
+    /*! Hello World certification mode. */
     FACADE_CERTIF_HELLO_WORLD,
 } facade_certification_mode_t;
 

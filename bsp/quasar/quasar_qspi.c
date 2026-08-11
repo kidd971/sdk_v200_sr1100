@@ -47,7 +47,7 @@ static OSPI_RegularCmdTypeDef qspi_cmd_ospi2 = {
 /* MACROS *********************************************************************/
 /* Return the QSPI cmd from quasar_qspi_selection_t. */
 #define QUASAR_QSPI_GET_SELECTED_CMD(qspi_selection) \
-    ((OSPI_RegularCmdTypeDef *)((qspi_selection == QUASAR_QSPI_SELECTION_OSPI1) ? &qspi_cmd_ospi1 : &qspi_cmd_ospi2))
+    ((OSPI_RegularCmdTypeDef *)(((qspi_selection) == QUASAR_QSPI_SELECTION_OSPI1) ? &qspi_cmd_ospi1 : &qspi_cmd_ospi2))
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
 static void qspi_configure_and_enable_clock(quasar_qspi_selection_t qspi_selection);
@@ -72,14 +72,14 @@ void quasar_qspi_init(quasar_qspi_config_t qspi_config)
     quasar_gpio_init(qspi_config.gpio_config_io_2);
     quasar_gpio_init(qspi_config.gpio_config_io_3);
 
-    /* Configure and enable the clock related to QSPI.  */
+    /* Configure and enable the clock related to QSPI. */
     qspi_configure_and_enable_clock(qspi_config.qspi_selection);
 
     /* Configure and initialize QSPI peripheral. */
     OSPI_HandleTypeDef *qspi_handle = QUASAR_QSPI_GET_SELECTED_HANDLE(qspi_config.qspi_selection);
     HAL_OSPI_DLYB_CfgTypeDef HAL_OSPI_DLYB_Cfg_Struct = {0};
 
-    /* OCTOSPI parameter configuration */
+    /* OCTOSPI parameter configuration. */
     qspi_handle->Init.FifoThreshold = 1;
     qspi_handle->Init.DualQuad = HAL_OSPI_DUALQUAD_DISABLE;
     qspi_handle->Init.MemoryType = HAL_OSPI_MEMTYPE_MICRON;
@@ -529,6 +529,12 @@ static void quasar_qspi_transmit_dma(OSPI_HandleTypeDef *hospi, uint8_t *pData)
     SET_BIT(hospi->Instance->CR, OCTOSPI_CR_DMAEN);
 }
 
+/** @brief Setup the QSPI for a transfer.
+ *
+ *  @param[in] hospi    Hoctospi handle.
+ *  @param[in] command  The command to send to the peripheral. This will be written in the AR register.
+ *  @param[in] size     The size of the transfer. This will be written in the DLR register.
+ */
 static void quasar_qspi_setup(OSPI_HandleTypeDef *hospi, uint8_t command, uint8_t size)
 {
     /* Block if requested read size is 0. This should never happen and user's app should block if it does. */
@@ -567,11 +573,10 @@ static void quasar_DMA_cmplt_callback(DMA_HandleTypeDef *hdma)
     __HAL_OSPI_ENABLE_IT(hospi, HAL_OSPI_IT_TC);
 }
 
-/* ST HAL FUNCTIONS IMPLEMENTATION ********************************************/
+/* ST HAL WEAK FUNCTIONS IMPLEMENTATION ********************************************/
 /** @brief This function handles OCTOSPI 1 interrupt.
  *
- *  @note This handler is use for the DMA transmission performed by
- *        the wireless core when the mode is QSPI.
+ *  @note This handler is use for the DMA transmission performed by the wireless core when the mode is QSPI.
  */
 void OCTOSPI1_IRQHandler(void)
 {

@@ -10,18 +10,17 @@
 #define SWC_CFG_COORD_H_
 
 /* CONSTANTS ******************************************************************/
-
 /* Sets the output power configuration for transmitting data. */
 #define TX_DATA_PULSE_COUNT 1
 #define TX_DATA_PULSE_WIDTH 7
 #define TX_DATA_PULSE_GAIN  1
 
-/* Sets the output power configuration for transmitting acknowledgement data. */
+/* Sets the output power configuration for transmitting acknowledgment data. */
 #define TX_ACK_PULSE_COUNT 1
 #define TX_ACK_PULSE_WIDTH 6
 #define TX_ACK_PULSE_GAIN  0
 
-/* Input power configuration */
+/* Input power configuration. */
 #define RX_ACK_PULSE_COUNT  1 /* Pulses configuration of received ACK frames */
 #define RX_DATA_PULSE_COUNT 1 /* Pulses configuration of received data frames */
 

@@ -23,7 +23,7 @@
 #define S_TO_US 1000000
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static void detect_drift(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline, sac_header_t *header);
+static void detect_drift(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline, const sac_header_t *header);
 static uint16_t correct_drift(sac_cdc_instance_t *cdc, uint8_t *data_in, uint16_t size, uint8_t *data_out);
 static void update_queue_avg(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline);
 static void validate_sac_bit_depth(sac_bit_depth_t bit_depth, sac_status_t *status);
@@ -142,18 +142,22 @@ uint16_t sac_cdc_process(void *instance, sac_pipeline_t *pipeline, sac_header_t 
         cdc->_internal.sac_cdc_resampling_stats.cdc_deflated_packets_count++;
     }
 
-    return (new_sample_count * cdc->_internal.size_of_buffer_type);
+    return new_sample_count * cdc->_internal.size_of_buffer_type;
 }
 
-int sac_cdc_format_stats(sac_cdc_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status)
+int sac_cdc_format_stats(const sac_cdc_instance_t *cdc, char *buffer, uint16_t size, sac_status_t *status)
 {
-    int string_length = 0;
-    const char *cdc_inflated_packets_count_str = "CDC Inflated Packets Count";
-    const char *cdc_deflated_packets_count_str = "CDC Deflated Packets Count";
+    int string_length;
+    const char *cdc_inflated_packets_count_str;
+    const char *cdc_deflated_packets_count_str;
+
     *status = SAC_OK;
 
     SAC_CHECK_STATUS(cdc == NULL, status, SAC_ERR_NULL_PTR, return 0);
     SAC_CHECK_STATUS(buffer == NULL, status, SAC_ERR_NULL_PTR, return 0);
+
+    cdc_inflated_packets_count_str = "CDC Inflated Packets Count";
+    cdc_deflated_packets_count_str = "CDC Deflated Packets Count";
 
     string_length = snprintf(buffer, size,
                              "<< CDC Statistics >>\r\n"
@@ -194,7 +198,7 @@ uint32_t sac_cdc_calculate_queue_average_size(uint8_t max_drift_ppm, uint32_t sa
  *  @param[in] pipeline  Pipeline instance.
  *  @param[in] header    Audio packet's header.
  */
-static void detect_drift(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline, sac_header_t *header)
+static void detect_drift(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline, const sac_header_t *header)
 {
     /* Calculate average queue length only if audio link is stable. */
     if (header->tx_queue_level_high == 0) {
@@ -252,8 +256,7 @@ static uint16_t correct_drift(sac_cdc_instance_t *cdc, uint8_t *data_in, uint16_
 
 /** @brief Update the rolling average of the audio buffer load.
  *
- *  Values in the average are the number of samples multiplied
- *  by DECIMAL_FACTOR to have a proper granularity.
+ *  @note Values in the average are the number of samples multiplied by DECIMAL_FACTOR to have a proper granularity.
  *
  *  @param[in] cdc       CDC instance.
  *  @param[in] pipeline  Pipeline instance.
@@ -265,7 +268,7 @@ static void update_queue_avg(sac_cdc_instance_t *cdc, sac_pipeline_t *pipeline)
     current_queue_length += (pipeline->_internal.pending_packets * cdc->_internal.sample_amount);
     uint16_t avg_idx = cdc->_internal.avg_idx;
 
-    /* Update Rolling Avg */
+    /* Update Rolling Avg. */
     cdc->_internal.avg_sum -= cdc->_internal.avg_arr[avg_idx]; /* Remove oldest value. */
     cdc->_internal.avg_arr[avg_idx] = current_queue_length;
     cdc->_internal.avg_sum += cdc->_internal.avg_arr[avg_idx]; /* Add new value. */

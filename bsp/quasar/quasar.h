@@ -36,10 +36,9 @@ extern "C" {
 /* TYPES **********************************************************************/
 /** @brief Configuration set by the application to configure the Quasar BSP.
  *
- * @note If debug mode is enabled, both debug GPIOs and a debug UART will be initialized.
- *       The GPIOs are located on the expansion port, and communication via UART is available through the port
- *       of the ST-Link programmer alongside SWD.
- *       The UART protocol is set to 115200 baud, 8 data bits, no parity, and 1 stop bit (115200 8N1).
+ *  @note If debug mode is enabled, both debug GPIOs and a debug UART will be initialized. The GPIOs are located on the
+ *        expansion port, and communication via UART is available through the port of the ST-Link programmer alongside
+ *        SWD. The UART protocol is set to 115200 baud, 8 data bits, no parity, and 1 stop bit (115200 8N1).
  */
 typedef struct quasar_config {
     /*! Enable debug mode to control debug pins and UART on the ST-Link. */

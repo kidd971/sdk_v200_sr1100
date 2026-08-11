@@ -22,7 +22,7 @@ extern "C" {
 /** @brief SPARK Wireless Core endpoint instance.
  */
 typedef struct ep_swc_instance {
-    /*! Wireless connection to use when producing or consuming */
+    /*! Wireless connection to use when producing or consuming. */
     swc_connection_t *connection;
 } ep_swc_instance_t;
 

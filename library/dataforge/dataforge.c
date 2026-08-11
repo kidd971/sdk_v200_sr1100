@@ -14,7 +14,7 @@
 #include <string.h>
 
 /* MACRO **********************************************************************/
-/*!< Extract the nth (0 = 1st, 1 = 2nd,..) byte from an int */
+/*! Extract the nth (0 = 1st, 1 = 2nd,..) byte from an int */
 #define EXTRACT_BYTE(x, n) (((x) >> (8 * (n))) & 0x00ff)
 
 /* CONSTANTS ******************************************************************/
@@ -24,7 +24,7 @@
 #define SEQ_NUM_INDEX     0
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static void memcpy_32bits(char *dest, uint32_t *src, size_t n);
+static void memcpy_32bits(char *dest, const uint32_t *src, size_t n);
 static void serialize_uint32_to_uint8_array(uint32_t in_data, uint8_t *out_data);
 static uint32_t get_crc(uint32_t crc, const void *buffer, size_t size);
 
@@ -45,7 +45,7 @@ void dataforge_generate_pseudo(uint8_t *data, size_t size, uint8_t seq_num)
     k++;
 }
 
-bool dataforge_validate_pseudo_crc(uint8_t *data, size_t size)
+bool dataforge_validate_pseudo_crc(const uint8_t *data, size_t size)
 {
     if (!dataforge_is_pseudo_crc_populated(size)) {
         return false;
@@ -61,7 +61,7 @@ bool dataforge_is_pseudo_crc_populated(size_t size)
     return size > CRC_SIZE;
 }
 
-dataforge_seq_status_t dataforge_validate_seq_num(uint8_t *data, uint8_t seq_num)
+dataforge_seq_status_t dataforge_validate_seq_num(const uint8_t *data, uint8_t seq_num)
 {
     if (data[SEQ_NUM_INDEX] == dataforge_increment_seq_num(seq_num)) {
         return DATAFORGE_MATCHING_SEQ;
@@ -77,12 +77,13 @@ uint8_t dataforge_increment_seq_num(uint8_t seq_num)
     return (seq_num + 1) % SEQ_NUM_VAL_RANGE;
 }
 
-uint8_t dataforge_extract_seq_num(uint8_t *payload)
+uint8_t dataforge_extract_seq_num(const uint8_t *payload)
 {
     return payload[SEQ_NUM_INDEX];
 }
 
-void dataforge_generate_pattern(char *payload, uint32_t *payload_data, uint8_t payload_size, uint8_t payload_data_count)
+void dataforge_generate_pattern(char *payload, const uint32_t *payload_data, uint8_t payload_size,
+                                uint8_t payload_data_count)
 {
     uint8_t i = 0;
 
@@ -99,7 +100,8 @@ void dataforge_generate_pattern(char *payload, uint32_t *payload_data, uint8_t p
     }
 }
 
-bool dataforge_validate_pattern(uint8_t *payload, uint32_t *pattern, uint8_t payload_size, uint8_t pattern_size)
+bool dataforge_validate_pattern(const uint8_t *payload, const uint32_t *pattern, uint8_t payload_size,
+                                uint8_t pattern_size)
 {
     if (pattern_size == 0) {
         return false;
@@ -115,10 +117,10 @@ bool dataforge_validate_pattern(uint8_t *payload, uint32_t *pattern, uint8_t pay
 }
 
 /* PRIVATE FUNCTIONS ***********************************************************/
-/** @brief Serialize an uint32_t byte array into an uint8_t byte array
+/** @brief Serialize an uint32_t byte array into an uint8_t byte array.
  *
- *  @param[in]  in_data   Input array in uint32_t
- *  @param[out] out_data  Output array in uint8_t
+ *  @param[in]  in_data   Input array in uint32_t.
+ *  @param[out] out_data  Output array in uint8_t.
  */
 static void serialize_uint32_to_uint8_array(uint32_t in_data, uint8_t *out_data)
 {
@@ -128,11 +130,11 @@ static void serialize_uint32_to_uint8_array(uint32_t in_data, uint8_t *out_data)
     out_data[3] = EXTRACT_BYTE(in_data, 0);
 }
 
-/** @brief  Compute CRC on a buffer.
+/** @brief Compute CRC on a buffer.
  *
  *  @param[in] crc     CRC seed value.
- *  @param[in] buffer  Pointer to the buffer for the CRC
- *  @param[in] size    size of the buffer
+ *  @param[in] buffer  Pointer to the buffer for the CRC.
+ *  @param[in] size    size of the buffer.
  *  @return CRC value calculated.
  */
 static uint32_t get_crc(uint32_t crc, const void *buffer, size_t size)
@@ -155,10 +157,10 @@ static uint32_t get_crc(uint32_t crc, const void *buffer, size_t size)
 /** @brief Copy content from uint32 array to char array.
  *
  *  @param[in] dest  Destination buffer.
- *  @param[in] src   Source buffer
- *  @param[in] n     Size to copy
+ *  @param[in] src   Source buffer.
+ *  @param[in] n     Size to copy.
  */
-static void memcpy_32bits(char *dest, uint32_t *src, size_t n)
+static void memcpy_32bits(char *dest, const uint32_t *src, size_t n)
 {
     for (uint8_t i = 0; i < n; i++) {
         dest[i] = src[i];

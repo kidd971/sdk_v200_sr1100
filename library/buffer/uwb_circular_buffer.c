@@ -52,7 +52,7 @@ void uwb_circ_buff_in(circ_buffer_t *buf, void *data, uint32_t size, circ_buff_e
         }
     }
 
-    memcpy(buf->in_idx, data + copied_len, cpy_size);
+    memcpy(buf->in_idx, (char *)data + copied_len, cpy_size);
     buf->in_idx = (char *)buf->in_idx + cpy_size;
     if (buf->in_idx == buf->buffer_end) {
         buf->in_idx = buf->buffer;
@@ -95,7 +95,7 @@ void uwb_circ_buff_out(circ_buffer_t *buf, void *data, uint32_t size, circ_buff_
         }
     }
 
-    memcpy(data + copied_len, buf->out_idx, cpy_size);
+    memcpy((char *)data + copied_len, buf->out_idx, cpy_size);
     buf->out_idx = (char *)buf->out_idx + cpy_size;
     if (buf->out_idx == buf->buffer_end)
         buf->out_idx = buf->buffer;
@@ -108,22 +108,22 @@ void uwb_circ_buff_out(circ_buffer_t *buf, void *data, uint32_t size, circ_buff_
     }
 }
 
-bool uwb_circ_buff_is_empty(circ_buffer_t *buf)
+bool uwb_circ_buff_is_empty(const circ_buffer_t *buf)
 {
     return buf->buf_empty;
 }
 
-bool uwb_circ_buff_is_full(circ_buffer_t *buf)
+bool uwb_circ_buff_is_full(const circ_buffer_t *buf)
 {
     return buf->buf_full;
 }
 
-uint32_t uwb_circ_buff_num_elements(circ_buffer_t *buf)
+uint32_t uwb_circ_buff_num_elements(const circ_buffer_t *buf)
 {
     return buf->num_data;
 }
 
-uint32_t uwb_circ_buff_free_space(circ_buffer_t *buf)
+uint32_t uwb_circ_buff_free_space(const circ_buffer_t *buf)
 {
     return buf->free_space;
 }

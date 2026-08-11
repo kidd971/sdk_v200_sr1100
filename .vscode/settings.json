@@ -205,6 +205,9 @@
     "terminal.integrated.automationProfile.windows": {
         "path": "powershell.exe"
     },
+    "chat.tools.terminal.terminalProfile.linux": {
+        "path": "/bin/bash"
+    },
     "spark-sdk.autoReload": true,
     "spark-sdk.offlineEnvironmentName": "spark-sdk",
     "spark-sdk.defaultEnvironment": "spark-sdk",

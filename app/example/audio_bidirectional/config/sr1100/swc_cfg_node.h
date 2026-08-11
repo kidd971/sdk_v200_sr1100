@@ -15,12 +15,12 @@
 #define TX_AUDIO_PULSE_WIDTH 1
 #define TX_AUDIO_PULSE_GAIN  1
 
-/* Sets the output power configuration for transmitting data and acknowledgement. */
+/* Sets the output power configuration for transmitting data and acknowledgment. */
 #define TX_DATA_PULSE_COUNT 1
 #define TX_DATA_PULSE_WIDTH 2
 #define TX_DATA_PULSE_GAIN  1
 
-/* Sets the output power configuration for transmitting acknowledgement data. */
+/* Sets the output power configuration for transmitting acknowledgment data. */
 #define TX_ACK_PULSE_COUNT 1
 #define TX_ACK_PULSE_WIDTH 6
 #define TX_ACK_PULSE_GAIN  0
@@ -30,7 +30,7 @@
 #define TX_AUDIO_FB_PULSE_WIDTH 5
 #define TX_AUDIO_FB_PULSE_GAIN  2
 
-/* Sets the number of pulses of received data and acknowledgement. */
+/* Sets the number of pulses of received data and acknowledgment. */
 #define RX_DATA_PULSE_COUNT 1
 #define RX_ACK_PULSE_COUNT  1
 

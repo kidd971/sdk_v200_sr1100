@@ -16,7 +16,7 @@
 #include "quasar_fifo.h"
 
 /* CONSTANTS ******************************************************************/
-/* I2C timing configuration (refer to the STM32U5xx datasheet and reference design) */
+/* I2C timing configuration (refer to the STM32U5xx datasheet and reference design). */
 #define QUASAR_I2C_TIMING 0xC0100615
 
 /* PRIVATE GLOBALS ************************************************************/
@@ -56,7 +56,7 @@ void quasar_i2c_init(quasar_i2c_config_t i2c_config)
      *      4. Enable I2C : Set I2C_CR1->PE
      */
 
-    /* Configure GPIO for SCL and SDA */
+    /* Configure GPIO for SCL and SDA. */
     quasar_gpio_init(i2c_config.gpio_config_sda);
     quasar_gpio_init(i2c_config.gpio_config_scl);
 
@@ -148,7 +148,7 @@ void quasar_i2c_write(quasar_i2c_selection_t i2c_selection, uint8_t device_addr,
     // clang-format on
 
     /* Push the configuration of the I2C write transaction into the FIFO. (Registers are 4 bytes long in a 32 bits
-     * architecture)
+     * architecture).
      */
     config_to_push = ((((uint32_t)2) << I2C_CR2_NBYTES_Pos) & I2C_CR2_NBYTES) |
                      (((uint32_t)device_addr) & I2C_CR2_SADD);
@@ -335,7 +335,7 @@ void quasar_i2c_read_blocking(quasar_i2c_selection_t i2c_selection, uint8_t devi
                         (((uint32_t)device_addr) & I2C_CR2_SADD);
     QUASAR_SET_BIT(i2c_instance->CR2, I2C_CR2_START_Msk);
 
-    /* Wait for received data in RXDR register to be ready  */
+    /* Wait for received data in RXDR register to be ready. */
     if (i2c_wait_for_flag(i2c_instance, I2C_ISR_RXNE_Pos, (retry_count + 500), 1) != 0) {
         QUASAR_BSP_CHECK_ERROR(true, err, QUASAR_ERR_I2C_RXNE_TIMEOUT, return);
     }
@@ -439,7 +439,7 @@ void quasar_i2c_read_burst_blocking(quasar_i2c_selection_t i2c_selection, uint8_
     QUASAR_SET_BIT(i2c_instance->CR2, I2C_CR2_START_Msk);
 
     for (int i = 0; i < size; i++) {
-        /* Wait for received data in RXDR register to be ready */
+        /* Wait for received data in RXDR register to be ready. */
         if (i2c_wait_for_flag(i2c_instance, I2C_ISR_RXNE_Pos, (retry_count + 500), 1) != 0) {
             QUASAR_BSP_CHECK_ERROR(true, err, QUASAR_ERR_I2C_RXNE_TIMEOUT, return);
         }
@@ -605,12 +605,12 @@ static IRQn_Type i2c_get_selected_irq(quasar_i2c_selection_t i2c_selection)
 static void i2c_select_clock_source(quasar_i2c_selection_t i2c_selection, quasar_i2c_clk_source_t clk_source)
 {
     /*
-     *   I2C1    : RCC_CCIPR1
-     *   I2C2    : RCC_CCIPR1
-     *   I2C3    : RCC_CCIPR3
-     *   I2C4    : RCC_CCIPR1
-     *   I2C5    : RCC_CCIPR2
-     *   I2C6    : RCC_CCIPR2
+     * - I2C1 : RCC_CCIPR1
+     * - I2C2 : RCC_CCIPR1
+     * - I2C3 : RCC_CCIPR3
+     * - I2C4 : RCC_CCIPR1
+     * - I2C5 : RCC_CCIPR2
+     * - I2C6 : RCC_CCIPR2
      */
     switch (i2c_selection) {
     case QUASAR_I2C_SELECTION_I2C1:
@@ -641,14 +641,16 @@ static void i2c_select_clock_source(quasar_i2c_selection_t i2c_selection, quasar
  *
  *  @note - The expected_status has to be 0 or 1.
  *        - If this function returns false, check flag in the ISR register to understand the cause
- *        - Some flags take time to be noticed. The timeout should be set to more than 200 for
- *          transmission and more than 500 for reception.
+ *        - Some flags take time to be noticed. The timeout should be set to more than 200 for transmission and more
+ *          than 500 for reception.
  *        - When breakpoint are placed, sometimes the behaviour is not the same as expected.
  *
- *  @param[in] i2c_instance    Selected I2C instance.
- *  @param[in] bit_pos         Position of the bit flag to be checked.
- *  @param[in] timeout         Number of loop iterations expected to wait for the flagto reach the desired status.
- *  @param[in] expected_status Desired status to be waited for.
+ *  @param[in] i2c_instance     Selected I2C instance.
+ *  @param[in] bit_pos          Position of the bit flag to be checked.
+ *  @param[in] timeout          Number of loop iterations expected to wait for the flagto reach the desired status.
+ *  @param[in] expected_status  Desired status to be waited for.
+ *  @retval 0  Flag has reached the desired status before the timeout has been reached.
+ *  @retval 1  Timeout has been reached before the flag reaches the desired status.
  */
 static uint8_t i2c_wait_for_flag(I2C_TypeDef *i2c_instance, uint32_t bit_pos, uint16_t timeout, uint8_t expected_status)
 {
@@ -669,30 +671,24 @@ static uint8_t i2c_wait_for_flag(I2C_TypeDef *i2c_instance, uint32_t bit_pos, ui
 
 /** @brief I2C interrupt routine for reception and transmission.
  *
- *  @note The I2C interrupt routine is a state machine based on the status flag
- *  of the selected I2C instance. I2C reading and writing are multi-step processes.
+ *  @note The I2C interrupt routine is a state machine based on the status flag of the selected I2C instance. I2C
+ *        reading and writing are multi-step processes.
  *
- *  In the case of a transmission (TXIS), data is pulled from an
- *  intermediate FIFO and placed into the transmission register (TXDR)
- *  to allow for the transmission of the next data.
+ *  @note In the case of a transmission (TXIS), data is pulled from an intermediate FIFO and placed into the
+ *        transmission register (TXDR) to allow for the transmission of the next data.
  *
- *  In the case of a completed transmission (TC), there are two options:
- *      Either a retransmission (RESTART) is needed in the case of
- *  a completed transmission in a read operation. In this scenario, the
- *  configuration of the CR2 register is pulled from the intermediate FIFO
- *  and placed into the relevant register. Then, the START condition is initiated
- *  to allow for a RESTART.
- *      Or the transaction needs to be terminated. In this scenario,
- *  the STOP condition is initiated to conclude the transaction.
+ *  @note In the case of a completed transmission (TC), there are two options: Either a retransmission (RESTART) is
+ *        needed in the case of a completed transmission in a read operation. In this scenario, the configuration of the
+ *        CR2 register is pulled from the intermediate FIFO and placed into the relevant register. Then, the START
+ *        condition is initiated to allow for a RESTART. Or the transaction needs to be terminated. In this scenario,
+ *        the STOP condition is initiated to conclude the transaction.
  *
- *  In the case of a reception (RXNE), data is retrieved from the reception
- *  register (RXDR) and placed into the output variable of the read function
- *  by directly writing to the address of this variable (a pointer that was
- *  previously fetched from the intermediate FIFO).
- *
- *  @note FIFO operations always pull exactly 4 bytes for pointer values.
- *  The quasar_fifo_pull_bytes() validation (number_of_bytes <= 8) always succeeds with this
- *  constant, so the error status is not checked as the precondition is always met by design.
+ *  @note In the case of a reception (RXNE), data is retrieved from the reception register (RXDR) and placed into the
+ *        output variable of the read function by directly writing to the address of this variable (a pointer that was
+ *        previously fetched from the intermediate FIFO).
+ *  @note FIFO operations always pull exactly 4 bytes for pointer values. The quasar_fifo_pull_bytes() validation
+ *        (number_of_bytes <= 8) always succeeds with this constant, so the error status is not checked as the
+ *        precondition is always met by design.
  *
  *  @param[in] i2c_instance   Selected I2C instance.
  *  @param[in] i2c_selection  Selected I2C selection.
@@ -715,7 +711,7 @@ static void i2c_irq_handler_routine(I2C_TypeDef *i2c_instance, quasar_i2c_select
         received_ptr = quasar_fifo_pull_bytes(&(quasar_i2c_fifo[i2c_selection]), 4, &local_err);
         /* Place the received pointer (the parameter of the read function of I2C) into the right variable. */
         memcpy((uint8_t *)&val_tmp, &received_ptr, 4);
-        /* Write the value of the received data into the parameter received_value from the read function of I2C*/
+        /* Write the value of the received data into the parameter received_value from the read function of I2C. */
         *val_tmp = (uint8_t)(i2c_instance->RXDR & I2C_RXDR_RXDATA);
 
         /* For TC : Initiate the STOP condition. */
@@ -724,7 +720,7 @@ static void i2c_irq_handler_routine(I2C_TypeDef *i2c_instance, quasar_i2c_select
         }
         /* Or : first write transaction of a read query just finished. */
         else {
-            /* Configure the I2C read transaction and initiate the RESTART condition.*/
+            /* Configure the I2C read transaction and initiate the RESTART condition. */
             local_err = QUASAR_OK;
             i2c_instance->CR2 = (uint32_t)quasar_fifo_pull_bytes(&(quasar_i2c_fifo[i2c_selection]), 4, &local_err);
             QUASAR_SET_BIT(i2c_instance->CR2, I2C_CR2_START_Msk);
@@ -746,7 +742,7 @@ static void i2c_irq_handler_routine(I2C_TypeDef *i2c_instance, quasar_i2c_select
 
     /* In case TXIS flag is set : A write transaction is not finished and there is still data to transmit. */
     case I2C_ISR_TXIS:
-        /* Transmit the next data */
+        /* Transmit the next data. */
         quasar_fifo_pull(&(quasar_i2c_fifo[i2c_selection]), &pulled_byte);
         i2c_instance->TXDR = (uint8_t)(pulled_byte & I2C_TXDR_TXDATA);
         break;
@@ -758,7 +754,7 @@ static void i2c_irq_handler_routine(I2C_TypeDef *i2c_instance, quasar_i2c_select
         received_ptr = quasar_fifo_pull_bytes(&(quasar_i2c_fifo[i2c_selection]), 4, &local_err);
         /* Place the received pointer (the parameter of the read function of I2C) into the right variable. */
         memcpy((uint8_t *)&val_tmp, &received_ptr, 4);
-        /* Write the value of the received data into the parameter received_value from the read function of I2C*/
+        /* Write the value of the received data into the parameter received_value from the read function of I2C. */
         *val_tmp = (uint8_t)(i2c_instance->RXDR & I2C_RXDR_RXDATA);
         break;
 
@@ -768,7 +764,7 @@ static void i2c_irq_handler_routine(I2C_TypeDef *i2c_instance, quasar_i2c_select
     }
 }
 
-/* ST HAL FUNCTIONS IMPLEMENTATION ********************************************/
+/* ST HAL WEAK FUNCTIONS IMPLEMENTATION ********************************************/
 /** @brief This function handles I2C1 event interrupt.
  */
 void I2C1_EV_IRQHandler(void)

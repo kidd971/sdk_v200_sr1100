@@ -13,7 +13,7 @@
 #include "stm32u5xx_ll_rcc.h"
 
 /* CONSTANT *******************************************************************/
-/* Voltage scale clock frequency limit */
+/* Voltage scale clock frequency limit. */
 /*! High performance range (160 MHz). */
 #define RANGE1_HIGH_PERFORMANCE_FREQ_LIMIT 160000000
 /*! Medium-high performance range (110 MHz). */
@@ -73,7 +73,7 @@ void quasar_clock_init(quasar_clk_freq_t quasar_clk_freq, quasar_bsp_status_t *e
 
 uint32_t quasar_clock_get_system_clock_freq(void)
 {
-    /* Update Core Clock value */
+    /* Update Core Clock value. */
     SystemCoreClockUpdate();
 
     return SystemCoreClock;
@@ -101,6 +101,7 @@ uint32_t quasar_clock_get_pll2_fracn(void)
  *  @param[in] RCC_OscInitStruct  RCC Oscillator configuration structure definition.
  *  @param[in] RCC_ClkInitStruct  RCC System/AHB/APB clock config structure definition.
  *  @param[in] quasar_clk_freq    Clock frequency selection.
+ *  @param[in] err                Pointer to store error status.
  */
 static void config_clock_freq(RCC_OscInitTypeDef *RCC_OscInitStruct, RCC_ClkInitTypeDef *RCC_ClkInitStruct,
                               quasar_clk_freq_t quasar_clk_freq, quasar_bsp_status_t *err)
@@ -118,7 +119,7 @@ static void config_clock_freq(RCC_OscInitTypeDef *RCC_OscInitStruct, RCC_ClkInit
 
 /** @brief Initialize the PLL clock to 160 MHz.
  *
- *  The HSE is 16 MHz.
+ *  @note The HSE is 16 MHz.
  *
  *  @param[in] RCC_OscInitStruct  RCC Oscillator configuration structure definition.
  */
@@ -159,6 +160,7 @@ static void set_system_clock_pll(RCC_ClkInitTypeDef *RCC_ClkInitStruct)
  *  @param[in] RCC_OscInitStruct  Oscillator configuration structure definition.
  *  @param[in] RCC_ClkInitStruct  Clock configuration structure definition.
  *  @param[in] flash_latency      Flash latency value to correctly read data from FLASH memory.
+ *  @param[in] err                Pointer to store error status.
  */
 static void system_clock_init(RCC_OscInitTypeDef *RCC_OscInitStruct, RCC_ClkInitTypeDef *RCC_ClkInitStruct,
                               uint32_t flash_latency, quasar_bsp_status_t *err)
@@ -210,7 +212,7 @@ static uint32_t get_voltage_scale(quasar_clk_freq_t quasar_clk_freq)
 
 /** @brief Set the flash latency from the voltage scale and HCLK.
  *
- *  The values are taken from the datasheet.
+ *  @note The values are taken from the datasheet.
  *
  *  @note It is assumed that the AHB prescaler is set to 1.
  *

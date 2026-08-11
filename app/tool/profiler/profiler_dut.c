@@ -24,11 +24,15 @@
  */
 
 /* INCLUDES *******************************************************************/
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
 #include "profiler_facade.h"
 #include "swc_api.h"
 #include "swc_cfg.h"
 #include "swc_error.h"
 #include "swc_hal_facade.h"
+#include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
 #define SWC_MEM_POOL_SIZE 8000
@@ -36,7 +40,7 @@
 #define PAYLOAD_TO_SEND 6
 /* Bytes overhead of a TX SPI transfer: 1 byte CMD + 3 bytes MAC. */
 #define TX_PAYLOAD_SPI_OVERHEAD 4
-/* Define whether or not to print all measurement statistics.  */
+/* Define whether or not to print all measurement statistics. */
 #define PRINT_ALL_STATS false
 /* Buffer size for terminal logs. */
 #define LOG_BUFFER_SIZE      ((PRINT_ALL_STATS) ? 3000 : 1024)
@@ -48,34 +52,34 @@
 /** @brief Represents the state of processing time measurements for a connection.
  */
 typedef enum profiler_state {
-    /* The link is idle, waiting for the next scenario to start. */
+    /*! The link is idle, waiting for the next scenario to start. */
     PROFILER_STATE_IDLE,
-    /* Currently transmitting or receiving AVERAGE_LENGTH payloads of the current payload size. */
+    /*! Currently transmitting or receiving AVERAGE_LENGTH payloads of the current payload size. */
     PROFILER_STATE_RUNNING,
-    /* The last payload of the current size has been transmitted or received, and the payload size must increase. */
+    /*! The last payload of the current size has been transmitted or received, and the payload size must increase. */
     PROFILER_STATE_INCREMENT_PAYLOAD_SIZE,
-    /* The scenario is complete. */
+    /*! The scenario is complete. */
     PROFILER_STATE_COMPLETE,
 } profiler_state_t;
 
 /** @brief Statistics of the processing time for a given payload size.
  */
 typedef struct processing_time_stats {
-    /* Payload size of the measurement. */
+    /*! Payload size of the measurement. */
     uint32_t payload_size;
-    /* Sum of all measurements. */
+    /*! Sum of all measurements. */
     double sum;
-    /* Number of measurements summed. */
+    /*! Number of measurements summed. */
     uint32_t sum_count;
-    /* Average measurement based on the sum of all measurements. */
+    /*! Average measurement based on the sum of all measurements. */
     double average;
-    /* Maximum value measured. */
+    /*! Maximum value measured. */
     double max;
-    /* Index of the maximum value measured. */
+    /*! Index of the maximum value measured. */
     uint32_t max_idx;
-    /* Minimum value measured. */
+    /*! Minimum value measured. */
     double min;
-    /* Index of the minimum value measured. */
+    /*! Index of the minimum value measured. */
     uint32_t min_idx;
 } processing_time_stats_t;
 
@@ -89,17 +93,17 @@ typedef volatile struct scenario_stats {
 /** @brief Statistics for the summary of all the profiler measurements.
  */
 typedef struct profiler_stats {
-    /* Time required to send 1 byte via SPI. */
+    /*! Time required to send 1 byte via SPI. */
     double spi_us_per_byte;
-    /* Constant processing time for each transmission, including configuration and CPU cycles. */
+    /*! Constant processing time for each transmission, including configuration and CPU cycles. */
     double tx_base_proc_time_us;
-    /* Constant processing time for each reception, including configuration and CPU cycles. */
+    /*! Constant processing time for each reception, including configuration and CPU cycles. */
     double rx_base_proc_time_us;
-    /* Constant processing time for each transfer, including configuration and CPU cycles. */
+    /*! Constant processing time for each transfer, including configuration and CPU cycles. */
     double rxtx_base_proc_time_us;
-    /* The RX payload size for which the SPI transfer exceeds the CPU cycles needed to process the received frame. */
+    /*! The RX payload size for which the SPI transfer exceeds the CPU cycles needed to process the received frame. */
     double rx_payload_threshold;
-    /* Time not included in the constant processing time for each transfer. */
+    /*! Time not included in the constant processing time for each transfer. */
     double rxtx_overhead_time_us;
 } profiler_stats_t;
 
@@ -173,9 +177,10 @@ static void save_current_payload_size(volatile processing_time_stats_t *current_
 
 static void log_clean_line(void);
 static void log_current_payload_size(void);
-static void log_processing_time_average(scenario_stats_t *scenario_tx_stats, scenario_stats_t *scenario_rx_stats);
-static void log_profiler_summary(profiler_stats_t *profiler_stats);
-static uint32_t log_advanced_stats(char *buffer, uint32_t buffer_size, volatile processing_time_stats_t *stats);
+static void log_processing_time_average(const scenario_stats_t *scenario_tx_stats,
+                                        const scenario_stats_t *scenario_rx_stats);
+static void log_profiler_summary(const profiler_stats_t *profiler_stats);
+static uint32_t log_advanced_stats(char *buffer, uint32_t buffer_size, const volatile processing_time_stats_t *stats);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
@@ -221,10 +226,14 @@ int main(void)
 static void setup_tx_connection(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
-    uint32_t timeslot_us[] = SCHEDULE;
-    int32_t timeslots[] = TIMESLOTS;
-    uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-    uint32_t channel_frequency[] = CHANNEL_FREQ;
+    const uint32_t timeslot_us[] = SCHEDULE;
+    const int32_t timeslots[] = TIMESLOTS;
+    const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+    const uint32_t channel_frequency[] = CHANNEL_FREQ;
+    swc_radio_handle_t *radio_handle = NULL;
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_handle_t *radio_handle_2 = NULL;
+#endif
 
     /* Reset the synchronization flags for the next scenario. */
     current_profiling_payload = MIN_PAYLOAD_SIZE_BYTE;
@@ -233,7 +242,7 @@ static void setup_tx_connection(void)
     generated_packet_count = 0;
     rx_conn = NULL;
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -241,11 +250,11 @@ static void setup_tx_connection(void)
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = PAN_ID,
     };
 
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_COORDINATOR,
-        .pan_id = PAN_ID,
         .coordinator_address = COORDINATOR_ADDRESS,
         .local_address = COORDINATOR_ADDRESS,
     };
@@ -253,7 +262,12 @@ static void setup_tx_connection(void)
     swc_init(core_cfg, node_cfg, context_switch_callback, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
 #if (SWC_RADIO_COUNT == 1)
@@ -263,8 +277,12 @@ static void setup_tx_connection(void)
     /* Set another callback to insert the profiler start in the Radio IRQ callback. */
     swc_hal_set_radio_1_irq_callback(radio1_callback);
 
-    /* Initialize second radio. */
-    swc_radio_module_init(SWC_RADIO_ID_2, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle_2 = swc_radio_module_calib(SWC_RADIO_ID_2, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle_2, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* Set another callback to insert the profiler start in the Radio IRQ callback. */
@@ -272,7 +290,7 @@ static void setup_tx_connection(void)
 #endif
 
     /* ** TX Connection ** */
-    swc_connection_cfg_t tx_conn_cfg = {
+    const swc_connection_cfg_t tx_conn_cfg = {
         .name = "TX Connection",
         .source_address = COORDINATOR_ADDRESS,
         .destination_address = NODE_ADDRESS,
@@ -284,17 +302,19 @@ static void setup_tx_connection(void)
     tx_conn = swc_connection_init(tx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t tx_channel_cfg = {
+    const swc_channel_cfg_t tx_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_conn, tx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *tx_channels = swc_channel_list_init_from_base(tx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(tx_conn, tx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_tx_success_callback(tx_conn, conn_tx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -311,10 +331,14 @@ static void setup_tx_connection(void)
 static void setup_rx_connection(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
-    uint32_t timeslot_us[] = SCHEDULE;
-    int32_t timeslots[] = TIMESLOTS;
-    uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-    uint32_t channel_frequency[] = CHANNEL_FREQ;
+    const uint32_t timeslot_us[] = SCHEDULE;
+    const int32_t timeslots[] = TIMESLOTS;
+    const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+    const uint32_t channel_frequency[] = CHANNEL_FREQ;
+    swc_radio_handle_t *radio_handle = NULL;
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_handle_t *radio_handle_2 = NULL;
+#endif
 
     /* Reset the synchronization flags for the next scenario. */
     current_profiling_payload = MIN_PAYLOAD_SIZE_BYTE;
@@ -322,7 +346,7 @@ static void setup_rx_connection(void)
     transmitted_packet_count = 0;
     generated_packet_count = 0;
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -330,12 +354,12 @@ static void setup_rx_connection(void)
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = PAN_ID,
     };
 
     /* For the unidirectional RX connection (Scenario 2), the DUT acts as the Node. */
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_NODE,
-        .pan_id = PAN_ID,
         .coordinator_address = NODE_ADDRESS,
         .local_address = COORDINATOR_ADDRESS,
     };
@@ -343,7 +367,12 @@ static void setup_rx_connection(void)
     swc_init(core_cfg, node_cfg, context_switch_callback, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
 #if (SWC_RADIO_COUNT == 1)
@@ -353,8 +382,12 @@ static void setup_rx_connection(void)
     /* Set another callback to insert the profiler start in the Radio IRQ callback. */
     swc_hal_set_radio_1_irq_callback(radio1_callback);
 
-    /* Initialize second radio. */
-    swc_radio_module_init(SWC_RADIO_ID_2, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle_2 = swc_radio_module_calib(SWC_RADIO_ID_2, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle_2, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* Set another callback to insert the profiler start in the Radio IRQ callback. */
@@ -362,7 +395,7 @@ static void setup_rx_connection(void)
 #endif
 
     /* ** RX Connection ** */
-    swc_connection_cfg_t rx_conn_cfg = {
+    const swc_connection_cfg_t rx_conn_cfg = {
         .name = "RX Connection",
         .source_address = NODE_ADDRESS,
         .destination_address = COORDINATOR_ADDRESS,
@@ -374,17 +407,19 @@ static void setup_rx_connection(void)
     rx_conn = swc_connection_init(rx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t rx_channel_cfg = {
+    const swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_conn, rx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *rx_channels = swc_channel_list_init_from_base(rx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(rx_conn, rx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -398,11 +433,15 @@ static void setup_rx_connection(void)
 static void setup_bidir_connection(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
-    uint32_t bidir_timeslot_us[] = BIDIR_SCHEDULE;
-    int32_t bidir_tx_timeslots[] = BIDIR_TIMESLOTS_1;
-    int32_t bidir_rx_timeslots[] = BIDIR_TIMESLOTS_0;
-    uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-    uint32_t channel_frequency[] = CHANNEL_FREQ;
+    const uint32_t bidir_timeslot_us[] = BIDIR_SCHEDULE;
+    const int32_t bidir_tx_timeslots[] = BIDIR_TIMESLOTS_1;
+    const int32_t bidir_rx_timeslots[] = BIDIR_TIMESLOTS_0;
+    const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+    const uint32_t channel_frequency[] = CHANNEL_FREQ;
+    swc_radio_handle_t *radio_handle = NULL;
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_handle_t *radio_handle_2 = NULL;
+#endif
 
     /* Reset the synchronizing flags for the next scenario. */
     current_profiling_payload = MIN_PAYLOAD_SIZE_BYTE;
@@ -410,7 +449,7 @@ static void setup_bidir_connection(void)
     transmitted_packet_count = 0;
     generated_packet_count = 0;
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = bidir_timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(bidir_timeslot_us),
         .channel_sequence = channel_sequence,
@@ -418,11 +457,11 @@ static void setup_bidir_connection(void)
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = PAN_ID,
     };
 
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_COORDINATOR,
-        .pan_id = PAN_ID,
         .coordinator_address = COORDINATOR_ADDRESS,
         .local_address = COORDINATOR_ADDRESS,
     };
@@ -430,7 +469,12 @@ static void setup_bidir_connection(void)
     swc_init(core_cfg, node_cfg, context_switch_callback, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
 #if (SWC_RADIO_COUNT == 1)
@@ -440,8 +484,12 @@ static void setup_bidir_connection(void)
     /* Set another callback to insert the profiler start in the Radio IRQ callback. */
     swc_hal_set_radio_1_irq_callback(radio1_callback);
 
-    /* Initialize second radio. */
-    swc_radio_module_init(SWC_RADIO_ID_2, true, &swc_err);
+    /* Calibrate the radio. */
+    radio_handle_2 = swc_radio_module_calib(SWC_RADIO_ID_2, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle_2, false, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
     /* Set another callback to insert the profiler start in the Radio IRQ callback. */
@@ -449,7 +497,7 @@ static void setup_bidir_connection(void)
 #endif
 
     /* ** TX Connection ** */
-    swc_connection_cfg_t tx_conn_cfg = {
+    const swc_connection_cfg_t tx_conn_cfg = {
         .name = "TX Connection",
         .source_address = COORDINATOR_ADDRESS,
         .destination_address = NODE_ADDRESS,
@@ -461,17 +509,19 @@ static void setup_bidir_connection(void)
     tx_conn = swc_connection_init(tx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t tx_channel_cfg = {
+    const swc_channel_cfg_t tx_channel_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        tx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(tx_conn, tx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *tx_channels = swc_channel_list_init_from_base(tx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(tx_conn, tx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_tx_success_callback(tx_conn, conn_tx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -479,7 +529,7 @@ static void setup_bidir_connection(void)
     ASSERT_SWC_STATUS(swc_err);
 
     /* ** RX Connection ** */
-    swc_connection_cfg_t rx_conn_cfg = {
+    const swc_connection_cfg_t rx_conn_cfg = {
         .name = "RX Connection",
         .source_address = NODE_ADDRESS,
         .destination_address = COORDINATOR_ADDRESS,
@@ -491,17 +541,19 @@ static void setup_bidir_connection(void)
     rx_conn = swc_connection_init(rx_conn_cfg, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    swc_channel_cfg_t rx_channel_cfg = {
+    const swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = TX_ACK_PULSE_COUNT,
         .tx_pulse_width = TX_ACK_PULSE_WIDTH,
         .tx_pulse_gain = TX_ACK_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_conn, rx_channel_cfg, &swc_err);
-        ASSERT_SWC_STATUS(swc_err);
-    }
+    swc_channel_t *rx_channels = swc_channel_list_init_from_base(rx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
+    swc_connection_set_channels(rx_conn, rx_channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
+
     swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
@@ -588,7 +640,7 @@ static void conn_rx_success_callback(void *conn, void *arg)
             state_rx = PROFILER_STATE_INCREMENT_PAYLOAD_SIZE;
         } else {
             /* Save the processing time measurement following a reception.
-             *  - The first packet is not measured since it can be an outlier (ex: instruction cache miss, event, etc.)
+             *  - The first packet is not measured since it can be an outlier (ex: instruction cache miss, event, etc.).
              */
             if (received_packet_count++ > 1) {
                 profiler_add_processing_time_rx_sample();
@@ -601,8 +653,8 @@ static void conn_rx_success_callback(void *conn, void *arg)
 
 /** @brief Timer callback for generating packets.
  *
- *  This function is triggered by a timer to periodically send packets. If the required number of packets has not been
- *  sent, it allocates a buffer, fills it with test data, and queues it for transmission.
+ *  @note This function is triggered by a timer to periodically send packets. If the required number of packets has not
+ *        been sent, it allocates a buffer, fills it with test data, and queues it for transmission.
  */
 static void packet_generation_timer_callback(void)
 {
@@ -617,7 +669,7 @@ static void packet_generation_timer_callback(void)
 
         swc_connection_get_payload_buffer(tx_conn, &profiler_buf, &swc_err);
 
-        /* If the SWC queue is not full, a new packets is inserted into the queue */
+        /* If the SWC queue is not full, a new packets is inserted into the queue. */
         if (profiler_buf != NULL) {
             memset(profiler_buf, PAYLOAD_TO_SEND, current_profiling_payload);
             swc_connection_send(tx_conn, profiler_buf, current_profiling_payload, &swc_err);
@@ -670,6 +722,8 @@ static void context_switch_callback(void)
 }
 
 /** @brief Run the unidirectional transmission scenario.
+ *
+ *  @param[out] profiler_stats  Profiler statistics structure to update.
  */
 static void run_unidir_tx_scenario(profiler_stats_t *profiler_stats)
 {
@@ -762,6 +816,8 @@ static void run_unidir_tx_scenario(profiler_stats_t *profiler_stats)
 }
 
 /** @brief Run the unidirectional reception scenario.
+ *
+ *  @param[out] profiler_stats  Profiler statistics structure to update.
  */
 static void run_unidir_rx_scenario(profiler_stats_t *profiler_stats)
 {
@@ -839,6 +895,8 @@ static void run_unidir_rx_scenario(profiler_stats_t *profiler_stats)
 }
 
 /** @brief Run the bidirectional transmission-reception scenario.
+ *
+ *  @param[out] profiler_stats  Profiler statistics structure to update.
  */
 static void run_bidir_bidir_scenario(profiler_stats_t *profiler_stats)
 {
@@ -875,7 +933,7 @@ static void run_bidir_bidir_scenario(profiler_stats_t *profiler_stats)
         /* Start the generation of packets. */
         facade_packet_generation_timer_start();
 
-        /* Wait until both sequence are finished. (Packets with the right payload size has been sent and received) */
+        /* Wait until both sequence are finished. (Packets with the right payload size has been sent and received). */
         while (state_rx != PROFILER_STATE_INCREMENT_PAYLOAD_SIZE || state_tx != PROFILER_STATE_INCREMENT_PAYLOAD_SIZE);
 
         /* Stop the timer used for the generation of new packets. */
@@ -974,6 +1032,8 @@ static void profiler_add_processing_time_rx_sample(void)
 }
 
 /** @brief Computes the average processing time for all scenario measurements.
+ *
+ *  @param[in] scenario_stats  Pointer to the scenario statistics structure.
  */
 static void calculate_processing_time_average(scenario_stats_t *scenario_stats)
 {
@@ -999,13 +1059,13 @@ static double calculate_tx_base_proc(double total_tx_time_1, double nb_tx_spi_by
            (nb_tx_spi_bytes_2 - nb_tx_spi_bytes_1);
 }
 
-/** @brief Calculate the number of microseconds for each byte transfered on the SPI.
+/** @brief Calculate the number of microseconds for each byte transferred on the SPI.
  *
  *  @param[in] total_tx_time_1    Total processing time of the measurement no 1.
  *  @param[in] nb_tx_spi_bytes_1  Number of bytes in the TX SPI transfer of the measurement no 1.
  *  @param[in] total_tx_time_2    Total processing time of the measurement no 2.
  *  @param[in] nb_tx_spi_bytes_2  Number of bytes in the TX SPI transfer of the measurement no 2.
- *  @return The number of microseconds for each byte transfered on the SPI.
+ *  @return The number of microseconds for each byte transferred on the SPI.
  */
 static double calculate_spi_us_per_byte(double total_tx_time_1, double nb_tx_spi_bytes_1, double total_tx_time_2,
                                         double nb_tx_spi_bytes_2)
@@ -1018,7 +1078,7 @@ static double calculate_spi_us_per_byte(double total_tx_time_1, double nb_tx_spi
  *
  *  @param[in] first_total_rx_time  Total processing time of the first measurement in the RX scenario.
  *  @param[in] last_total_rx_time   Total processing time of the last measurement in the RX scenario.
- *  @param[in] spi_us_per_byte      The number of microseconds for each byte transfered on the SPI.
+ *  @param[in] spi_us_per_byte      The number of microseconds for each byte transferred on the SPI.
  *  @return The RX payload threshold.
  */
 static double calculate_rx_payload_threshold(double first_total_rx_time, double last_total_rx_time,
@@ -1029,7 +1089,7 @@ static double calculate_rx_payload_threshold(double first_total_rx_time, double 
 
 /** @brief Calculate the time of a SPI transfer.
  *
- *  @param[in] spi_us_per_byte  The number of microseconds for each byte transfered on the SPI.
+ *  @param[in] spi_us_per_byte  The number of microseconds for each byte transferred on the SPI.
  *  @param[in] nb_byte          Number of bytes to transfer.
  *  @return The time of a SPI transfer.
  */
@@ -1081,7 +1141,7 @@ static void log_current_payload_size(void)
 {
     /* Clear log buffer. */
     memset(log_buffer, 0, LOG_BUFFER_SIZE);
-    snprintf(log_buffer, sizeof(log_buffer), "\rCurrent Payload size: %3u bytes", current_profiling_payload);
+    snprintf(log_buffer, sizeof(log_buffer), "\rCurrent Payload size: %3" PRIu16 " bytes", current_profiling_payload);
     facade_log_write(log_buffer);
 }
 
@@ -1090,20 +1150,24 @@ static void log_current_payload_size(void)
  *  @param[in] scenario_tx_stats  Pointer the scenario's TX statistics.
  *  @param[in] scenario_rx_stats  Pointer the scenario's RX statistics.
  */
-static void log_processing_time_average(scenario_stats_t *scenario_tx_stats, scenario_stats_t *scenario_rx_stats)
+static void log_processing_time_average(const scenario_stats_t *scenario_tx_stats,
+                                        const scenario_stats_t *scenario_rx_stats)
 {
     int string_length = 0;
-    uint32_t payload_size = 0;
+    uint32_t payload_size;
 
     /* Clear log buffer. */
     memset(log_buffer, 0, LOG_BUFFER_SIZE);
+    if (scenario_tx_stats == NULL && scenario_rx_stats == NULL) {
+        return;
+    }
     for (int i = 0; i < PAYLOAD_SIZE_COUNT; i++) {
         payload_size = (scenario_tx_stats != NULL) ? scenario_tx_stats->processing_time_stats[i].payload_size :
                                                      scenario_rx_stats->processing_time_stats[i].payload_size;
         string_length += snprintf(log_buffer + string_length, sizeof(log_buffer) - string_length,
-                                  "\r\n< Payload size: %lu bytes >", payload_size);
+                                  "\r\n< Payload size: %" PRIu32 " bytes >", payload_size);
         if (scenario_tx_stats) {
-            volatile processing_time_stats_t *tx_stats = scenario_tx_stats->processing_time_stats;
+            const volatile processing_time_stats_t *tx_stats = scenario_tx_stats->processing_time_stats;
 
             if (PRINT_ALL_STATS) {
                 string_length += snprintf(log_buffer + string_length, sizeof(log_buffer) - string_length,
@@ -1116,7 +1180,7 @@ static void log_processing_time_average(scenario_stats_t *scenario_tx_stats, sce
             }
         }
         if (scenario_rx_stats) {
-            volatile processing_time_stats_t *rx_stats = scenario_rx_stats->processing_time_stats;
+            const volatile processing_time_stats_t *rx_stats = scenario_rx_stats->processing_time_stats;
 
             if (PRINT_ALL_STATS) {
                 string_length += snprintf(log_buffer + string_length, sizeof(log_buffer) - string_length,
@@ -1138,17 +1202,18 @@ static void log_processing_time_average(scenario_stats_t *scenario_tx_stats, sce
  *  @param[in] buffer       Buffer to write to.
  *  @param[in] buffer_size  Size of the buffer.
  *  @param[in] stats        Statistics to log.
+ *  @return Number of characters written to the buffer.
  */
-static uint32_t log_advanced_stats(char *buffer, uint32_t buffer_size, volatile processing_time_stats_t *stats)
+static uint32_t log_advanced_stats(char *buffer, uint32_t buffer_size, const volatile processing_time_stats_t *stats)
 {
     uint32_t string_length = 0;
 
-    string_length += snprintf(buffer + string_length, buffer_size - string_length, "\r\n\t%-7s: %7.3f us, count: %lu",
-                              "Average", stats->average, stats->sum_count);
-    string_length += snprintf(buffer + string_length, buffer_size - string_length, "\r\n\t%-7s: %7.3f us, index: %lu",
-                              "Max", stats->max, stats->max_idx);
-    string_length += snprintf(buffer + string_length, buffer_size - string_length, "\r\n\t%-7s: %7.3f us, index: %lu",
-                              "Min", stats->min, stats->min_idx);
+    string_length += snprintf(buffer + string_length, buffer_size - string_length,
+                              "\r\n\t%-7s: %7.3f us, count: %" PRIu32, "Average", stats->average, stats->sum_count);
+    string_length += snprintf(buffer + string_length, buffer_size - string_length,
+                              "\r\n\t%-7s: %7.3f us, index: %" PRIu32, "Max", stats->max, stats->max_idx);
+    string_length += snprintf(buffer + string_length, buffer_size - string_length,
+                              "\r\n\t%-7s: %7.3f us, index: %" PRIu32, "Min", stats->min, stats->min_idx);
     string_length += snprintf(buffer + string_length, buffer_size - string_length, "\r\n\t%-7s: %7.3f us", "Range",
                               stats->max - stats->min);
 
@@ -1156,8 +1221,10 @@ static uint32_t log_advanced_stats(char *buffer, uint32_t buffer_size, volatile 
 }
 
 /** @brief Log the SPI speed and processing time formulas.
+ *
+ *  @param[in] profiler_stats  Pointer to the profiler statistics structure.
  */
-static void log_profiler_summary(profiler_stats_t *profiler_stats)
+static void log_profiler_summary(const profiler_stats_t *profiler_stats)
 {
     uint32_t string_length = 0;
 
@@ -1177,18 +1244,18 @@ static void log_profiler_summary(profiler_stats_t *profiler_stats)
                               " SPI Time per Byte: %.6f us / Byte\r\n"
                               " SPI Speed: %.3f Mbps\r\n",
                               profiler_stats->spi_us_per_byte, 8 / profiler_stats->spi_us_per_byte);
-    string_length += snprintf(
-        log_buffer + string_length, sizeof(log_buffer) - string_length,
-        "\n< Processing Formulas >\r\n"
-        "<< TX processing formula >>\r\n"
-        "   proc = %.3f us + (CMD_BYTE + MAC_HDR + nb_tx_byte) * %.3f us/byte\r\n"
-        "<< RX processing formula >>\r\n"
-        "   proc = %.3f us + max((nb_rx_byte - %.3f), 0) * %.3f us/byte\r\n"
-        "<< RX-TX processing formula >>\r\n"
-        "   proc = %.3f us + (max((nb_rx_byte - %.3f), 0) + (CMD_BYTE + MAC_HDR + nb_tx_byte)) * %.3f us/byte\r\n",
-        profiler_stats->tx_base_proc_time_us, profiler_stats->spi_us_per_byte, profiler_stats->rx_base_proc_time_us,
-        profiler_stats->rx_payload_threshold, profiler_stats->spi_us_per_byte, profiler_stats->rxtx_base_proc_time_us,
-        profiler_stats->rx_payload_threshold, profiler_stats->spi_us_per_byte);
+    snprintf(log_buffer + string_length, sizeof(log_buffer) - string_length,
+             "\n< Processing Formulas >\r\n"
+             "<< TX processing formula >>\r\n"
+             "   proc = %.3f us + (CMD_BYTE + MAC_HDR + nb_tx_byte) * %.3f us/byte\r\n"
+             "<< RX processing formula >>\r\n"
+             "   proc = %.3f us + max((nb_rx_byte - %.3f), 0) * %.3f us/byte\r\n"
+             "<< RX-TX processing formula >>\r\n"
+             "   proc = %.3f us + (max((nb_rx_byte - %.3f), 0) + (CMD_BYTE + MAC_HDR + nb_tx_byte)) * %.3f us/byte\r\n",
+             profiler_stats->tx_base_proc_time_us, profiler_stats->spi_us_per_byte,
+             profiler_stats->rx_base_proc_time_us, profiler_stats->rx_payload_threshold,
+             profiler_stats->spi_us_per_byte, profiler_stats->rxtx_base_proc_time_us,
+             profiler_stats->rx_payload_threshold, profiler_stats->spi_us_per_byte);
 
     facade_log_write(log_buffer);
 }
@@ -1197,7 +1264,7 @@ void swc_error_handler(swc_error_t swc_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    snprintf(buffer, sizeof(buffer), "SWC Error ! Code: %d\n\r", swc_status);
     facade_log_error_string(buffer);
 
     while (1);

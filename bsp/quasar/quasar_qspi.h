@@ -22,12 +22,13 @@ extern OSPI_HandleTypeDef *const qspi_handle_table[];
 
 /* Return the global interrupt of the selected QSPI peripheral from quasar_qspi_selection_t. */
 #define QUASAR_QSPI_GET_SELECTED_IRQ(qspi_selection) \
-    ((IRQn_Type)((qspi_selection == QUASAR_QSPI_SELECTION_OSPI1) ? OCTOSPI1_IRQn : OCTOSPI2_IRQn))
+    ((IRQn_Type)(((qspi_selection) == QUASAR_QSPI_SELECTION_OSPI1) ? OCTOSPI1_IRQn : OCTOSPI2_IRQn))
 
 /* MACROS *********************************************************************/
 /*! Return the handle from the selected QSPI from quasar_qspi_selection_t. */
-#define QUASAR_QSPI_GET_SELECTED_HANDLE(qspi_selection) \
-    ((OSPI_HandleTypeDef *)((qspi_selection < _QUASAR_QSPI_SELECTION_COUNT) ? qspi_handle_table[qspi_selection] : NULL))
+#define QUASAR_QSPI_GET_SELECTED_HANDLE(qspi_selection)                                                               \
+    ((OSPI_HandleTypeDef *)(((qspi_selection) < _QUASAR_QSPI_SELECTION_COUNT) ? qspi_handle_table[(qspi_selection)] : \
+                                                                                NULL))
 
 /*! Return true is the QSPI is busy, false if not. */
 #define QUASAR_QSPI_IS_BUSY(qspi_selection) \
@@ -45,8 +46,7 @@ typedef enum quasar_qspi_selection {
     _QUASAR_QSPI_SELECTION_COUNT,
 } quasar_qspi_selection_t;
 
-/** @brief List of Quasar QSPI communication modes, specifying line count
- *         and dummy data bits.
+/** @brief List of Quasar QSPI communication modes, specifying line count and dummy data bits.
  */
 typedef enum quasar_qspi_mode {
     /*! Single line mode with no dummy data. */
@@ -83,9 +83,8 @@ typedef struct quasar_qspi_config {
 /* PUBLIC FUNCTION PROTOTYPES *************************************************/
 /** @brief Initialize the QSPI peripheral.
  *
- *  @note The configuration of the QSPI protocol is not complete; the number
- *        dummy data as well as the number of communication lines used still
- *        need to be determined. (See quasar_qspi_mode enumeration and the
+ *  @note The configuration of the QSPI protocol is not complete; the number dummy data as well as the number of
+ *        communication lines used still need to be determined. (See quasar_qspi_mode enumeration and the
  *        quasar_qspi_set_mode function)
  *
  *  @param[in] qspi_config  Configuration of the QSPI peripheral.
@@ -94,9 +93,8 @@ void quasar_qspi_init(quasar_qspi_config_t qspi_config);
 
 /** @brief Enable the selected QSPI interrupt.
  *
- *  @note By default, the interrupt is not enabled in the initialization.
- *        The reason is that the interrupt routine should only be called
- *        when the wireless core performs a DMA transmission.
+ *  @note By default, the interrupt is not enabled in the initialization. The reason is that the interrupt routine
+ *        should only be called when the wireless core performs a DMA transmission.
  *
  *  @param[in] qspi_selection  Selected QSPI.
  */

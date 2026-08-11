@@ -21,8 +21,8 @@ uint16_t sac_mute_packet_process(void *instance, sac_pipeline_t *pipeline, sac_h
     (void)pipeline;
     (void)header;
 
-    uint8_t i = 0;
-    uint8_t zeros = 0;
+    uint8_t i;
+    uint8_t zeros;
 
     *status = SAC_OK;
 
@@ -33,23 +33,23 @@ uint16_t sac_mute_packet_process(void *instance, sac_pipeline_t *pipeline, sac_h
 
     if (((sac_mute_packet_instance_t *)instance)->is_tx) {
         zeros = 0;
-        /* look for a packet containing only zeros */
+        /* Look for a packet containing only zeros. */
         for (i = 0; i < size; i++) {
             if (data_in[i] == 0) {
                 zeros++;
             }
         }
         if (zeros == size) {
-            /* packet is muted */
+            /* Packet is muted. */
             data_out[0] = size;
             return 1;
         } else {
-            /* packet not muted */
+            /* Packet not muted. */
             return 0;
         }
     } else {
         if (size == 1) {
-            /* reconstruct muted packet */
+            /* Reconstruct muted packet. */
             memset(data_out, 0, data_in[0]);
             return data_in[0];
         } else {

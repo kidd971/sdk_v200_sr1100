@@ -87,10 +87,8 @@ void quasar_button_set_button4_callback(void (*irq_callback)(void));
 
 /** @brief Read button state.
  *
- *  @note The GPIO must have been initialized in input mode.
- *        Since the button is connected to VDD and the GPIO has a pull-down
- *        resistor, the return value is true if the button is pressed, false
- *        otherwise.
+ *  @note The GPIO must have been initialized in input mode. Since the button is connected to VDD and the GPIO has a
+ *        pull-down resistor, the return value is true if the button is pressed, false otherwise.
  *
  *  @param[in] button_peripheral  Selected button peripheral.
  *  @return Return true if the button is pressed, flase otherwise.

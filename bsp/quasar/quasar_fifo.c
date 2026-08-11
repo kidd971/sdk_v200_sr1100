@@ -109,7 +109,7 @@ uint64_t quasar_fifo_pull_bytes(quasar_fifo_t *fifo, uint16_t number_of_bytes, q
      * with MSB.
      */
     for (int i = (number_of_bytes - 1); i >= 0; i--) {
-        /* Pull a byte */
+        /* Pull a byte. */
         quasar_fifo_pull(fifo, &pulled_byte);
         /* Typecast to uint64_t to enable bit shifts beyond the 32 bits default of STM32 registers. */
         temp = (uint64_t)pulled_byte;

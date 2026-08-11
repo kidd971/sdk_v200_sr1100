@@ -1,3 +1,7 @@
+if (NOT TRANSCEIVER STREQUAL "SR1100")
+    return()
+endif()
+
 add_library(audio_bidirectional_backend "")
 target_include_directories(audio_bidirectional_backend PUBLIC facade common_backend)
 target_link_libraries(audio_bidirectional_backend PUBLIC common_backend)
@@ -17,6 +21,8 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
             audio_core
             audio_bidirectional_backend
             swc
+            swc_backend
+            spark_pairing
             at_cmd_core
     )
     add_custom_command(TARGET audio_bidirectional_coordinator.elf
@@ -31,6 +37,8 @@ target_link_libraries(audio_bidirectional_node.elf
         audio_core
         audio_bidirectional_backend
         swc
+        swc_backend
+        spark_pairing
         at_cmd_core
 )
 add_custom_command(TARGET audio_bidirectional_node.elf

@@ -9,6 +9,7 @@
 
 /* INCLUDES *******************************************************************/
 #include <stdio.h>
+#include <string.h>
 #include "connection_priority_facade.h"
 #include "pairing_api.h"
 #include "pairing_cfg.h"
@@ -17,6 +18,7 @@
 #include "swc_cfg_node.h"
 #include "swc_error.h"
 #include "swc_stats.h"
+#include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
 #define SWC_MEM_POOL_SIZE           12000
@@ -62,11 +64,11 @@ static swc_connection_t *rx_cid2;
 static swc_connection_t *tx_cid3;
 static swc_connection_t *tx_cid4;
 
-static uint32_t timeslot_us[] = SCHEDULE;
-static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-static uint32_t channel_frequency[] = CHANNEL_FREQ;
-static int32_t tx_timeslots[] = NODE_TIMESLOTS;
-static int32_t rx_timeslots[] = COORD_TIMESLOTS;
+static const uint32_t timeslot_us[] = SCHEDULE;
+static const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+static const uint32_t channel_frequency[] = CHANNEL_FREQ;
+static const int32_t tx_timeslots[] = NODE_TIMESLOTS;
+static const int32_t rx_timeslots[] = COORD_TIMESLOTS;
 
 /* ** Application Specific ** */
 static uint32_t cid3_sent_count;
@@ -85,12 +87,12 @@ static pairing_assigned_address_t pairing_assigned_address;
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
 static void app_init(void);
-static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err);
+static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *swc_err);
 static void cid3_tx_send_callback(void);
 static void cid4_tx_send_callback(void);
 static void rx_success_callback(void *conn, void *arg);
 static void tx_success_callback(void *conn, void *arg);
-static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_address, swc_channel_cfg_t *channel_cfg,
+static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_address, swc_channel_t *channels,
                                     conn_type_t conn_type, const char *conn_name, uint8_t prio,
                                     void (*cb)(void *conn, void *arg));
 static void setup_connections(uint8_t local_address, uint8_t remote_address);
@@ -111,7 +113,7 @@ int main(void)
 {
     facade_board_init();
 
-    /* Initialize wireless core context switch handler before pairing is available */
+    /* Initialize wireless core context switch handler before pairing is available. */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
     facade_button_callbacks_t button_callbacks = {
@@ -131,6 +133,7 @@ int main(void)
     certification_mode = facade_get_node_certification_mode();
     if (certification_mode != FACADE_CERTIF_NONE) {
         /* Init app in certification mode. */
+        facade_notify_certification_mode();
         app_init();
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
@@ -149,7 +152,7 @@ int main(void)
     while (1) {
         facade_button_handling();
 
-        /* Print received string and stats every PRINT_INTERVAL_MS */
+        /* Print received string and stats every PRINT_INTERVAL_MS. */
         if (should_print_stats()) {
             print_stats();
         }
@@ -184,22 +187,25 @@ static void app_init(void)
 /** @brief Initialize the Wireless Core.
  *
  *  @param[in]  app_pairing  Configure the Wireless Core with the pairing values.
- *  @param[out] err          Wireless Core error code.
+ *  @param[out] swc_err      Wireless Core error code.
  */
-static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err)
+static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *swc_err)
 {
     uint16_t local_address = app_pairing->node_address;
     uint16_t remote_address = app_pairing->coordinator_address;
+    swc_radio_handle_t *radio_handle = NULL;
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_handle_t *radio_handle_2 = NULL;
+#endif
 
+    /* In cert mode, pairing has not run -- override addresses directly. */
     if (certification_mode != FACADE_CERTIF_NONE) {
-        app_pairing->coordinator_address = 0x1;
-        app_pairing->node_address = 0x2;
         app_pairing->pan_id = 0xABC;
-        remote_address = 0x2;
-        local_address = 0x1;
+        remote_address = 0x1;
+        local_address = 0x2;
     }
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -207,34 +213,44 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = app_pairing->pan_id,
     };
 
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_NODE,
-        .pan_id = app_pairing->pan_id,
         .coordinator_address = remote_address,
         .local_address = local_address,
     };
 
-    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, err);
-    ASSERT_SWC_STATUS(*err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
 #if (SWC_RADIO_COUNT == 2)
-    swc_radio_module_init(SWC_RADIO_ID_2, true, err);
-    ASSERT_SWC_STATUS(*err);
+    /* Calibrate the radio. */
+    radio_handle_2 = swc_radio_module_calib(SWC_RADIO_ID_2, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle_2, false, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 #endif
 
     setup_connections(local_address, remote_address);
 
     /* Handle certification mode. */
-    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_setup(err);
-    ASSERT_SWC_STATUS(*err);
+    swc_setup(swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 }
 
 /** @brief Callback function when it is time to send a payload on Connection ID 3 (CID3).
@@ -280,16 +296,16 @@ static void cid4_tx_send_callback(void)
 /** @brief Callback function when a frame has been successfully received.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
- * @param[in] arg   Additional argument for the callback function.
+ *  @param[in] arg   Additional argument for the callback function.
  */
 static void rx_success_callback(void *conn, void *arg)
 {
-    swc_error_t err = SWC_ERR_NONE;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     (void)arg;
 
-    swc_connection_receive_complete(conn, &err);
-    ASSERT_SWC_STATUS(err);
+    swc_connection_receive_complete(conn, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
     facade_rx_conn_status();
 }
@@ -297,6 +313,7 @@ static void rx_success_callback(void *conn, void *arg)
 /** @brief Callback function when a frame has been successfully transmitted.
  *
  *  @param[in] conn  Connection the callback function has been linked to.
+ *  @param[in] arg   Additional argument for the callback function.
  */
 static void tx_success_callback(void *conn, void *arg)
 {
@@ -306,20 +323,20 @@ static void tx_success_callback(void *conn, void *arg)
     facade_tx_conn_status();
 }
 
-static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_address, swc_channel_cfg_t *channel_cfg,
+static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_address, swc_channel_t *channels,
                                     conn_type_t conn_type, const char *conn_name, uint8_t prio,
                                     void (*cb)(void *conn, void *arg))
 {
-    if (channel_cfg == NULL) {
-        facade_print_error_string("An invalid channel config was given to setup a connection.");
+    if (channels == NULL) {
+        facade_print_error_string("An invalid channel array was given to setup a connection.");
         while (1);
     }
 
-    swc_error_t err = SWC_ERR_NONE;
+    swc_error_t swc_err = SWC_ERR_NONE;
     swc_connection_t *conn = NULL;
 
     /* Connection config. */
-    swc_connection_cfg_t conn_cfg = {
+    const swc_connection_cfg_t conn_cfg = {
         .name = conn_name,
         .source_address = conn_type == TX_CONN ? local_address : remote_address,
         .destination_address = conn_type == TX_CONN ? remote_address : local_address,
@@ -329,48 +346,59 @@ static swc_connection_t *setup_conn(uint8_t local_address, uint8_t remote_addres
         .timeslot_count = conn_type == TX_CONN ? ARRAY_SIZE(tx_timeslots) : ARRAY_SIZE(rx_timeslots),
     };
 
-    conn = swc_connection_init(conn_cfg, &err);
-    ASSERT_SWC_STATUS(err);
+    conn = swc_connection_init(conn_cfg, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
-    swc_connection_set_connection_priority(conn, prio, &err);
-    ASSERT_SWC_STATUS(err);
+    swc_connection_set_connection_priority(conn, prio, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
     switch (conn_type) {
     case TX_CONN:
-        swc_connection_set_tx_success_callback(conn, cb, NULL, &err);
+        swc_connection_set_tx_success_callback(conn, cb, NULL, &swc_err);
         break;
     case RX_CONN:
-        swc_connection_set_rx_success_callback(conn, cb, NULL, &err);
+        swc_connection_set_rx_success_callback(conn, cb, NULL, &swc_err);
         break;
     default:
         facade_print_error_string("An invalid connection type was provided to setup a connection.");
         while (1);
     }
-    ASSERT_SWC_STATUS(err);
+    ASSERT_SWC_STATUS(swc_err);
 
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        channel_cfg->frequency = channel_frequency[i];
-        swc_connection_add_channel(conn, *channel_cfg, &err);
-        ASSERT_SWC_STATUS(err);
-    }
+    swc_connection_set_channels(conn, channels, ARRAY_SIZE(channel_frequency), &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
     return conn;
 }
 
+/** @brief Set up the connections used in the application with different priorities based on the certification mode.
+ *
+ *  @param[in] local_address   Local address to use in the connections.
+ *  @param[in] remote_address  Remote address to use in the connections.
+ */
 static void setup_connections(uint8_t local_address, uint8_t remote_address)
 {
-    swc_channel_cfg_t rx_ch_cfg = {
+    swc_error_t err;
+
+    const swc_channel_cfg_t rx_ch_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
-    swc_channel_cfg_t tx_ch_cfg = {
+    swc_channel_t *rx_channels = swc_channel_list_init_from_base(rx_ch_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &err);
+    ASSERT_SWC_STATUS(err);
+
+    const swc_channel_cfg_t tx_ch_cfg = {
         .tx_pulse_count = TX_DATA_PULSE_COUNT,
         .tx_pulse_width = TX_DATA_PULSE_WIDTH,
         .tx_pulse_gain = TX_DATA_PULSE_GAIN,
         .rx_pulse_count = RX_ACK_PULSE_COUNT,
     };
+    swc_channel_t *tx_channels = swc_channel_list_init_from_base(tx_ch_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), &err);
+    ASSERT_SWC_STATUS(err);
 
     const char *cid0_name = "RX CID0 from Coord";
     const char *cid1_name = "RX CID1 from Coord";
@@ -380,27 +408,30 @@ static void setup_connections(uint8_t local_address, uint8_t remote_address)
 
     switch (certification_mode) {
     case FACADE_CERTIF_NONE:
-        /* clang-format off */
-        rx_cid0 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid0_name, RX_PRIORITY, rx_success_callback);
-        rx_cid1 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid1_name, RX_PRIORITY, rx_success_callback);
-        rx_cid2 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid2_name, RX_PRIORITY, rx_success_callback);
-        tx_cid3 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid3_name, TX_CID3_PRIORITY, tx_success_callback);
-        tx_cid4 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid4_name, TX_CID4_PRIORITY, tx_success_callback);
-        /* clang-format on */
+        rx_cid0 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid0_name, RX_PRIORITY,
+                             rx_success_callback);
+        rx_cid1 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid1_name, RX_PRIORITY,
+                             rx_success_callback);
+        rx_cid2 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid2_name, RX_PRIORITY,
+                             rx_success_callback);
+        tx_cid3 = setup_conn(local_address, remote_address, tx_channels, TX_CONN, cid3_name, TX_CID3_PRIORITY,
+                             tx_success_callback);
+        tx_cid4 = setup_conn(local_address, remote_address, tx_channels, TX_CONN, cid4_name, TX_CID4_PRIORITY,
+                             tx_success_callback);
         break;
     case FACADE_CERTIF_CONNECTION_ID_3:
-        tx_cid3 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid3_name, 0, tx_success_callback);
-        rx_cid0 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid0_name, 1, rx_success_callback);
-        rx_cid1 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid1_name, 1, rx_success_callback);
-        rx_cid2 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid2_name, 1, rx_success_callback);
-        tx_cid4 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid4_name, 1, tx_success_callback);
+        tx_cid3 = setup_conn(local_address, remote_address, tx_channels, TX_CONN, cid3_name, 0, tx_success_callback);
+        rx_cid0 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid0_name, 1, rx_success_callback);
+        rx_cid1 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid1_name, 1, rx_success_callback);
+        rx_cid2 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid2_name, 1, rx_success_callback);
+        tx_cid4 = setup_conn(local_address, remote_address, tx_channels, TX_CONN, cid4_name, 1, tx_success_callback);
         break;
     case FACADE_CERTIF_CONNECTION_ID_4:
-        tx_cid4 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid4_name, 0, tx_success_callback);
-        rx_cid0 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid0_name, 1, rx_success_callback);
-        rx_cid1 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid1_name, 1, rx_success_callback);
-        rx_cid2 = setup_conn(local_address, remote_address, &rx_ch_cfg, RX_CONN, cid2_name, 1, rx_success_callback);
-        tx_cid3 = setup_conn(local_address, remote_address, &tx_ch_cfg, TX_CONN, cid3_name, 1, tx_success_callback);
+        tx_cid4 = setup_conn(local_address, remote_address, tx_channels, TX_CONN, cid4_name, 0, tx_success_callback);
+        rx_cid0 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid0_name, 1, rx_success_callback);
+        rx_cid1 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid1_name, 1, rx_success_callback);
+        rx_cid2 = setup_conn(local_address, remote_address, rx_channels, RX_CONN, cid2_name, 1, rx_success_callback);
+        tx_cid3 = setup_conn(local_address, remote_address, tx_channels, TX_CONN, cid3_name, 1, tx_success_callback);
         break;
     default:
         facade_print_error_string("Encountered unknown certification mode while setting up connections.");
@@ -459,20 +490,12 @@ static void print_stats(void)
 
     memset(stats_string, 0, sizeof(stats_string));
 
-    swc_connection_update_stats(rx_cid0, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    swc_connection_t *connections[] = {rx_cid0, rx_cid1, rx_cid2, tx_cid3, tx_cid4};
 
-    swc_connection_update_stats(rx_cid1, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(rx_cid2, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(tx_cid3, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    swc_connection_update_stats(tx_cid4, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    for (uint8_t i = 0; i < ARRAY_SIZE(connections); i++) {
+        swc_connection_update_stats(connections[i], &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+    }
 
     total_payload_count = (cid3_sent_count + cid4_sent_count);
 
@@ -481,7 +504,7 @@ static void print_stats(void)
                                   certification_mode_str, certification_mode);
     }
 
-    /* Device role */
+    /* Device role. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, device_str);
 
     if (certification_mode != FACADE_CERTIF_NONE) {
@@ -489,9 +512,9 @@ static void print_stats(void)
                                   certification_mode_str, certification_mode);
     }
 
-    /* Application statistics */
+    /* Application statistics. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, app_stats_str);
-    /* Connection transmission rate */
+    /* Connection transmission rate. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, data_rate_str);
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, total_cid3_str,
                               cid3_sent_count + cid3_dropped_count);
@@ -507,34 +530,20 @@ static void print_stats(void)
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, payload_dropped_str,
                               cid4_dropped_count,
                               (double)cid4_dropped_count * 100 / (cid4_sent_count + cid4_dropped_count));
-    /* Link capacity utilization */
+    /* Link capacity utilization. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, overview_str);
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, cid3_sent_str,
                               cid3_sent_count, (double)cid3_sent_count * 100 / total_payload_count);
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, cid4_sent_str,
                               cid4_sent_count, (double)cid4_sent_count * 100 / total_payload_count);
 
-    /* Wireless statistics */
+    /* Wireless statistics. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
-    string_length += swc_connection_format_stats(rx_cid0, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(rx_cid1, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(rx_cid2, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(tx_cid3, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(tx_cid4, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    for (uint8_t i = 0; i < ARRAY_SIZE(connections); i++) {
+        string_length += swc_connection_format_stats(connections[i], stats_string + string_length,
+                                                     sizeof(stats_string) - string_length, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+    }
 
     facade_print_string(stats_string);
 
@@ -623,7 +632,7 @@ static void enter_pairing_mode(void)
     pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE_NODE,
                                        &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
-        facade_print_error_string("An error occured during the pairing process.");
+        facade_print_error_string("An error occurred during the pairing process.");
         while (1);
     }
 
@@ -691,7 +700,7 @@ void swc_error_handler(swc_error_t swc_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    snprintf(buffer, sizeof(buffer), "SWC Error ! Code: %d\n\r", swc_status);
     facade_print_error_string(buffer);
 
     while (1);

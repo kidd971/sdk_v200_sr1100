@@ -90,7 +90,7 @@ uint16_t tinyusb_audio_read(void *samples, uint16_t size)
 #endif
 }
 
-uint16_t tinyusb_audio_write(void *samples, uint16_t size)
+uint16_t tinyusb_audio_write(const void *samples, uint16_t size)
 {
 #if CFG_TUD_AUDIO_ENABLE_EP_IN
     /* Write audio data into USB FIFO. tinyusb FIFO will automatically overwrite old data once the queue is full. */

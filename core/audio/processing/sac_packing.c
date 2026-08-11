@@ -25,26 +25,26 @@
 static void extend_msb_18bits_value(uint32_t *value);
 static void extend_msb_20bits_value(uint32_t *value);
 static void extend_msb_24bits_value(uint32_t *value);
-static uint16_t pack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t pack_18bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t pack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t pack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t pack_32bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t pack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t pack_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t pack_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t pack_32bits_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t pack_20bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t pack_24bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t pack_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t scale_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t scale_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t scale_20bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t scale_16bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t unpack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t unpack_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t scale_16bits_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t unpack_20bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t unpack_24bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t unpack_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t unpack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t unpack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 static uint16_t unpack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t extend_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t extend_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
-static uint16_t extend_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t extend_18bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t extend_20bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
+static uint16_t extend_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void sac_packing_init(void *instance, const char *name, sac_pipeline_t *pipeline, mem_pool_t *mem_pool,
@@ -54,7 +54,7 @@ void sac_packing_init(void *instance, const char *name, sac_pipeline_t *pipeline
     (void)mem_pool;
     (void)name;
 
-    sac_packing_instance_t *packing_inst = instance;
+    const sac_packing_instance_t *packing_inst = instance;
 
     *status = SAC_OK;
 
@@ -73,6 +73,7 @@ void sac_packing_init(void *instance, const char *name, sac_pipeline_t *pipeline
     case SAC_PACK_24BITS_20BITS:
     case SAC_SCALE_24BITS_16BITS:
     case SAC_SCALE_24BITS_20BITS:
+    case SAC_SCALE_20BITS_24BITS:
     case SAC_SCALE_16BITS_24BITS:
     case SAC_UNPACK_18BITS:
     case SAC_UNPACK_20BITS:
@@ -120,7 +121,7 @@ uint16_t sac_packing_process(void *instance, sac_pipeline_t *pipeline, sac_heade
     (void)pipeline;
     (void)header;
 
-    sac_packing_instance_t *packing_inst = instance;
+    const sac_packing_instance_t *packing_inst = instance;
     uint16_t output_size = 0;
 
     *status = SAC_OK;
@@ -199,9 +200,9 @@ uint16_t sac_packing_process(void *instance, sac_pipeline_t *pipeline, sac_heade
  *  @param[out] buffer_out      Array where the packed 18-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t pack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t pack_18bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint32_t *data32_in = (uint32_t *)buffer_in;
+    const uint32_t *data32_in = (const uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
     uint16_t i = 0;
@@ -214,7 +215,6 @@ static uint16_t pack_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
             /* Get 18 MSB's from (18 + CODEC_WORD_SIZE_OFFSET_18BITS) bit sample, shift sample by 6 bits and copy sample
              * #4.
              */
-            *(uint32_t *)(&(data_out[6])) &= (~0x3FFFFU << 6);
             *(uint32_t *)(&(data_out[6])) = (((data32_in[3] >> CODEC_WORD_SIZE_OFFSET_18BITS) & 0x3FFFF) << 6);
             /* Increment return size by (floor(2.25)). */
             ret += 2;
@@ -276,7 +276,7 @@ static uint16_t pack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
         *(uint32_t *)(&(data_out[0])) = 0;
         /* Check if sample #2 exists. */
         if ((i + 1) < sample_count) {
-            /* Copy Sample #2 */
+            /* Copy Sample #2. */
             *(uint32_t *)(&(data_out[2])) = ((data32_in[1]) & 0xFFFFF);
             /* Shift Sample #2 by 4 bits. */
             *(uint32_t *)(&(data_out[2])) <<= 4;
@@ -288,7 +288,7 @@ static uint16_t pack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
         /* Increment return size by (ceil(2.5)). */
         ret += 3;
 
-        /* Increment pointers */
+        /* Increment pointers. */
         data_out += PACKED_SIZE_20BITS;
         data32_in += 2;
     }
@@ -303,9 +303,9 @@ static uint16_t pack_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t
  *  @param[out] buffer_out      Array where the packed 24-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t pack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t pack_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint32_t *data32_in = (uint32_t *)buffer_in;
+    const uint32_t *data32_in = (const uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
     uint16_t i = 0;
@@ -342,9 +342,9 @@ static uint32_t   s_pack_out_idx = 0;
  *  @param[out] buffer_out      Array where the packed 24-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t pack_32bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t pack_32bits_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint32_t *data32_in = (uint32_t *)buffer_in;
+    const uint32_t *data32_in = (const uint32_t *)buffer_in;
     uint8_t *data_out = buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
     uint16_t i = 0;
@@ -379,9 +379,9 @@ static uint16_t pack_32bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
  *  @param[out] buffer_out      Array where the packed 16-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t pack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t pack_20bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint32_t *data32_in = (uint32_t *)buffer_in;
+    const uint32_t *data32_in = (const uint32_t *)buffer_in;
     uint16_t *data_out = (uint16_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
     uint16_t i = 0;
@@ -404,9 +404,9 @@ static uint16_t pack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
  *  @param[out] buffer_out      Array where the packed 16-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t pack_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t pack_24bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint32_t *data32_in = (uint32_t *)buffer_in;
+    const uint32_t *data32_in = (const uint32_t *)buffer_in;
     uint16_t *data_out = (uint16_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
     uint16_t i = 0;
@@ -441,7 +441,7 @@ static uint16_t pack_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
         *(uint32_t *)(&(data_out[0])) = 0;
         /* Check if sample #2 exists. */
         if ((i + 1) < sample_count) {
-            /* Copy Sample #2 */
+            /* Copy Sample #2. */
             *(uint32_t *)(&(data_out[2])) = (((data32_in[1]) >> 4) & 0xFFFFF);
             /* Shift Sample #2 by 4 bits. */
             *(uint32_t *)(&(data_out[2])) <<= 4;
@@ -453,7 +453,7 @@ static uint16_t pack_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, 
         /* Increment return size by (ceil(2.5)). */
         ret += 3;
 
-        /* Increment pointers */
+        /* Increment pointers. */
         data_out += PACKED_SIZE_20BITS;
         data32_in += 2;
     }
@@ -508,7 +508,7 @@ static uint16_t scale_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size,
         *(uint32_t *)(&(data_out[0])) = 0;
         /* Check if sample #2 exists. */
         if ((i + 1) < sample_count) {
-            /* Copy Sample #2 */
+            /* Copy Sample #2. */
             *(uint32_t *)(&(data_out[2])) = ((*(uint32_t *)(&(data24_in[3])) >> 4) & 0xFFFFF);
             /* Shift Sample #2 by 4 bits. */
             *(uint32_t *)(&(data_out[2])) <<= 4;
@@ -520,7 +520,7 @@ static uint16_t scale_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size,
         /* Increment return size by (ceil(2.5)). */
         ret += 3;
 
-        /* Increment pointers */
+        /* Increment pointers. */
         data_out += PACKED_SIZE_20BITS;
         data24_in += (SAMPLE_SIZE_24BITS * 2);
     }
@@ -549,22 +549,21 @@ static uint16_t scale_20bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size,
 
         sample32 = ((*(uint32_t *)(&data_in[0]) << 4) & 0x00FFFFF0);
         extend_msb_24bits_value(&sample32);
-        /* Keep only the 24 useful bits (little-endian packed: LSB first). */
-        sample24 = (sample32 >> 8) & 0x00FFFFFF;
+        sample24 = sample32 & 0x00FFFFFF;
         /* LSB. */
         data_out[0] = (uint8_t)(sample24 & 0xFF);
         data_out[1] = (uint8_t)((sample24 >> 8) & 0xFF);
         /* MSB. */
         data_out[2] = (uint8_t)((sample24 >> 16) & 0xFF);
         data_out += 3;
-        /* 3 bytes per 24-bit sample */
+        /* 3 bytes per 24-bit sample. */
         ret += 3;
 
         /* Check if sample #2 exists. */
         if ((i + 1) < sample_count) {
             sample32 = (*(uint32_t *)(&data_in[2]) & 0x00FFFFF0);
             extend_msb_24bits_value(&sample32);
-            sample24 = (sample32 >> 8) & 0x00FFFFFF;
+            sample24 = sample32 & 0x00FFFFFF;
             data_out[0] = (uint8_t)(sample24 & 0xFF);
             data_out[1] = (uint8_t)((sample24 >> 8) & 0xFF);
             data_out[2] = (uint8_t)((sample24 >> 16) & 0xFF);
@@ -586,10 +585,10 @@ static uint16_t scale_20bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size,
  *  @param[out] buffer_out      Array where the packed 24-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t scale_16bits_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t scale_16bits_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint8_t *data24_out = buffer_out;
-    uint16_t *data16_in = (uint16_t *)buffer_in;
+    const uint16_t *data16_in = (const uint16_t *)buffer_in;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_16BITS;
     uint16_t i = 0;
     uint16_t ret = 0;
@@ -764,9 +763,9 @@ static uint16_t unpack_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
  *  @param[out] buffer_out      Array where the unpacked 20-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t unpack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t unpack_20bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint16_t *data32_in = (uint16_t *)buffer_in;
+    const uint16_t *data32_in = (const uint16_t *)buffer_in;
     uint32_t *data_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_16BITS;
     uint16_t i = 0;
@@ -790,9 +789,9 @@ static uint16_t unpack_20bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size
  *  @param[out] buffer_out      Array where the unpacked 24-bit stream is written to.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t unpack_24bits_16bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t unpack_24bits_16bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
-    uint16_t *data32_in = (uint16_t *)buffer_in;
+    const uint16_t *data32_in = (const uint16_t *)buffer_in;
     uint32_t *data_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_16BITS;
     uint16_t i = 0;
@@ -855,7 +854,7 @@ static uint16_t unpack_24bits_20bits(uint8_t *buffer_in, uint16_t buffer_in_size
  *  @param[out] buffer_out      Output of the input 32-bit samples.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t extend_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t extend_18bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
@@ -879,7 +878,7 @@ static uint16_t extend_18bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
  *  @param[out] buffer_out      Output of the input 32-bit samples.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t extend_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t extend_20bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;
@@ -903,7 +902,7 @@ static uint16_t extend_20bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8
  *  @param[out] buffer_out      Output of the input 32-bit samples.
  *  @return Written size, in byte, to the output buffer.
  */
-static uint16_t extend_24bits(uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
+static uint16_t extend_24bits(const uint8_t *buffer_in, uint16_t buffer_in_size, uint8_t *buffer_out)
 {
     uint32_t *data32_out = (uint32_t *)buffer_out;
     uint16_t sample_count = buffer_in_size / SAMPLE_SIZE_32BITS;

@@ -20,24 +20,24 @@
         250, 250, 250, 250, 250, \
         250, 250, 250, 250,      \
     }
-#define COORD_TIMESLOTS                                                                           \
-    {                                                                                             \
-        MAIN_TIMESLOT(0), MAIN_TIMESLOT(1), MAIN_TIMESLOT(2),                   MAIN_TIMESLOT(4), \
-        MAIN_TIMESLOT(5), MAIN_TIMESLOT(6), MAIN_TIMESLOT(7),                                     \
+#define COORD_TIMESLOTS                                                                                               \
+    {                                                                                                                 \
+        SWC_MAIN_TIMESLOT(0), SWC_MAIN_TIMESLOT(1), SWC_MAIN_TIMESLOT(2),                       SWC_MAIN_TIMESLOT(4), \
+        SWC_MAIN_TIMESLOT(5), SWC_MAIN_TIMESLOT(6), SWC_MAIN_TIMESLOT(7),                                             \
     }
 
-#define NODE_TIMESLOTS                                                          \
-    {                                                                           \
-                                                              MAIN_TIMESLOT(3), \
-                                                              MAIN_TIMESLOT(8), \
+#define NODE_TIMESLOTS                                                                          \
+    {                                                                                           \
+                                                                          SWC_MAIN_TIMESLOT(3), \
+                                                                          SWC_MAIN_TIMESLOT(8), \
     }
 // clang-format on
 
-/* Channels */
+/* Channels. */
 #define CHANNEL_FREQ     {164, 174, 184, 194}
 #define CHANNEL_SEQUENCE {0, 1, 2, 3}
 
-/* CCA settings */
+/* CCA settings. */
 #define SWC_CCA_RETRY_TIME          204 /* 9.96 us CCA intervals. */
 #define SWC_CCA_AUDIO_TRY_COUNT     7   /* 59.77 us total CCA time. */
 #define SWC_CCA_AUDIO_FBK_TRY_COUNT 12  /* 109.57 us total CCA time. */

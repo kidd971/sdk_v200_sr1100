@@ -33,13 +33,13 @@ void facade_audio_node_init(bool i2s_master_mode)
 void facade_configure_coord_usb_audio(void)
 {
     /* Configure the payload size that the application expects to receive. */
-    app_expected_rx_payload_size = MAIN_CHANNEL_SWC_PAYLOAD_SIZE;
+    app_expected_rx_payload_size = MAIN_CHANNEL_USB_PAYLOAD_SIZE;
 
     /* Configure main channel interface. */
     tud_audio_config_t main_channel_cfg = {
         .sampling_rate = MAIN_CHANNEL_SAMPLE_RATE_HZ,
-        .bytes_per_sample = MAIN_CHANNEL_BIT_DEPTH / 8,
-        .resolution = MAIN_CHANNEL_BIT_DEPTH,
+        .bytes_per_sample = MAIN_CHANNEL_USB_BIT_DEPTH / 8,
+        .resolution = MAIN_CHANNEL_USB_BIT_DEPTH,
         .nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
     };
 
@@ -69,8 +69,8 @@ void facade_configure_node_usb_audio(void)
     /* Configure main channel interface. */
     tud_audio_config_t main_channel_cfg = {
         .sampling_rate = MAIN_CHANNEL_SAMPLE_RATE_HZ,
-        .bytes_per_sample = MAIN_CHANNEL_BIT_DEPTH / 8,
-        .resolution = MAIN_CHANNEL_BIT_DEPTH,
+        .bytes_per_sample = MAIN_CHANNEL_USB_BIT_DEPTH / 8,
+        .resolution = MAIN_CHANNEL_USB_BIT_DEPTH,
         .nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
     };
 
@@ -89,7 +89,7 @@ void facade_configure_node_usb_audio(void)
     tud_audio_set_epout_cfg(back_channel_cfg);
     tud_audio_set_epin_cfg(main_channel_cfg);
 
-    tinyusb_audio_set_ep_in_target_fifo_size(MAIN_CHANNEL_SWC_PAYLOAD_SIZE * MAIN_CHANNEL_LATENCY_QUEUE_SIZE);
+    tinyusb_audio_set_ep_in_target_fifo_size(MAIN_CHANNEL_USB_PAYLOAD_SIZE * MAIN_CHANNEL_LATENCY_QUEUE_SIZE);
 }
 
 void facade_audio_deinit(void)
@@ -117,7 +117,7 @@ uint32_t facade_get_node_usb_audio_tx_fifo_sample_count(void)
 {
     /* Get the number of samples contained in the EPIN fifo. */
     return SAC_CALCULATE_SAMPLE_COUNT(tinyusb_audio_get_epin_fifo_size(), MAIN_CHANNEL_CHANNEL_COUNT,
-                                      MAIN_CHANNEL_BIT_DEPTH / 8);
+                                      MAIN_CHANNEL_USB_BIT_DEPTH / 8);
 }
 
 uint32_t facade_app_audio_usb_get_epin_fifo_remaining(void)

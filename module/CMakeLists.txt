@@ -29,3 +29,4 @@ if(RPC_ENABLED)
 endif()
 
 add_subdirectory(tinyusb)
+add_subdirectory(spark_pairing)

@@ -24,16 +24,16 @@
         250, 250, 250, 250, 250, \
         250, 250, 250, 250,      \
     }
-#define COORD_TIMESLOTS                                                                           \
-    {                                                                                             \
-        MAIN_TIMESLOT(0), MAIN_TIMESLOT(1), MAIN_TIMESLOT(2),                   MAIN_TIMESLOT(4), \
-        MAIN_TIMESLOT(5), MAIN_TIMESLOT(6), MAIN_TIMESLOT(7),                                     \
+#define COORD_TIMESLOTS                                                                                               \
+    {                                                                                                                 \
+        SWC_MAIN_TIMESLOT(0), SWC_MAIN_TIMESLOT(1), SWC_MAIN_TIMESLOT(2),                       SWC_MAIN_TIMESLOT(4), \
+        SWC_MAIN_TIMESLOT(5), SWC_MAIN_TIMESLOT(6), SWC_MAIN_TIMESLOT(7),                                             \
     }
 
-#define NODE_TIMESLOTS                                                          \
-    {                                                                           \
-                                                              MAIN_TIMESLOT(3), \
-                                                              MAIN_TIMESLOT(8), \
+#define NODE_TIMESLOTS                                                                          \
+    {                                                                                           \
+                                                                          SWC_MAIN_TIMESLOT(3), \
+                                                                          SWC_MAIN_TIMESLOT(8), \
     }
 // clang-format on
 

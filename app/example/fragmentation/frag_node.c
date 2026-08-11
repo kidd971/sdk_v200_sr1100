@@ -9,6 +9,7 @@
 
 /* INCLUDES *******************************************************************/
 #include <stdio.h>
+#include <string.h>
 #include "frag_facade.h"
 #include "pairing_api.h"
 #include "pairing_cfg.h"
@@ -18,9 +19,10 @@
 #include "swc_cfg_node.h"
 #include "swc_error.h"
 #include "swc_stats.h"
+#include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
-#define SWC_MEM_POOL_SIZE         12000
+#define SWC_MEM_POOL_SIZE         12048
 #define MAX_PAYLOAD_SIZE_BYTE     500
 #define MAX_SWC_PAYLOAD_SIZE_BYTE 124
 #define STATS_ARRAY_LENGTH        2000
@@ -47,11 +49,11 @@ static uint8_t swc_memory_pool[SWC_MEM_POOL_SIZE];
 static swc_connection_t *rx_conn;
 static swc_connection_t *tx_conn;
 
-static uint32_t timeslot_us[] = SCHEDULE;
-static uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
-static uint32_t channel_frequency[] = CHANNEL_FREQ;
-static int32_t tx_timeslots[] = NODE_TIMESLOTS;
-static int32_t rx_timeslots[] = COORD_TIMESLOTS;
+static const uint32_t timeslot_us[] = SCHEDULE;
+static const uint32_t channel_sequence[] = CHANNEL_SEQUENCE;
+static const uint32_t channel_frequency[] = CHANNEL_FREQ;
+static const int32_t tx_timeslots[] = NODE_TIMESLOTS;
+static const int32_t rx_timeslots[] = COORD_TIMESLOTS;
 
 /* ** Application Specific ** */
 static uint8_t tx_payload[MAX_PAYLOAD_SIZE_BYTE];
@@ -70,7 +72,7 @@ static pairing_assigned_address_t pairing_assigned_address;
 
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
 static void app_init(void);
-static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err);
+static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *swc_err);
 static void conn_tx_success_callback(void *conn, void *arg);
 static void conn_rx_success_callback(void *conn, void *arg);
 static bool should_print_stats(void);
@@ -99,13 +101,14 @@ int main(void)
     };
     facade_set_button_callbacks(button_callbacks);
 
-    /* Setup higher priority packet generation timer */
+    /* Setup higher priority packet generation timer. */
     facade_packet_generation_timer_init(timeslot_us[0]);
     facade_packet_generation_set_timer_callback(packet_generation_timer_interrupt_handler);
 
     certification_mode = facade_get_certification_mode();
     if (certification_mode != FACADE_CERTIF_NONE) {
         /* Init app in certification mode. */
+        facade_notify_certification_mode();
         app_init();
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
@@ -116,7 +119,7 @@ int main(void)
         }
     }
 
-    /* Fill application payload of the first packet */
+    /* Fill application payload of the first packet. */
     generate_pseudo_data();
 
     device_pairing_state = DEVICE_UNPAIRED;
@@ -127,7 +130,7 @@ int main(void)
     while (1) {
         facade_button_handling();
 
-        /* Print received string and stats every PRINT_INTERVAL_MS */
+        /* Print received string and stats every PRINT_INTERVAL_MS. */
         if (should_print_stats()) {
             print_stats();
         }
@@ -142,7 +145,7 @@ int main(void)
  */
 static void app_init(void)
 {
-    swc_error_t swc_err;
+    swc_error_t swc_err = SWC_ERR_NONE;
 
     app_swc_core_init(&pairing_assigned_address, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
@@ -156,22 +159,25 @@ static void app_init(void)
 /** @brief Initialize the Wireless Core.
  *
  *  @param[in]  app_pairing  Configure the Wireless Core with the pairing values.
- *  @param[out] err          Wireless Core error code.
+ *  @param[out] swc_err      Wireless Core error code.
  */
-static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *err)
+static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *swc_err)
 {
     uint16_t local_address = app_pairing->node_address;
     uint16_t remote_address = app_pairing->coordinator_address;
+    swc_radio_handle_t *radio_handle = NULL;
+#if (SWC_RADIO_COUNT == 2)
+    swc_radio_handle_t *radio_handle_2 = NULL;
+#endif
 
+    /* In cert mode, pairing has not run -- override addresses directly. */
     if (certification_mode != FACADE_CERTIF_NONE) {
-        app_pairing->coordinator_address = 0x1;
-        app_pairing->node_address = 0x2;
         app_pairing->pan_id = 0xABC;
-        remote_address = 0x2;
-        local_address = 0x1;
+        remote_address = 0x1;
+        local_address = 0x2;
     }
 
-    swc_cfg_t core_cfg = {
+    const swc_cfg_t core_cfg = {
         .timeslot_sequence = timeslot_us,
         .timeslot_sequence_length = ARRAY_SIZE(timeslot_us),
         .channel_sequence = channel_sequence,
@@ -179,24 +185,34 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .concurrency_mode = SWC_CONCURRENCY_MODE_HIGH_PERFORMANCE,
         .memory_pool = swc_memory_pool,
         .memory_pool_size = SWC_MEM_POOL_SIZE,
+        .pan_id = app_pairing->pan_id,
     };
 
-    swc_node_cfg_t node_cfg = {
+    const swc_node_cfg_t node_cfg = {
         .role = SWC_ROLE_NODE,
-        .pan_id = app_pairing->pan_id,
         .coordinator_address = remote_address,
         .local_address = local_address,
     };
 
-    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_init(core_cfg, node_cfg, facade_context_switch_trigger, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_radio_module_init(SWC_RADIO_ID_1, true, err);
-    ASSERT_SWC_STATUS(*err);
+    /* Calibrate the radio. */
+    radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle, false, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
 #if (SWC_RADIO_COUNT == 2)
-    swc_radio_module_init(SWC_RADIO_ID_2, true, err);
-    ASSERT_SWC_STATUS(*err);
+    /* Calibrate the radio. */
+    radio_handle_2 = swc_radio_module_calib(SWC_RADIO_ID_2, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    /* Initialize the radio. */
+    swc_radio_module_init(radio_handle_2, false, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 #endif
 
     /* ** TX Connection ** */
@@ -206,7 +222,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
      * of the main connection (RX Connection here). It also does not need any
      * channel to be added to it, since, again, it will reuse the main connection ones.
      */
-    swc_connection_cfg_t tx_conn_cfg = {
+    const swc_connection_cfg_t tx_conn_cfg = {
         .name = "TX Auto-Reply Connection",
         .source_address = local_address,
         .destination_address = remote_address,
@@ -215,26 +231,17 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .timeslot_id = tx_timeslots,
         .timeslot_count = ARRAY_SIZE(tx_timeslots),
     };
-    tx_conn = swc_connection_init(tx_conn_cfg, err);
-    ASSERT_SWC_STATUS(*err);
+    tx_conn = swc_connection_init(tx_conn_cfg, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_connection_set_auto_sync(tx_conn, true, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_connection_set_fragmentation(tx_conn, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_connection_set_fragmentation(tx_conn, err);
-    ASSERT_SWC_STATUS(*err);
-
-    swc_connection_set_acknowledgement(tx_conn, false, err);
-    ASSERT_SWC_STATUS(*err);
-
-    swc_connection_set_credit_flow_ctrl(tx_conn, false, err);
-    ASSERT_SWC_STATUS(*err);
-
-    swc_connection_set_tx_success_callback(tx_conn, conn_tx_success_callback, NULL, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_connection_set_tx_success_callback(tx_conn, conn_tx_success_callback, NULL, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* ** RX Connection ** */
-    swc_connection_cfg_t rx_conn_cfg = {
+    const swc_connection_cfg_t rx_conn_cfg = {
         .name = "RX Connection",
         .source_address = remote_address,
         .destination_address = local_address,
@@ -243,35 +250,34 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .timeslot_id = rx_timeslots,
         .timeslot_count = ARRAY_SIZE(rx_timeslots),
     };
-    rx_conn = swc_connection_init(rx_conn_cfg, err);
-    ASSERT_SWC_STATUS(*err);
+    rx_conn = swc_connection_init(rx_conn_cfg, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_connection_set_auto_sync(rx_conn, true, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_connection_set_fragmentation(rx_conn, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_connection_set_fragmentation(rx_conn, err);
-    ASSERT_SWC_STATUS(*err);
-
-    swc_channel_cfg_t rx_channel_cfg = {
+    const swc_channel_cfg_t rx_channel_cfg = {
         .tx_pulse_count = TX_AUTO_REPLY_PULSE_COUNT,
         .tx_pulse_width = TX_AUTO_REPLY_PULSE_WIDTH,
         .tx_pulse_gain = TX_AUTO_REPLY_PULSE_GAIN,
         .rx_pulse_count = RX_DATA_PULSE_COUNT,
     };
-    for (uint8_t i = 0; i < ARRAY_SIZE(channel_frequency); i++) {
-        rx_channel_cfg.frequency = channel_frequency[i];
-        swc_connection_add_channel(rx_conn, rx_channel_cfg, err);
-        ASSERT_SWC_STATUS(*err);
-    }
-    swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_channel_t *rx_channels = swc_channel_list_init_from_base(rx_channel_cfg, channel_frequency,
+                                                                 ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    swc_connection_set_channels(rx_conn, rx_channels, ARRAY_SIZE(channel_frequency), swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+
+    swc_connection_set_rx_success_callback(rx_conn, conn_rx_success_callback, NULL, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
     /* Handle certification mode. */
-    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, err);
-    ASSERT_SWC_STATUS(*err);
+    swc_set_certification_mode(certification_mode != FACADE_CERTIF_NONE, swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 
-    swc_setup(err);
-    ASSERT_SWC_STATUS(*err);
+    swc_setup(swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
 }
 
 /** @brief Callback function when a previously sent frame has been ACK'd.
@@ -296,13 +302,14 @@ static void conn_rx_success_callback(void *conn, void *arg)
 {
     (void)conn;
     (void)arg;
-    swc_error_t err = SWC_ERR_NONE;
+
+    swc_error_t swc_err = SWC_ERR_NONE;
     uint8_t current_rx_payload_id = 0;
     static uint8_t previous_rx_payload_id;
 
     /* Get a new payload. */
-    swc_connection_receive_to_buffer(rx_conn, rx_payload, MAX_PAYLOAD_SIZE_BYTE, &err);
-    ASSERT_SWC_STATUS(err);
+    swc_connection_receive_to_buffer(rx_conn, rx_payload, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
+    ASSERT_SWC_STATUS(swc_err);
 
     /* Look for count matching. */
     current_rx_payload_id = rx_payload[0];
@@ -362,10 +369,10 @@ static void print_stats(void)
     const char *device_str = "\n\r<  NODE  >\n\r";
     const char *certification_mode_str = "Cert. Mode %i\r\n";
     const char *app_stats_str = "<<  Fragmentation App Statistics  >>\n\r";
-    const char *valid_sequence_count_str = "Valid Payload Sequence Count:\t%10d\n\r";
-    const char *invalid_sequence_count_str = "Invalid Payload Sequence Count:\t%10d\n\r";
-    const char *valid_crc_count_str = "Valid Payload CRC Count:\t%10d\n\r";
-    const char *invalid_crc_count_str = "Invalid Payload CRC Count:\t%10d\n\r";
+    const char *valid_sequence_count_str = "Valid Payload Sequence Count:\t%10lu\n\r";
+    const char *invalid_sequence_count_str = "Invalid Payload Sequence Count:\t%10lu\n\r";
+    const char *valid_crc_count_str = "Valid Payload CRC Count:\t%10lu\n\r";
+    const char *invalid_crc_count_str = "Invalid Payload CRC Count:\t%10lu\n\r";
     const char *wireless_stats_str = "<<  Wireless Core Statistics  >>\n\r";
 
     memset(stats_string, 0, sizeof(stats_string));
@@ -375,10 +382,10 @@ static void print_stats(void)
                                   certification_mode_str, certification_mode);
     }
 
-    /* Device Prelude */
+    /* Device Prelude. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, device_str);
 
-    /* Application statistics */
+    /* Application statistics. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string), app_stats_str);
     string_length += snprintf(stats_string + string_length, sizeof(stats_string), valid_sequence_count_str,
                               valid_payload_count);
@@ -388,23 +395,17 @@ static void print_stats(void)
     string_length += snprintf(stats_string + string_length, sizeof(stats_string), invalid_crc_count_str,
                               invalid_crc_count);
 
-    /* Wireless statistics */
-    /* TX */
+    /* Wireless statistics. */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, wireless_stats_str);
-    swc_connection_update_stats(tx_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    swc_connection_t *connections[] = {tx_conn, rx_conn};
 
-    string_length += swc_connection_format_stats(tx_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    /* RX */
-    swc_connection_update_stats(rx_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
-
-    string_length += swc_connection_format_stats(rx_conn, stats_string + string_length,
-                                                 sizeof(stats_string) - string_length, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    for (uint8_t i = 0; i < ARRAY_SIZE(connections); i++) {
+        swc_connection_update_stats(connections[i], &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+        string_length += swc_connection_format_stats(connections[i], stats_string + string_length,
+                                                     sizeof(stats_string) - string_length, &swc_err);
+        ASSERT_SWC_STATUS(swc_err);
+    }
 
     facade_print_string(stats_string);
 
@@ -485,7 +486,7 @@ static void enter_pairing_mode(void)
     pairing_event = pairing_node_start(&app_pairing_cfg, &pairing_assigned_address, PAIRING_DEVICE_ROLE_NODE,
                                        &pairing_err);
     if (pairing_err != PAIRING_ERR_NONE) {
-        facade_print_error_string("An error occured during the pairing process.");
+        facade_print_error_string("An error occurred during the pairing process.");
         while (1);
     }
 
@@ -549,7 +550,7 @@ static void abort_pairing_procedure(void)
  */
 static void generate_pseudo_data(void)
 {
-    /* Sequence ID */
+    /* Sequence ID. */
     tx_payload[0] = tx_payload_id;
     tx_payload_id++;
 
@@ -565,7 +566,12 @@ static void packet_generation_timer_interrupt_handler(void)
     swc_connection_send(tx_conn, (uint8_t *)tx_payload, MAX_PAYLOAD_SIZE_BYTE, &swc_err);
     ASSERT_SWC_STATUS(swc_err);
 
-    /* Fill application payload. */
+    if (swc_err != SWC_ERR_NONE) {
+        /* The packet could not be sent. */
+        return;
+    }
+
+    /* Previous packet was sent to the SWC. Prepare the next packet. */
     generate_pseudo_data();
 }
 
@@ -573,7 +579,7 @@ void swc_error_handler(swc_error_t swc_status)
 {
     char buffer[ERROR_MESSAGE_BUFFER_SIZE];
 
-    sprintf(buffer, "SWC Error ! Code: %d\n\r", swc_status);
+    snprintf(buffer, sizeof(buffer), "SWC Error ! Code: %d\n\r", swc_status);
     facade_print_error_string(buffer);
 
     while (1);

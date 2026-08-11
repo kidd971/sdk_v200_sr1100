@@ -48,7 +48,7 @@ fixed_point_format_t fixed_point_initialization(uint8_t precision_bits, uint8_t 
     return fixed_point_format;
 }
 
-q_num_t fixed_point_float_to_q_conv(fixed_point_format_t *fixed_point_format, float real_number)
+q_num_t fixed_point_float_to_q_conv(const fixed_point_format_t *fixed_point_format, float real_number)
 {
     q_num_t conv_result = 0;
 
@@ -59,7 +59,7 @@ q_num_t fixed_point_float_to_q_conv(fixed_point_format_t *fixed_point_format, fl
     return conv_result;
 }
 
-q_num_t fixed_point_int_to_q_conv(fixed_point_format_t *fixed_point_format, int32_t real_number)
+q_num_t fixed_point_int_to_q_conv(const fixed_point_format_t *fixed_point_format, int32_t real_number)
 {
     q_num_t conv_result = 0;
 
@@ -68,7 +68,7 @@ q_num_t fixed_point_int_to_q_conv(fixed_point_format_t *fixed_point_format, int3
     return conv_result;
 }
 
-float fixed_point_q_to_float_conv(fixed_point_format_t *fixed_point_format, q_num_t q_number)
+float fixed_point_q_to_float_conv(const fixed_point_format_t *fixed_point_format, q_num_t q_number)
 {
     float conv_result = 0;
 
@@ -77,7 +77,7 @@ float fixed_point_q_to_float_conv(fixed_point_format_t *fixed_point_format, q_nu
     return conv_result;
 }
 
-int32_t fixed_point_q_to_int_conv(fixed_point_format_t *fixed_point_format, q_num_t q_number)
+int32_t fixed_point_q_to_int_conv(const fixed_point_format_t *fixed_point_format, q_num_t q_number)
 {
     int32_t conv_result = 0;
 
@@ -103,7 +103,7 @@ q_num_t fixed_point_sub(q_num_t q_num1, q_num_t q_num2)
     return fixed_point_add(q_num1, -q_num2);
 }
 
-q_num_t fixed_point_multiply(fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2)
+q_num_t fixed_point_multiply(const fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2)
 {
     q_num_t result = 0;
     int64_t result_tmp = 0;
@@ -119,7 +119,7 @@ q_num_t fixed_point_multiply(fixed_point_format_t *fixed_point_format, q_num_t q
     return result;
 }
 
-q_num_t fixed_point_division(fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2)
+q_num_t fixed_point_division(const fixed_point_format_t *fixed_point_format, q_num_t q_num1, q_num_t q_num2)
 {
     int32_t result = 0;
     int64_t nominator_scale = 0;
@@ -136,7 +136,7 @@ q_num_t fixed_point_division(fixed_point_format_t *fixed_point_format, q_num_t q
     return result;
 }
 
-fixed_point_mean_format_t fixed_point_mean_init(fixed_point_format_t *fixed_point_format, uint16_t mean_size)
+fixed_point_mean_format_t fixed_point_mean_init(const fixed_point_format_t *fixed_point_format, uint16_t mean_size)
 {
     fixed_point_mean_format_t fixed_point_mean_format = {0};
 
@@ -164,7 +164,7 @@ void fixed_point_mean_reset(fixed_point_mean_format_t *fixed_point_mean_format)
     fixed_point_mean_format->mean_index = 0;
 }
 
-q_num_t fixed_point_mean_calculate(fixed_point_mean_format_t *fixed_point_mean_format, uint16_t size)
+q_num_t fixed_point_mean_calculate(const fixed_point_mean_format_t *fixed_point_mean_format, uint16_t size)
 {
     q_num_t result = 0;
     int64_t nominator_scale = 0;
@@ -189,7 +189,7 @@ q_num_t fixed_point_mean_calculate(fixed_point_mean_format_t *fixed_point_mean_f
     return result;
 }
 
-q_num_t fixed_point_get_precision_q(fixed_point_format_t *fixed_point_format)
+q_num_t fixed_point_get_precision_q(const fixed_point_format_t *fixed_point_format)
 {
     return 1 << fixed_point_format->precision;
 }
@@ -212,9 +212,8 @@ static bool no_bits_defined(uint8_t bits_value1, uint8_t bits_value2)
 
 /** @brief Check if the user set parameter are valid.
  *
- *  This will check if the sum of the precision_bits, the
- *  integer_bits and the signed representation is greater
- *  than 32.
+ *  @note This will check if the sum of the precision_bits, the integer_bits and the signed representation is greater
+ *        than 32.
  *
  *  @param[in] total_nb_bits  The sum, in bits, of the 3 parameters.
  *  @retval True   Sum is higher than 32.
@@ -284,13 +283,13 @@ static int64_t saturate_value32(int64_t value)
 
 /** @brief Clip 64-bit value to 32-bit max value (Optimized).
  *
- *  @param[in] value  64-bit value to clip.
+ *  @param[in] x  64-bit value to clip.
  *  @return Clipped value.
  */
 static int32_t clip64_to_32(int64_t x)
 {
-    if ((int32_t)(x >> 32) != ((int32_t)x >> 31)) {
-        return (0x7FFFFFFF ^ ((int32_t)(x >> 63)));
+    if ((int32_t)(x >> 32) != (-(int32_t)((uint32_t)(int32_t)x >> 31))) {
+        return (0x7FFFFFFF ^ ((int32_t)(-(int64_t)((uint64_t)x >> 63))));
     } else {
         return (int32_t)x;
     }

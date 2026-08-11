@@ -217,18 +217,18 @@ void quasar_radio_callback_context_switch(void);
 
 /** @brief Change the radio 1 SPI BaudRate.
  *
- *  By default the SPI peripheral is initalized with a prescaler of 4.
+ *  @note By default the SPI peripheral is initialized with a prescaler of 4.
  *
- *  @param[in]  prescaler  SPI BaudRate Prescaler
+ *  @param[in]  prescaler  SPI BaudRate Prescaler.
  *  @param[out] err        Pointer to quasar_bsp_status_t for error reporting.
  */
 void quasar_radio_1_set_spi_baudrate(quasar_spi_prescaler_t prescaler, quasar_bsp_status_t *err);
 
 /** @brief Change the radio 2 SPI BaudRate.
  *
- *  By default the SPI peripheral is initalized with a prescaler of 4.
+ *  @note By default the SPI peripheral is initialized with a prescaler of 4.
  *
- *  @param[in]  prescaler  SPI BaudRate Prescaler
+ *  @param[in]  prescaler  SPI BaudRate Prescaler.
  *  @param[out] err        Pointer to quasar_bsp_status_t for error reporting.
  */
 void quasar_radio_2_set_spi_baudrate(quasar_spi_prescaler_t prescaler, quasar_bsp_status_t *err);

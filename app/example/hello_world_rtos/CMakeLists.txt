@@ -12,8 +12,10 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
         PUBLIC
             hello_world_rtos_backend
             swc
+            swc_backend
             cmsis_rtos_v2
             module_tinyusb_freertos
+            spark_pairing
     )
     add_custom_command(TARGET hello_world_rtos_coordinator.elf
         POST_BUILD
@@ -27,8 +29,10 @@ target_link_libraries(hello_world_rtos_node.elf
     PUBLIC
         hello_world_rtos_backend
         swc
+        swc_backend
         cmsis_rtos_v2
         module_tinyusb_freertos
+        spark_pairing
 )
 add_custom_command(TARGET hello_world_rtos_node.elf
     POST_BUILD

@@ -88,7 +88,7 @@ uint16_t sac_compression_process(void *instance, sac_pipeline_t *pipeline, sac_h
     (void)pipeline;
     (void)header;
 
-    sac_compression_instance_t *compress_inst = instance;
+    const sac_compression_instance_t *compress_inst = instance;
     uint16_t output_size = 0;
 
     *status = SAC_OK;
@@ -117,7 +117,7 @@ uint16_t sac_compression_process_discard(void *instance, sac_pipeline_t *pipelin
     (void)header;
     (void)data_out;
 
-    sac_compression_instance_t *compress_inst = instance;
+    const sac_compression_instance_t *compress_inst = instance;
 
     *status = SAC_OK;
 
@@ -148,9 +148,9 @@ static uint16_t pack_stereo(void *instance, uint8_t *buffer_in, uint16_t buffer_
 {
     uint8_t *input_buffer = (uint8_t *)buffer_in;
     uint16_t pcm_sample_count = 0;
-    uint8_t left_code = 0;
-    uint8_t right_code = 0;
-    int16_t sample = 0;
+    uint8_t left_code;
+    uint8_t right_code;
+    int16_t sample;
     sac_compression_instance_t *compress_inst = instance;
 
     pcm_sample_count = (BYTE_TO_BITS(buffer_in_size) / compress_inst->_internal.sample_size_bit) / 2;
@@ -242,7 +242,7 @@ static uint16_t pack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_in
     uint8_t *input_buffer = (uint8_t *)buffer_in;
     uint16_t pcm_sample_count = 0;
     uint16_t compressed_byte_count = 0;
-    int16_t sample = 0;
+    int16_t sample;
     sac_compression_instance_t *compress_inst = instance;
 
     pcm_sample_count = (BYTE_TO_BITS(buffer_in_size) / compress_inst->_internal.sample_size_bit);
@@ -262,7 +262,7 @@ static uint16_t pack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_in
         *buffer_out++ |= (adpcm_encode(sample, &(compress_inst->_internal.adpcm_left_state)) << 4) & 0xF0;
         input_buffer += compress_inst->_internal.sample_size_byte;
     }
-    /* Manage odd number of samples */
+    /* Manage odd number of samples. */
     if (pcm_sample_count & 0x01) {
         sample = (*((int32_t *)input_buffer) >> compress_inst->_internal.bit_shift_16bits) & 0xFFFF;
         *buffer_out = adpcm_encode(sample, &(compress_inst->_internal.adpcm_left_state)) & 0x0F;
@@ -316,7 +316,8 @@ static uint16_t unpack_mono(void *instance, uint8_t *buffer_in, uint16_t buffer_
 
 /** @brief Extend value's sign bit into 32-bit word.
  *
- *  @param[in] value  The input value to be extended.
+ *  @param[in] instance  Compression instance.
+ *  @param[in] value     The input value to be extended.
  */
 static void extend_msb_to_32bits(void *instance, uint32_t *value)
 {

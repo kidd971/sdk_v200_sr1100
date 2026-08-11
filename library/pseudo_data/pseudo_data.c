@@ -14,7 +14,7 @@
 #include <string.h>
 
 /* MACRO **********************************************************************/
-/*!< Extract the nth (0 = 1st, 1 = 2nd,..) byte from an int */
+/*! Extract the nth (0 = 1st, 1 = 2nd,..) byte from an int. */
 #define EXTRACT_BYTE(x, n) (((x) >> (8 * (n))) & 0x00ff)
 
 /* CONSTANTS ******************************************************************/
@@ -40,10 +40,11 @@ void pseudo_data_generate(uint8_t *data, size_t size)
     k++;
 }
 
-bool pseudo_data_validate(uint8_t *data, size_t size)
+bool pseudo_data_validate(const uint8_t *data, size_t size)
 {
     uint32_t crc = get_crc(0xBAAD, data, size - CRC_SIZE);
     uint32_t crc_in = data[size - 1] | (data[size - 2] << 8) | (data[size - 3] << 16) | (data[size - 4] << 24);
+
     return crc_in == crc;
 }
 
@@ -53,10 +54,10 @@ bool pseudo_data_is_crc_populated(size_t size)
 }
 
 /* PRIVATE FUNCTIONS ***********************************************************/
-/** @brief Serialize an uint32_t byte array into an uint8_t byte array
+/** @brief Serialize an uint32_t byte array into an uint8_t byte array.
  *
- *  @param[in]  in_data   Input array in uint32_t
- *  @param[out] out_data  Output array in uint8_t
+ *  @param[in]  in_data   Input array in uint32_t.
+ *  @param[out] out_data  Output array in uint8_t.
  */
 static void serialize_uint32_to_uint8_array(uint32_t in_data, uint8_t *out_data)
 {
@@ -66,11 +67,11 @@ static void serialize_uint32_to_uint8_array(uint32_t in_data, uint8_t *out_data)
     out_data[3] = EXTRACT_BYTE(in_data, 0);
 }
 
-/** @brief  Compute CRC on a buffer.
+/** @brief Compute CRC on a buffer.
  *
  *  @param[in] crc     CRC seed value.
- *  @param[in] buffer  Pointer to the buffer for the CRC
- *  @param[in] size    size of the buffer
+ *  @param[in] buffer  Pointer to the buffer for the CRC.
+ *  @param[in] size    size of the buffer.
  *  @return CRC value calculated.
  */
 static uint32_t get_crc(uint32_t crc, const void *buffer, size_t size)

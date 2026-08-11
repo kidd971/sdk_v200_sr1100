@@ -70,7 +70,7 @@
 #endif
 
 /* PUBLIC FUNCTIONS ***********************************************************/
-/* Context Switching and Interrupt Management */
+/* Context Switching and Interrupt Management. */
 void swc_hal_radio_1_context_switch(void)
 {
     slot1_context_switch();
@@ -151,7 +151,7 @@ void swc_hal_radio_2_enable_non_blocking_transfer_irq_it(void)
 }
 #endif
 
-/* GPIO Controls for Radios */
+/* GPIO Controls for Radios. */
 bool swc_hal_radio_1_read_irq_pin(void)
 {
     return slot1_read_irq_pin();
@@ -188,7 +188,7 @@ void swc_hal_radio_2_reset_reset_pin(void)
 }
 #endif
 
-/* SPI Communication */
+/* SPI Communication. */
 void swc_hal_radio_1_end_transfer(void)
 {
     /* The CS pin is the same for SPI and QSPI. */
@@ -361,7 +361,7 @@ bool swc_hal_radio_2_is_transfer_busy(void)
 #endif
 }
 
-/* Timer and Delay Management */
+/* Timer and Delay Management. */
 uint64_t swc_hal_get_tick_free_running_timer(void)
 {
     return quasar_timer_free_running_ms_get_tick_count();
@@ -372,7 +372,7 @@ uint32_t swc_hal_get_free_running_timer_frequency_hz(void)
     return quasar_timer_free_running_ms_get_tick_frequency();
 }
 
-/* Dual Radio Timer Management */
+/* Dual Radio Timer Management. */
 void swc_hal_multi_radio_timer_init(void)
 {
     quasar_timer_multi_radio_init(QUASAR_DEF_PRIO_MULTI_RADIO_TIMER_IRQ);

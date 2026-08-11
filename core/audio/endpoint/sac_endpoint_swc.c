@@ -47,6 +47,7 @@ static uint16_t ep_swc_action_produce(void *instance, uint8_t *samples, uint16_t
     uint8_t payload_size = 0;
     swc_error_t err = SWC_ERR_NONE;
     ep_swc_instance_t *inst = (ep_swc_instance_t *)instance;
+
     (void)size;
 
     payload_size = swc_connection_receive(inst->connection, &payload, &err);

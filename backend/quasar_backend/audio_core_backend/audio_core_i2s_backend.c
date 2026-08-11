@@ -79,7 +79,7 @@ void sac_facade_i2s_tx_sine(uint8_t *buf, uint16_t size)
 #endif
 
 /* PRIVATE FUNCTIONS **********************************************************/
-/** @brief Produce Endpoint of the audio codec
+/** @brief Produce Endpoint of the audio codec.
  *
  *  @param[in]  instance  Endpoint instance (not used).
  *  @param[out] samples   Location to put produced samples.
@@ -124,7 +124,7 @@ static void ep_i2s_stop_produce(void *instance)
     quasar_audio_sai_stop_read_non_blocking();
 }
 
-/** @brief Consume Endpoint of the audio codec
+/** @brief Consume Endpoint of the audio codec.
  *
  *  @param[in] instance  Endpoint instance (not used).
  *  @param[in] samples   Samples to consume.

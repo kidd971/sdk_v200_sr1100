@@ -1,0 +1,2 @@
+target_link_libraries(dest_addr_test_backend PRIVATE hardware module_tinyusb_baremetal)
+target_sources(dest_addr_test_backend PRIVATE dest_addr_test_backend.c)

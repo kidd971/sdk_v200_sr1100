@@ -31,7 +31,9 @@
 /** @brief Structure tracking a button's state.
  */
 typedef struct button_handle {
+    /*! The ID of the button. */
     quasar_button_selection_t button_id;
+    /*! Indicates whether the button is active. */
     bool active;
 } button_handle_t;
 
@@ -110,6 +112,9 @@ void facade_button_handling(void)
 
 void facade_tx_audio_conn_status(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     quasar_led_toggle(QUASAR_LED_USER_1);
 }
 
@@ -119,6 +124,9 @@ void facade_tx_data_conn_status(void)
 
 void facade_rx_audio_conn_status(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     quasar_led_toggle(QUASAR_LED_USER_2);
 }
 
@@ -128,6 +136,9 @@ void facade_rx_data_conn_status(void)
 
 void facade_fallback_status(bool on)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     if (on) {
         quasar_led_set(QUASAR_LED_USER_3);
     } else {
@@ -191,11 +202,17 @@ void facade_data_timer_stop(void)
 
 void facade_empty_payload_received_status(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     quasar_led_clear(QUASAR_LED_USER_4);
 }
 
 void facade_payload_received_status(void)
 {
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
     quasar_led_set(QUASAR_LED_USER_4);
 }
 
@@ -238,7 +255,7 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
     } else {
         /* If the button is active (pressed), do nothing for now, it remains pressed. */
         if (!quasar_button_read_state(button_handle->button_id)) {
-            /* The button is released, desactivate the button. */
+            /* The button is released, deactivate the button. */
             button_handle->active = false;
         }
     }

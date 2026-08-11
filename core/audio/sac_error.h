@@ -23,12 +23,12 @@ enum { SAC_COUNTER_BASE = __COUNTER__ };
  */
 #define ASSERT_SAC_STATUS(sac_status)        \
     do {                                     \
-        if (sac_status == SAC_OK) {          \
+        if ((sac_status) == SAC_OK) {        \
             /* Exit early. */                \
             break;                           \
         }                                    \
                                              \
-        if (sac_status > SAC_OK) {           \
+        if ((sac_status) > SAC_OK) {         \
             /* Handle warning. */            \
             sac_warning_handler(sac_status); \
             break;                           \
@@ -54,7 +54,7 @@ typedef enum sac_status {
     /*! No error nor warning occurred. */
     SAC_OK = 0,
 
-    /*! Warnings (positive values) */
+    /*! Warnings (positive values). */
     /*! Producer's queue is full when trying to produce. */
     SAC_WARN_PRODUCER_Q_FULL,
     /*! Consumer's queue is empty when trying to consume. */
@@ -65,12 +65,12 @@ typedef enum sac_status {
     SAC_WARN_NO_SAMPLES_TO_PROCESS,
     /*! The processing queue is empty and no nodes are available for processing. */
     SAC_WARN_PROCESSING_Q_EMPTY,
-    /*! A processing stage returned nothing to be produced.
-     *  The processing stage might be accumulating data to generate bigger packets.
+    /*! A processing stage returned nothing to be produced. The processing stage might be accumulating data to generate
+     *  bigger packets.
      */
     SAC_WARN_NO_PACKET_TO_PRODUCE,
 
-    /*! Errors (negative values) */
+    /*! Errors (negative values). */
     /*! Not enough memory is allocated by the application for a full audio core initialization. */
     SAC_ERR_NOT_ENOUGH_MEMORY = SAC_GENERATE_ERR_CODE,
     /*! Maximum number of processing stages for a given SAC pipeline is already reached when trying to add another one.

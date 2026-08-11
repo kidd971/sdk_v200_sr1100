@@ -11,6 +11,7 @@ target_link_libraries(profiler_dut.elf
     PRIVATE
         profiler_backend
         swc
+        swc_backend
 )
 add_custom_command(TARGET profiler_dut.elf
     POST_BUILD
@@ -26,6 +27,7 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
         PRIVATE
             profiler_backend
             swc
+            swc_backend
     )
     add_custom_command(TARGET profiler_helper.elf
         POST_BUILD

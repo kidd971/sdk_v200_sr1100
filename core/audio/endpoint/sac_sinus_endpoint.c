@@ -34,7 +34,7 @@ static const int16_t sin_3khz_48ks_16bits_mono[48] = {
 /* PUBLIC FUNCTIONS ***********************************************************/
 uint16_t ep_sinus_produce(void *instance, uint8_t *samples, uint16_t size)
 {
-    sinus_instance_t *inst = (sinus_instance_t *)instance;
+    const sinus_instance_t *inst = (const sinus_instance_t *)instance;
 
     switch (inst->sine_freq) {
     case SINE_FREQ_1K:
