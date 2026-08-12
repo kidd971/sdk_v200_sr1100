@@ -1349,6 +1349,13 @@ static void print_stats(void)
         snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 48kHz 16-bit\r\n");
     } else if (fallback_state == FALLBACK_48K_ADPCM_STEREO) {
         snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 48kHz ADPCM\r\n");
+    } else if (fallback_state == FALLBACK_24K_ADPCM_STEREO) {
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " 24kHz ADPCM\r\n");
+    } else {
+        /* Every enumerator above supplies its own newline, so a state with no branch here does not
+         * merely lose its name -- it runs the next section onto this line. */
+        snprintf(stats_string + string_length, sizeof(stats_string) - string_length, " (unnamed state %u)\r\n",
+                 (unsigned)fallback_state);
     }
 
     facade_print_string(stats_string);
