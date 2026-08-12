@@ -3015,7 +3015,19 @@ static int32_t at_get_link_margin(void)
  *  reads use a local err and never assert, so this is safe to call in a stalled
  *  state and does not require the link to be up (covers the "hangs during sync,
  *  before pairing" case as long as the CPU is still running).
- */
+ *
+ *  Two lines when nothing is wrong:
+ *    +CRASH_DUMP:
+ *     build=<ver> <tag> <date> <time> role=HS paired=<0|1> swc=<RUN|STOP> conn=<OK|LOST|N/A> fb=<n> lm=<n>
+ *     rx_ok=<n> rx_miss=<n> rx_rej=<n> cca_fail=<n> tx_drop=<n> err=<connErr>/<statErr>
+ *         send_err=<lastErr>(<count>) irq=<r1>/<r2> dma=<r1>/<r2> mrt=<n> frt=<n>
+ *
+ *  The TIM4 and HardFault groups get their own lines only when they carry information:
+ *  at 2 Hz they were two thirds of the dump while reading all-zero, because TIM4 is the
+ *  multi-radio scheduler timer and a single-radio board never starts it, and an all-zero
+ *  fault snapshot just means no HardFault has been captured. Suppressing them is what
+ *  makes the steady-state dump readable; when either one is non-zero it is the whole
+ *  point of the dump, so it prints in full. */
 #if STALL_AUTO_RECOVER_MS
 /** @brief EXPERIMENTAL stall watchdog: force an SWC re-init if the radios wedge.
  *
@@ -3090,89 +3102,90 @@ static void emit_crash_dump(void)
      * UWB_READY on the AT port at boot. */
     facade_stats_write("\r\n+CRASH_DUMP:\r\n");
 
-    /* Version + compile timestamp so the dump self-identifies the exact binary: __DATE__/
-     * __TIME__ change on every rebuild, which is the quick way to confirm the board is
-     * running the build you think it is (a hardcoded label cannot). */
-    snprintf(buf, sizeof(buf), " build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d\r\n",
-             (device_pairing_state == DEVICE_PAIRED) ? 1 : 0);
-    facade_stats_write(buf);
+    /* Read everything first, then lay it out: the identity and the link verdict belong on
+     * the same line, and whether the TIM4/fault groups print at all depends on their values.
+     * Non-asserting reads throughout; rx_audio_conn is NULL before pairing. */
+    swc_error_t conn_err = SWC_ERR_NONE;
+    swc_error_t stat_err = SWC_ERR_NONE;
+    sac_status_t fb_status = SAC_OK;
+    swc_fallback_info_t info = {0};
+    bool have_conn = (rx_audio_conn != NULL);
+    bool connected = false;
+    uint8_t fb_mode = 0;
+    uint32_t rx_ok = 0, rx_miss = 0, rx_rej = 0;
 
-    /* Wireless link state (non-asserting; rx_audio_conn may be NULL before pairing). */
-    if (rx_audio_conn != NULL) {
-        swc_error_t conn_err = SWC_ERR_NONE;
-        swc_error_t stat_err = SWC_ERR_NONE;
-        sac_status_t fb_status = SAC_OK;
-        bool connected = swc_connection_get_connect_status(rx_audio_conn, &conn_err);
-        swc_fallback_info_t info = swc_connection_get_fallback_info(rx_audio_conn, &conn_err);
+    if (have_conn) {
+        connected = swc_connection_get_connect_status(rx_audio_conn, &conn_err);
+        info = swc_connection_get_fallback_info(rx_audio_conn, &conn_err);
+        fb_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, &fb_status);
+
         swc_statistics_t *rx_stats = swc_connection_update_stats(rx_audio_conn, &stat_err);
-        swc_status_t swc_state = swc_get_status();
-        uint8_t fb_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, &fb_status);
-        uint32_t rx_ok = (rx_stats != NULL) ? rx_stats->packet_successfully_received_count : 0;
-        uint32_t rx_miss = (rx_stats != NULL) ? rx_stats->no_packet_reception_count : 0;
-        uint32_t rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
-
-        snprintf(buf, sizeof(buf),
-                 " swc=%s conn=%s fb=%u lm=%u cca_fail=%lu tx_drop=%lu "
-                 "rx_ok=%lu rx_miss=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)\r\n",
-                 (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
-                 connected ? "OK" : "LOST", (unsigned)fb_mode, (unsigned)info.link_margin,
-                 (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
-                 (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
-                 (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count);
-    } else {
-        snprintf(buf, sizeof(buf), " swc=%s conn=N/A (no connection yet)\r\n",
-                 (swc_get_status() == SWC_STATUS_RUNNING) ? "RUN" : "STOP");
+        rx_ok = (rx_stats != NULL) ? rx_stats->packet_successfully_received_count : 0;
+        rx_miss = (rx_stats != NULL) ? rx_stats->no_packet_reception_count : 0;
+        rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
     }
+    swc_status_t swc_state = swc_get_status();
+
+    /* Line 1 -- which binary, and what it thinks the link is doing. The compile timestamp in
+     * AT_CMD_CORE_BUILD_ID changes on every rebuild, which is the quick way to confirm the
+     * board is running the build you think it is (a hardcoded label cannot). */
+    snprintf(buf, sizeof(buf),
+             " build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d swc=%s conn=%s fb=%u lm=%u\r\n",
+             (device_pairing_state == DEVICE_PAIRED) ? 1 : 0,
+             (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
+             have_conn ? (connected ? "OK" : "LOST") : "N/A",
+             (unsigned)fb_mode, (unsigned)info.link_margin);
     facade_stats_write(buf);
 
-    /* Dual-radio HW liveness counters (u535 & u5a5 dual-radio BSPs). */
-    uint32_t r1_irq, r2_irq, r1_dma, r2_dma;
-    if (facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma)) {
-        snprintf(buf, sizeof(buf), " hw: r1_irq=%lu r2_irq=%lu r1_dma=%lu r2_dma=%lu\r\n",
-                 (unsigned long)r1_irq, (unsigned long)r2_irq,
-                 (unsigned long)r1_dma, (unsigned long)r2_dma);
-    } else {
-        snprintf(buf, sizeof(buf), " hw: N/A (single-radio board)\r\n");
-    }
-    facade_stats_write(buf);
+    /* Radio HW liveness (dual-radio BSPs; zeroed and reported as 0 on single-radio boards) and
+     * scheduler liveness: mrt=multi-radio timer (TIM4) heartbeat, frt=free-running (TIM8) tick.
+     * Compare across two dumps: mrt frozen -> SWC scheduler died; mrt ticking while irq/dma
+     * frozen -> scheduler alive but radios not serviced. */
+    uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
+    (void)facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma);
 
-    /* Scheduler liveness: mrt=multi-radio timer (TIM4) heartbeat, frt=free-running (TIM8) tick,
-     * irq1/irq2=radio IRQ pin levels. Compare across two dumps: mrt frozen -> SWC scheduler died;
-     * mrt ticking while hw r*_irq/dma frozen -> scheduler alive but radios not serviced. */
-    uint32_t mrt, frt;
-    bool irq1, irq2;
-    if (facade_get_sched_liveness(&mrt, &frt, &irq1, &irq2)) {
-        snprintf(buf, sizeof(buf), " sched: mrt=%lu frt=%lu irq1=%d irq2=%d\r\n",
-                 (unsigned long)mrt, (unsigned long)frt, (int)irq1, (int)irq2);
-    } else {
-        snprintf(buf, sizeof(buf), " sched: N/A\r\n");
-    }
+    uint32_t mrt = 0, frt = 0;
+    bool irq1 = false, irq2 = false;
+    (void)facade_get_sched_liveness(&mrt, &frt, &irq1, &irq2);
+
+    /* Line 2 -- the counters, all of which are read as deltas across two dumps. */
+    snprintf(buf, sizeof(buf),
+             " rx_ok=%lu rx_miss=%lu rx_rej=%lu cca_fail=%lu tx_drop=%lu err=%d/%d send_err=%d(%lu)"
+             " irq=%lu/%lu dma=%lu/%lu mrt=%lu frt=%lu\r\n",
+             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
+             (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
+             (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count,
+             (unsigned long)r1_irq, (unsigned long)r2_irq,
+             (unsigned long)r1_dma, (unsigned long)r2_dma,
+             (unsigned long)mrt, (unsigned long)frt);
     facade_stats_write(buf);
 
     /* Raw multi-radio scheduler timer (TIM4) state, to pin WHY mrt froze:
      *   cen=0            -> timer was stopped (disconnect/stop path)
      *   cen=1 arr=0      -> period programmed to 0 -> timer stalled (period-clamp hole)
      *   cen=1 arr=65534  -> clamped to max but still not firing -> NVIC/other
-     *   cen=1 arr sane, uie=1, cnt advancing -> timer alive (not the wedge) */
-    uint32_t t_cr1, t_arr, t_cnt, t_dier;
-    if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier)) {
-        snprintf(buf, sizeof(buf), " tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX)\r\n",
+     *   cen=1 arr sane, uie=1, cnt advancing -> timer alive (not the wedge)
+     * Printed only when a register is set or a radio IRQ pin is high: a single-radio board
+     * never starts TIM4, so on those this line is four zeros forever. */
+    uint32_t t_cr1 = 0, t_arr = 0, t_cnt = 0, t_dier = 0;
+    if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier) &&
+        ((t_cr1 | t_arr | t_cnt | t_dier) != 0 || irq1 || irq2)) {
+        snprintf(buf, sizeof(buf),
+                 " tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX) irq1=%d irq2=%d\r\n",
                  (unsigned long)(t_cr1 & 0x1u), (unsigned long)t_arr, (unsigned long)t_cnt,
-                 (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier);
-    } else {
-        snprintf(buf, sizeof(buf), " tim4: N/A\r\n");
+                 (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier,
+                 (int)irq1, (int)irq2);
+        facade_stats_write(buf);
     }
-    facade_stats_write(buf);
 
-    /* Last captured HardFault (all-zero = no fault seen; cross-ref pc/lr against the .map). */
-    uint32_t cfsr, hfsr, pc, lr;
-    if (facade_get_hardfault_snapshot(&cfsr, &hfsr, &pc, &lr)) {
+    /* Last captured HardFault; cross-ref pc/lr against the .map. All-zero means no fault has
+     * been captured, which is the normal case and says nothing worth two Hz of UART. */
+    uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
+    if (facade_get_hardfault_snapshot(&cfsr, &hfsr, &pc, &lr) && (cfsr | hfsr | pc | lr) != 0) {
         snprintf(buf, sizeof(buf), " fault: cfsr=0x%08lX hfsr=0x%08lX pc=0x%08lX lr=0x%08lX\r\n",
                  (unsigned long)cfsr, (unsigned long)hfsr, (unsigned long)pc, (unsigned long)lr);
-    } else {
-        snprintf(buf, sizeof(buf), " fault: N/A\r\n");
+        facade_stats_write(buf);
     }
-    facade_stats_write(buf);
 }
 
 static void at_play(void)
