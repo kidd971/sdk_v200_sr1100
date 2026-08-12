@@ -51,7 +51,37 @@
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
 #define MAIN_CHANNEL_FBK_2_SAMPLE_COUNT 34
-#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT 46
+/* **** Bottom rung (mode 3) knobs **** */
+/* Accumulator ratio for mode 3, as mul/div. This is the retransmission-headroom knob: the
+ * accumulator sits BEFORE the resampler, so it alone decides how often a packet leaves, and
+ * attempts per packet is just the coordinator's slot rate divided by the packet rate. Slots are
+ * spent per packet, not per byte, so nothing else on the ladder -- not a lower sample rate, not
+ * FEC, not ISI -- changes how many attempts a packet gets.
+ *   23/10 -> 0.96 ms per packet -> 1043 pkt/s -> 3.0 attempts
+ *   46/10 -> 1.92 ms per packet ->  522 pkt/s -> 6.0 attempts
+ * The cost is 1.92 ms of packetisation delay inside mode 3's latency budget, and a payload that
+ * grows in proportion: 100 B against the 54 B of 23/10. Both fit -- mode 0 already puts 242 B in
+ * the same slot, and the SWC fallback thresholds stay in descending order at 206 / 138 / 100. */
+#ifndef MAIN_CHANNEL_FBK_3_ACC_MUL
+#define MAIN_CHANNEL_FBK_3_ACC_MUL 46
+#endif
+#define MAIN_CHANNEL_FBK_3_ACC_DIV 10
+/* Resampler ratio on the bottom rung: 2 puts it at 48 kHz, which is what the rest of the ladder
+ * already uses. Named so the arithmetic below reads, and so a 24 kHz rung is a change of this
+ * number plus a second SRC instance rather than a rewrite of the derivation. */
+#define MAIN_CHANNEL_FBK_3_RUNG_DIV 2
+/* DERIVED -- never hand-written. The accumulator collects MAIN_CHANNEL_SAMPLE_COUNT x ACC_MUL/DIV
+ * samples per channel at 96 kHz, and the resampler divides that by the rung ratio:
+ *   40 x 46/10 = 184 @96 kHz, / 2 = 92 @48 kHz.
+ *
+ * This has to track MAIN_CHANNEL_FBK_3_ACC_MUL. The fallback stage copies this value into
+ * pipeline->_internal.current_sample_count once per packet, and the headset's interpolator
+ * rejects any packet whose size does not match (sac_src_cmsis.c:479) -- so a value that has
+ * drifted out of step with the accumulator is not a glitch, it is every mode 3 packet dropped
+ * and total silence on that rung. */
+#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT                                                       \
+    ((MAIN_CHANNEL_SAMPLE_COUNT * MAIN_CHANNEL_FBK_3_ACC_MUL / MAIN_CHANNEL_FBK_3_ACC_DIV) / \
+     MAIN_CHANNEL_FBK_3_RUNG_DIV)
 
 /* A header is added to audio samples during fallback. */
 #define MAIN_CHANNEL_FALLBACK_HEADER_SIZE sizeof(sac_header_t)
@@ -84,37 +114,45 @@
     SAC_CALCULATE_LATENCY_QUEUE_SIZE(MAIN_CHANNEL_FBK_3_LATENCY_MS, CODEC_LATENCY_MS, MAIN_CHANNEL_SAMPLE_COUNT, \
                                      MAIN_CHANNEL_SAMPLE_RATE_HZ)
 
-/* Fallback modes payload size. */
-#define MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE                                                      \
-    {                                                                                           \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_1_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
-                                   MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH) +                   \
-            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                  \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_2_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
-                                   MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH) +                         \
-            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                  \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_3_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, \
-                                   SAC_COMPRESSION_SAMPLE_RESOLUTION) +                         \
-            MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE,                                      \
+/* Fallback modes payload size. Named per rung as well as collected into the array, so the
+ * descending-order requirement the SWC asserts on can be checked at compile time. */
+#define MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE                                                             \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_1_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,        \
+                                MAIN_CHANNEL_OTA_UNCOMPRESSED_BIT_DEPTH) +                          \
+     MAIN_CHANNEL_FALLBACK_HEADER_SIZE)
+#define MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE                                                             \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_2_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,        \
+                                MAIN_CHANNEL_OTA_PACKED_BIT_DEPTH) +                                \
+     MAIN_CHANNEL_FALLBACK_HEADER_SIZE)
+#define MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE                                                             \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_3_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,        \
+                                SAC_COMPRESSION_SAMPLE_RESOLUTION) +                                \
+     MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE)
+#define MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE \
+    {                                      \
+        MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE,   \
+        MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE,   \
+        MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE,   \
     }
 
-/* Accumulator settings. */
-#define MAIN_CHANNEL_MAX_ACC_MUL 23
-#define MAIN_CHANNEL_MAX_ACC_DIV 10
+/* Accumulator settings. Sizes the accumulator buffer, so it must be the largest ratio any mode
+ * asks for -- which is the bottom rung's. */
+#define MAIN_CHANNEL_MAX_ACC_MUL MAIN_CHANNEL_FBK_3_ACC_MUL
+#define MAIN_CHANNEL_MAX_ACC_DIV MAIN_CHANNEL_FBK_3_ACC_DIV
 
-#define MAIN_CHANNEL_ACC_MUL \
-    {                        \
-        1,                   \
-        17,                  \
-        17,                  \
-        23,                  \
+#define MAIN_CHANNEL_ACC_MUL           \
+    {                                  \
+        1,                             \
+        17,                            \
+        17,                            \
+        MAIN_CHANNEL_FBK_3_ACC_MUL,    \
     }
-#define MAIN_CHANNEL_ACC_DIV \
-    {                        \
-        1,                   \
-        10,                  \
-        10,                  \
-        10,                  \
+#define MAIN_CHANNEL_ACC_DIV           \
+    {                                  \
+        1,                             \
+        10,                            \
+        10,                            \
+        MAIN_CHANNEL_FBK_3_ACC_DIV,    \
     }
 
 /* Fallback latency. */

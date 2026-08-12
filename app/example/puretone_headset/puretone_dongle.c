@@ -544,6 +544,20 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     uint8_t remote_address = pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE].node_address;
     uint8_t local_address = pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address;
     const uint8_t fallback_thresholds[] = MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE;
+
+    /* swc_connection_set_fallback_cfg() requires these in descending order and asserts if they
+     * are not -- a red LED at init, well after the edit that caused it. The accumulator ratio
+     * feeds the bottom rung's size, so the ladder can be inverted by changing one number in
+     * sac_cfg.h; catch it here instead. The uint8_t bound matters for the same reason: a large
+     * enough ratio silently wraps the threshold rather than overflowing it. */
+    _Static_assert(sizeof(fallback_thresholds) == SWC_FALLBACK_MODE_COUNT,
+                   "fallback threshold count must match SWC_FALLBACK_MODE_COUNT");
+    _Static_assert(MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE < MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE &&
+                       MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE < MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE,
+                   "SWC fallback thresholds must stay in descending payload order");
+    _Static_assert(MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE <= UINT8_MAX,
+                   "fallback thresholds are uint8_t; a larger payload wraps silently");
+
     const uint8_t fallback_cca_try_count[] = {
         SWC_CCA_AUDIO_FBK_1_TRY_COUNT,
         SWC_CCA_AUDIO_FBK_2_TRY_COUNT,
