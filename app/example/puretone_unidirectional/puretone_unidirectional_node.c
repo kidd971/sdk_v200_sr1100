@@ -122,6 +122,13 @@ static sac_mute_on_underflow_instance_t main_channel_mute_on_underflow_instance;
 static sac_processing_t *main_channel_mute_on_underflow_processing;
 static src_cmsis_instance_t main_channel_upsampling_instance;
 static sac_processing_t *main_channel_upsampling_processing;
+/* Second, independent SRC for the 24 kHz rung, mirroring the coordinator's 1:4 decimator. A ratio
+ * is fixed at init, so the 48->96 kHz instance above cannot be reused, and the two have to mirror:
+ * on the packet that ends a discard the decimator appends (FIR_NUMTAPS / ratio * channel_count) / 2
+ * samples and this side expects exactly that many, which only agrees when multiply_ratio here
+ * equals divide_ratio there. */
+static src_cmsis_instance_t main_channel_upsampling4_instance;
+static sac_processing_t *main_channel_upsampling4_processing;
 static sac_mute_packet_instance_t main_channel_mute_packet_instance;
 static sac_processing_t *main_channel_mute_packet_processing;
 static sac_sample_accumulator_instance_t main_channel_sample_accumulator_instance;
@@ -862,6 +869,29 @@ static void app_audio_core_init(void)
                                                                    &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
+    /* 24 -> 96 kHz for the bottom rung, mirroring the coordinator's 1:4. A single 4:1, not two
+     * chained 2:1: the interpolation path validates its input against
+     * pipeline->_internal.current_sample_count, which the fallback stage writes once per packet
+     * and never updates between stages, so a chained second stage would always see half what the
+     * check expects and be rejected. No discard variant, matching the coordinator -- see the note
+     * on its 1:4 instance. */
+    main_channel_upsampling4_instance.cfg.multiply_ratio = SAC_SRC_FOUR;
+    main_channel_upsampling4_instance.cfg.divide_ratio = SAC_SRC_ONE;
+    main_channel_upsampling4_instance.cfg.payload_size = MAIN_CHANNEL_SWC_PAYLOAD_SIZE *
+                                                         main_channel_upsampling4_instance.cfg.divide_ratio /
+                                                         main_channel_upsampling4_instance.cfg.multiply_ratio;
+    main_channel_upsampling4_instance.cfg.payload_size =
+        (main_channel_upsampling4_instance.cfg.payload_size * MAIN_CHANNEL_MAX_ACC_MUL) / MAIN_CHANNEL_MAX_ACC_DIV;
+
+    /* Upsampling does not change the sample format. */
+    main_channel_upsampling4_instance.cfg.input_sample_format = MAIN_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT;
+    main_channel_upsampling4_instance.cfg.output_sample_format = MAIN_CHANNEL_CONSUMER_SAC_SAMPLE_FORMAT;
+    main_channel_upsampling4_instance.cfg.channel_count = MAIN_CHANNEL_CHANNEL_COUNT;
+    main_channel_upsampling4_processing = sac_processing_stage_init((void *)&main_channel_upsampling4_instance,
+                                                                    "Audio Upsampling 4:1",
+                                                                    main_channel_upsampling_iface, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
     /* Mute packet processing stage initialization. */
     main_channel_mute_packet_instance.is_tx = false;
     main_channel_mute_packet_processing = sac_processing_stage_init((void *)&main_channel_mute_packet_instance,
@@ -1028,6 +1058,19 @@ static void app_audio_core_init(void)
     mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "48kHz ADPCM", mode_cfg, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_upsampling_processing,
+                                     &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_decompression_processing,
+                                     &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
+    /* Fallback mode 4 configuration: 24kHz ADPCM. Mirrors the coordinator's mode 4 -- same chain
+     * as mode 3 with the 4:1 interpolator in place of the 2:1. The mode index is a wire-level
+     * contract, so both sides must be flashed together. */
+    mode_cfg.sample_count = MAIN_CHANNEL_FBK_4_SAMPLE_COUNT;
+    mode_index = sac_fallback_add_mode(&main_channel_fallback_instance, "24kHz ADPCM", mode_cfg, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_upsampling4_processing,
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&main_channel_fallback_instance, mode_index, main_channel_decompression_processing,

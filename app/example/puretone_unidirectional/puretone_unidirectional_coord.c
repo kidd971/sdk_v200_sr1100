@@ -56,7 +56,7 @@
 
 /* **** Fallback **** */
 /* Number of SWC fallback modes. */
-#define SWC_FALLBACK_MODE_COUNT 3
+#define SWC_FALLBACK_MODE_COUNT 4
 
 /* TYPES **********************************************************************/
 /** @brief Enumeration representing device pairing states.
@@ -92,6 +92,8 @@ typedef enum fallback_states {
     FALLBACK_48K_16BIT_UNCOMPRESSED,
     /*! Forced fallback state to 48kHz compressed audio. */
     FALLBACK_48K_ADPCM_STEREO,
+    /*! Forced fallback state to 24kHz compressed audio. */
+    FALLBACK_24K_ADPCM_STEREO,
     /*! Total number of fallback states. */
     FALLBACK_STATE_COUNT,
 } fallback_states_t;
@@ -140,6 +142,13 @@ static sac_processing_t *main_channel_sample_accumulator_processing;
 static src_cmsis_instance_t main_channel_downsampling_instance;
 static sac_processing_t *main_channel_downsampling_processing;
 static sac_processing_t *main_channel_downsampling_discard_processing;
+/* Second, independent SRC for the 24 kHz rung. A ratio is fixed at init, so the 96->48 kHz
+ * instance above cannot be reused, and the two ends' ratios have to mirror each other: on the
+ * packet that ends a discard the decimator appends (FIR_NUMTAPS / ratio * channel_count) / 2
+ * samples and the interpolator expects exactly that many, which only agrees when divide_ratio
+ * here equals multiply_ratio on the node. */
+static src_cmsis_instance_t main_channel_downsampling4_instance;
+static sac_processing_t *main_channel_downsampling4_processing;
 static sac_mute_packet_instance_t main_channel_mute_packet_instance;
 static sac_processing_t *main_channel_mute_packet_processing;
 
@@ -295,7 +304,22 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     uint8_t local_address = pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address;
     const uint8_t fallback_thresholds[] = MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE;
     const uint8_t fallback_cca_try_count[] = {SWC_CCA_AUDIO_FBK_1_TRY_COUNT, SWC_CCA_AUDIO_FBK_2_TRY_COUNT,
-                                              SWC_CCA_AUDIO_FBK_3_TRY_COUNT};
+                                              SWC_CCA_AUDIO_FBK_3_TRY_COUNT, SWC_CCA_AUDIO_FBK_4_TRY_COUNT};
+
+    /* swc_connection_set_fallback_cfg() requires the thresholds in descending order and asserts
+     * if they are not -- a red LED at init, well after the edit that caused it. The bottom rung's
+     * size follows from its accumulator ratio and resampler ratio, so the ladder can be inverted
+     * by changing one number in sac_cfg.h; catch it here instead. */
+    _Static_assert(sizeof(fallback_thresholds) == SWC_FALLBACK_MODE_COUNT,
+                   "fallback threshold count must match SWC_FALLBACK_MODE_COUNT");
+    _Static_assert(sizeof(fallback_cca_try_count) == SWC_FALLBACK_MODE_COUNT,
+                   "CCA try count array must match SWC_FALLBACK_MODE_COUNT");
+    _Static_assert(MAIN_CHANNEL_FBK_4_PAYLOAD_SIZE < MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE &&
+                       MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE < MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE &&
+                       MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE < MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE,
+                   "SWC fallback thresholds must stay in descending payload order");
+    _Static_assert(MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE <= UINT8_MAX,
+                   "fallback thresholds are uint8_t; a larger payload wraps silently");
     swc_radio_handle_t *radio_handle = NULL;
 
     if (certification_mode != FACADE_CERTIF_NONE) {
@@ -850,6 +874,31 @@ static void app_audio_core_init(void)
                                   downsampling_discard_iface, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
+    /* 96 -> 24 kHz for the bottom rung. A single 1:4, not two chained 1:2: the interpolation path
+     * validates its input against pipeline->_internal.current_sample_count, which the fallback
+     * stage writes once per packet and never updates between stages, so a second chained stage
+     * would always see twice what the check expects and be rejected.
+     *
+     * No discard variant is registered, deliberately. discard_active then never becomes true on
+     * this instance, so the coordinator always emits exactly sample_count_out and the node always
+     * sees the size it expects -- which keeps this rung clear of the oversized-transition-packet
+     * path, the one part of this area the SDK has never exercised. The cost is a cold-FIR
+     * transient when the ladder enters mode 4, audible as a soft pop at the 3<->4 boundary. */
+    main_channel_downsampling4_instance.cfg.multiply_ratio = SAC_SRC_ONE;
+    main_channel_downsampling4_instance.cfg.divide_ratio = SAC_SRC_FOUR;
+    main_channel_downsampling4_instance.cfg.payload_size = USB_AUDIO_ENABLED ? MAIN_CHANNEL_SWC_PAYLOAD_SIZE :
+                                                                               MAIN_CHANNEL_I2S_PAYLOAD_SIZE;
+    main_channel_downsampling4_instance.cfg.payload_size =
+        (main_channel_downsampling4_instance.cfg.payload_size * MAIN_CHANNEL_MAX_ACC_MUL) / MAIN_CHANNEL_MAX_ACC_DIV;
+    /* Downsampling does not change the sample format. */
+    main_channel_downsampling4_instance.cfg.input_sample_format = MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT;
+    main_channel_downsampling4_instance.cfg.output_sample_format = MAIN_CHANNEL_PRODUCER_SAC_SAMPLE_FORMAT;
+    main_channel_downsampling4_instance.cfg.channel_count = MAIN_CHANNEL_CHANNEL_COUNT;
+    main_channel_downsampling4_processing = sac_processing_stage_init((void *)&main_channel_downsampling4_instance,
+                                                                      "Audio Downsampling 1:4", downsampling_iface,
+                                                                      &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
     /* Processing stage that packs into 24 bits before sending if fallback is deactivated. */
     audio_packing_instance.packing_mode = SAC_PACK_24BITS;
     sac_packing_processing = sac_processing_stage_init((void *)&audio_packing_instance, "Audio Packing", packing_iface,
@@ -1019,6 +1068,39 @@ static void app_audio_core_init(void)
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&sac_fallback_instance, mode_index, main_channel_downsampling_processing,
+                                     &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_mode_assign_process(&sac_fallback_instance, mode_index, main_channel_compression_processing,
+                                     &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+
+    /* Fallback mode 4 configuration: 24kHz ADPCM.
+     *
+     * Same processing chain as mode 3 with the 1:4 resampler in place of the 1:2, which halves
+     * what goes on the air: 23 samples/channel instead of 46, so 31 B instead of 54 B.
+     *
+     * What this rung buys is bitrate -- 192 kbps against 384 -- which is a range argument. It does
+     * NOT buy retransmission headroom: slots are spent per packet, not per byte, so a smaller
+     * payload does not change how many attempts a packet gets. Only the accumulator does that,
+     * and this rung shares mode 3's ratio.
+     *
+     * Entry thresholds are mode 3's, loosened one step: by the time the ladder is here the link
+     * has already failed everything above, so the question is whether 24 kHz holds, not whether to
+     * be cautious about arriving. Recovery is deliberately slower than mode 3's -- 15 s of good
+     * CCA against 10 -- because the 3<->4 boundary swaps resamplers and each crossing costs a
+     * cold-FIR pop, so oscillating across it is worse than sitting on the lower rung a while. */
+    mode_cfg = sac_fallback_mode_get_defaults();
+    mode_cfg.cca_good_fail_count_threshold_perc = 60;
+    mode_cfg.cca_good_time_sec = 15;
+    mode_cfg.link_margin_threshold = 30;
+    mode_cfg.link_margin_good_time_sec = 3;
+    mode_cfg.sample_count = MAIN_CHANNEL_FBK_4_SAMPLE_COUNT;
+    mode_index = sac_fallback_add_mode(&sac_fallback_instance, "24kHz ADPCM", mode_cfg, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_mode_assign_process(&sac_fallback_instance, mode_index, main_channel_sample_accumulator_processing,
+                                     &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_mode_assign_process(&sac_fallback_instance, mode_index, main_channel_downsampling4_processing,
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_fallback_mode_assign_process(&sac_fallback_instance, mode_index, main_channel_compression_processing,

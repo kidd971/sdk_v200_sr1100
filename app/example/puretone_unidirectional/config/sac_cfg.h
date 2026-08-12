@@ -21,16 +21,45 @@
 #define MAIN_CHANNEL_BIT_DEPTH      24
 /* Maximum Latency. */
 #define MAIN_CHANNEL_MAX_LATENCY_MS 15
-/* Fallback modes Latency. */
+/* Fallback modes Latency. Mode 4 sits at mode 3's 15 ms deliberately: MAIN_CHANNEL_MAX_LATENCY_MS
+ * caps every per-mode value because the consumer endpoint queue is sized from it, so widening the
+ * bottom rung means widening that queue too. Worth doing -- an outage lasts hundreds of ms and
+ * buffer depth is what rides one out -- but it is a separate change from adding the rung. */
 #define MAIN_CHANNEL_FBK_0_LATENCY_MS 5
 #define MAIN_CHANNEL_FBK_1_LATENCY_MS 7
 #define MAIN_CHANNEL_FBK_2_LATENCY_MS 10
 #define MAIN_CHANNEL_FBK_3_LATENCY_MS 15
+#define MAIN_CHANNEL_FBK_4_LATENCY_MS 15
 /* Fallback modes sample count. */
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
 #define MAIN_CHANNEL_FBK_2_SAMPLE_COUNT 34
 #define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT 46
+
+/* **** Mode 4: the 24 kHz ADPCM rung **** */
+/* Accumulator ratio, as mul/div. Left at mode 3's 23/10 so this change moves one thing: the
+ * sample rate. The accumulator is the retransmission-headroom knob -- it sits before the
+ * resampler, so it alone sets how often a packet leaves, and attempts per packet is the
+ * coordinator's slot rate over the packet rate. Raising it here would put mode 4 back on mode 3's
+ * 54 B and collapse the two SWC thresholds onto each other; that is a follow-up, not this. */
+#define MAIN_CHANNEL_FBK_4_ACC_MUL 23
+#define MAIN_CHANNEL_FBK_4_ACC_DIV 10
+/* Resampler ratio: 4 puts the rung at 24 kHz against the 96 kHz base. It has to be a single 1:4
+ * and not two chained 1:2 -- the interpolation path validates its input against
+ * pipeline->_internal.current_sample_count, which the fallback stage writes once per packet and
+ * never updates between stages, so a second chained stage always sees twice what the check
+ * expects and is rejected. */
+#define MAIN_CHANNEL_FBK_4_RUNG_DIV 4
+/* DERIVED -- never hand-written. The accumulator collects SAMPLE_COUNT x ACC_MUL/ACC_DIV samples
+ * per channel at 96 kHz and the resampler divides by the rung ratio:
+ *   40 x 23/10 = 92 @96 kHz, / 4 = 23 @24 kHz.
+ * 92 / 4 divides exactly, which is required: the fallback stage copies this into
+ * current_sample_count once per packet and the node's interpolator rejects any packet that does
+ * not match, so a value out of step with the accumulator is not a glitch -- it is every mode 4
+ * packet dropped and silence on that rung. */
+#define MAIN_CHANNEL_FBK_4_SAMPLE_COUNT                                                       \
+    ((MAIN_CHANNEL_SAMPLE_COUNT * MAIN_CHANNEL_FBK_4_ACC_MUL / MAIN_CHANNEL_FBK_4_ACC_DIV) / \
+     MAIN_CHANNEL_FBK_4_RUNG_DIV)
 
 /* A header is added to audio samples during fallback. */
 #define MAIN_CHANNEL_FALLBACK_HEADER_SIZE sizeof(sac_header_t)
@@ -59,36 +88,55 @@
 #define MAIN_CHANNEL_FBK_3_LATENCY_QUEUE_SIZE                                                                    \
     SAC_CALCULATE_LATENCY_QUEUE_SIZE(MAIN_CHANNEL_FBK_3_LATENCY_MS, CODEC_LATENCY_MS, MAIN_CHANNEL_SAMPLE_COUNT, \
                                      MAIN_CHANNEL_SAMPLE_RATE_HZ)
+#define MAIN_CHANNEL_FBK_4_LATENCY_QUEUE_SIZE                                                                    \
+    SAC_CALCULATE_LATENCY_QUEUE_SIZE(MAIN_CHANNEL_FBK_4_LATENCY_MS, CODEC_LATENCY_MS, MAIN_CHANNEL_SAMPLE_COUNT, \
+                                     MAIN_CHANNEL_SAMPLE_RATE_HZ)
 
-/* Fallback modes payload size. */
-#define MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE                                                            \
-    {                                                                                                 \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_1_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, 24) + \
-            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                        \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_2_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, 16) + \
-            MAIN_CHANNEL_FALLBACK_HEADER_SIZE,                                                        \
-        SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_3_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,       \
-                                   SAC_COMPRESSION_SAMPLE_RESOLUTION) +                               \
-            MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE,                                            \
+/* Fallback modes payload size. Named per rung as well as collected into the array, so the
+ * descending order that swc_connection_set_fallback_cfg() asserts on can be checked at compile
+ * time instead of showing up as a red LED at init. */
+#define MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE                                                              \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_1_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, 24) +   \
+     MAIN_CHANNEL_FALLBACK_HEADER_SIZE)
+#define MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE                                                              \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_2_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT, 16) +   \
+     MAIN_CHANNEL_FALLBACK_HEADER_SIZE)
+#define MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE                                                              \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_3_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,         \
+                                SAC_COMPRESSION_SAMPLE_RESOLUTION) +                                 \
+     MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE)
+#define MAIN_CHANNEL_FBK_4_PAYLOAD_SIZE                                                              \
+    (SAC_CALCULATE_PAYLOAD_SIZE(MAIN_CHANNEL_FBK_4_SAMPLE_COUNT, MAIN_CHANNEL_CHANNEL_COUNT,         \
+                                SAC_COMPRESSION_SAMPLE_RESOLUTION) +                                 \
+     MAIN_CHANNEL_FALLBACK_COMPRESSION_HEADER_SIZE)
+#define MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE \
+    {                                      \
+        MAIN_CHANNEL_FBK_1_PAYLOAD_SIZE,   \
+        MAIN_CHANNEL_FBK_2_PAYLOAD_SIZE,   \
+        MAIN_CHANNEL_FBK_3_PAYLOAD_SIZE,   \
+        MAIN_CHANNEL_FBK_4_PAYLOAD_SIZE,   \
     }
 
-/* Accumulator settings. */
+/* Accumulator settings. Sizes the accumulator buffer, so it must be the largest ratio any mode
+ * asks for. Mode 4 shares mode 3's ratio, so this does not move. */
 #define MAIN_CHANNEL_MAX_ACC_MUL 23
 #define MAIN_CHANNEL_MAX_ACC_DIV 10
 
-#define MAIN_CHANNEL_ACC_MUL \
-    {                        \
-        1,                   \
-        17,                  \
-        17,                  \
-        23,                  \
+#define MAIN_CHANNEL_ACC_MUL           \
+    {                                  \
+        1,                             \
+        17,                            \
+        17,                            \
+        23,                            \
+        MAIN_CHANNEL_FBK_4_ACC_MUL,    \
     }
-#define MAIN_CHANNEL_ACC_DIV \
-    {                        \
-        1,                   \
-        10,                  \
-        10,                  \
-        10,                  \
+#define MAIN_CHANNEL_ACC_DIV           \
+    {                                  \
+        1,                             \
+        10,                            \
+        10,                            \
+        10,                            \
+        MAIN_CHANNEL_FBK_4_ACC_DIV,    \
     }
 
 /* Fallback latency. */
@@ -98,6 +146,7 @@
         MAIN_CHANNEL_FBK_1_LATENCY_QUEUE_SIZE,   \
         MAIN_CHANNEL_FBK_2_LATENCY_QUEUE_SIZE,   \
         MAIN_CHANNEL_FBK_3_LATENCY_QUEUE_SIZE,   \
+        MAIN_CHANNEL_FBK_4_LATENCY_QUEUE_SIZE,   \
     }
 
 /* Fallback latency fifo size. */
@@ -107,6 +156,7 @@
         (MAIN_CHANNEL_FBK_1_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
         (MAIN_CHANNEL_FBK_2_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
         (MAIN_CHANNEL_FBK_3_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
+        (MAIN_CHANNEL_FBK_4_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS)), \
     }
 
 /* **** I2S Settings. **** */
