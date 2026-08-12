@@ -87,12 +87,12 @@
  * side can be lined up with its counterpart by eye. */
 #define LINK_WATCH_INTERVAL_MS 1000
 
-/* Periodic on-board crash/stall snapshot: emit the consolidated dump every N ms,
- * WITHOUT waiting for a stall or any command (the AT-UART RX pad is unusable on this
- * board, so the log is grabbed automatically). Output goes to LPUART1 TX. Set to 0
- * to disable. */
-#ifndef CRASH_DUMP_PERIODIC_MS
-#define CRASH_DUMP_PERIODIC_MS 1000
+/* Periodic HS status line: emitted every N ms WITHOUT waiting for a stall or any command
+ * (the AT-UART RX pad is unusable on this board, so the log is grabbed automatically).
+ * Output goes to LPUART1 TX. Stall/HardFault detail rides along on the same line or its
+ * own, but only when there is any -- see emit_hs_status(). Set to 0 to disable. */
+#ifndef HS_STATUS_PERIODIC_MS
+#define HS_STATUS_PERIODIC_MS 1000
 #endif
 
 /* Periodic print_stats() dump. Turned OFF by default on this debug branch so the
@@ -122,7 +122,7 @@
 /* **** Standby test hook (bench only — off in product builds) ****
  * Set to 1 to bind USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the
  * sleep path can be exercised from the board. Needed on benches where the AT-UART RX pad
- * is unusable (see CRASH_DUMP_PERIODIC_MS above), which makes AT+UWB_DISCONNECT
+ * is unusable (see HS_STATUS_PERIODIC_MS above), which makes AT+UWB_DISCONNECT
  * unreachable. Takes precedence over LATCH_TEST_HOOKS for that button. Left at 0 so the
  * product keeps its normal button behaviour and reaches Standby over AT. */
 #ifndef STANDBY_TEST_HOOKS
@@ -469,7 +469,7 @@ static void at_start_shutdown(void);
 static void app_teardown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
-static void emit_crash_dump(void);
+static void emit_hs_status(void);
 static void at_play(void);
 static void at_stop(void);
 static void at_set_vol(uint8_t vol);
@@ -608,15 +608,15 @@ int main(void)
         link_watch();
 #endif
 
-#if CRASH_DUMP_PERIODIC_MS
-        /* Periodic consolidated snapshot (link state + HW counters + last HardFault),
-         * auto-emitted every CRASH_DUMP_PERIODIC_MS because the AT-UART RX is unusable here. */
+#if HS_STATUS_PERIODIC_MS
+        /* Periodic status line, auto-emitted every HS_STATUS_PERIODIC_MS because the
+         * AT-UART RX is unusable here and nothing can ask for it. */
         {
-            static uint32_t crash_dump_tick_start = 0;
+            static uint32_t hs_status_tick_start = 0;
             uint32_t cd_now = facade_get_tick_ms();
-            if ((cd_now - crash_dump_tick_start) >= CRASH_DUMP_PERIODIC_MS) {
-                crash_dump_tick_start = cd_now;
-                emit_crash_dump();
+            if ((cd_now - hs_status_tick_start) >= HS_STATUS_PERIODIC_MS) {
+                hs_status_tick_start = cd_now;
+                emit_hs_status();
             }
         }
 #endif
@@ -2336,7 +2336,7 @@ static void print_stats(void)
     }
 
     /* Board-dependent routing: u535 -> ST-Link VCP (UART4); u5a5 EVK & others -> USB CDC.
-     * Never the AT UART -- see emit_crash_dump() for why that distinction matters. */
+     * Never the AT UART -- see emit_hs_status() for why that distinction matters. */
     facade_stats_write(stats_string);
 
     /* ** APP Statistics ** */
@@ -3016,37 +3016,36 @@ static int32_t at_get_link_margin(void)
     return (int32_t)info.link_margin;
 }
 
-/** @brief Emit a crash/stall snapshot to the AT UART (called periodically, every
- *         CRASH_DUMP_PERIODIC_MS, from the main loop).
+/** @brief Emit the HS status line to the AT UART (called every HS_STATUS_PERIODIC_MS from
+ *         the main loop). All SWC reads use a local err and never assert, so this is safe
+ *         to call in a stalled state and does not require the link to be up -- it covers
+ *         the "hangs during sync, before pairing" case as long as the CPU is still running.
  *
- *  Captures, in one block: the dual-radio HW liveness counters, the wireless link
- *  state (same fields as LINK_WATCH), and any HardFault register snapshot. All SWC
- *  reads use a local err and never assert, so this is safe to call in a stalled
- *  state and does not require the link to be up (covers the "hangs during sync,
- *  before pairing" case as long as the CPU is still running).
+ *  One line when nothing is wrong, the mirror image of the DG's:
+ *    [HS <ver> t=<ms>] <Connected|Disconnected|Unpaired> fb=<n> coord_lm=<n>
+ *        rx=<n>/s miss=<n>/s rej=<n>/s
  *
- *  Two lines when nothing is wrong:
- *    +CRASH_DUMP: build=<ver> <tag> <date> <time> role=HS paired=<0|1> t=<ms>
- *        swc=<RUN|STOP> conn=<OK|LOST|N/A> fb=<n> lm=<n>
- *    rx_ok=<n> rx_miss=<n> miss/s=<n> rx_rej=<n> cca_fail=<n> tx_drop=<n> err=<connErr>/<statErr>
- *        send_err=<lastErr>(<count>) irq=<r1>/<r2> dma=<r1>/<r2> mrt=<n> frt=<n>
+ *  followed, only when they say something, by swc=STOP, cca_fail, tx_drop, err and
+ *  send_err, and on dual-radio builds by the per-radio irq/dma counters and mrt. TIM4
+ *  registers and the HardFault snapshot get their own lines on the same terms.
  *
  *  This is the HS's only periodic log (LINK_WATCH is off by default -- see its comment), so
- *  it carries what that used to: t= advances every dump, which is both how you line an HS
+ *  it carries what that used to: t= advances every line, which is both how you line an HS
  *  line up with the DG line of the same second and how you tell a real RF loss (keeps
- *  printing conn=LOST) from a firmware hang (log freezes mid-stream), and connect/disconnect
- *  edges are announced the moment they happen rather than waiting for the next dump.
+ *  printing Disconnected) from a firmware hang (log freezes mid-stream), and connect/
+ *  disconnect edges are announced the moment they happen rather than at the next line.
  *
- *  miss/s is the per-second delta of rx_miss, which is the readable form: against the DG's
- *  prod=<n>/s on the same time axis, a high miss/s while the DG is healthy (prod~2400) means
- *  the empty slots are fallback-mode slot occupancy, not a starved producer.
+ *  Rates, not cumulative counters, for the three that move every line. miss/s read against
+ *  the DG's prod=<n>/s on the same time axis is the one comparison this log exists for: a
+ *  high miss/s while the DG is healthy (prod~2400) means the empty slots are fallback-mode
+ *  slot occupancy, not a starved producer.
  *
- *  The TIM4 and HardFault groups get their own lines only when they carry information:
- *  at 2 Hz they were two thirds of the dump while reading all-zero, because TIM4 is the
- *  multi-radio scheduler timer and a single-radio board never starts it, and an all-zero
- *  fault snapshot just means no HardFault has been captured. Suppressing them is what
- *  makes the steady-state dump readable; when either one is non-zero it is the whole
- *  point of the dump, so it prints in full. */
+ *  Gone from the old +CRASH_DUMP block, and why: the build tag and compile timestamp (the
+ *  boot banner's +EVENT: BUILD: already identifies the binary once, which is where that
+ *  belongs); role=HS and the +CRASH_DUMP: header (the [HS ...] prefix says both); paired=
+ *  (folded into the state word as Unpaired); and frt, which called
+ *  quasar_timer_free_running_ms_get_tick_count() -- the same counter facade_get_tick_ms()
+ *  returns, so it printed t= a second time. */
 #if STALL_AUTO_RECOVER_MS
 /** @brief EXPERIMENTAL stall watchdog: force an SWC re-init if the radios wedge.
  *
@@ -3105,12 +3104,12 @@ static void stall_auto_recover(void)
 }
 #endif
 
-static void emit_crash_dump(void)
+static void emit_hs_status(void)
 {
     char buf[288];
-    static uint32_t rxmiss_prev;
-    static uint32_t rxmiss_prev_tick;
-    static bool rxmiss_prev_valid;
+    static uint32_t rx_ok_prev, rxmiss_prev, rxrej_prev;
+    static uint32_t rate_prev_tick;
+    static bool rate_prev_valid;
     static bool prev_connected;
     static bool edge_initialized;
 
@@ -3150,22 +3149,27 @@ static void emit_crash_dump(void)
     swc_status_t swc_state = swc_get_status();
     uint32_t now = facade_get_tick_ms();
 
-    /* rx_miss per second, over the real elapsed interval. Reset the baseline whenever there is
-     * no connection so the first dump after a reconnect does not report the whole gap as one
-     * second's worth of misses. */
-    uint32_t rxmiss_rate = 0;
+    /* The three counters that move every line, as per-second rates over the real elapsed
+     * interval. One shared timestamp keeps them comparable with each other and with the DG's
+     * prod/s. Reset the baseline whenever there is no connection, so the first line after a
+     * reconnect does not bill the whole outage to one second. */
+    uint32_t rx_rate = 0, miss_rate = 0, rej_rate = 0;
     if (!have_conn) {
-        rxmiss_prev_valid = false;
+        rate_prev_valid = false;
     } else {
-        if (rxmiss_prev_valid) {
-            uint32_t dms = now - rxmiss_prev_tick;
+        if (rate_prev_valid) {
+            uint32_t dms = now - rate_prev_tick;
             if (dms > 0) {
-                rxmiss_rate = (uint32_t)(((uint64_t)(rx_miss - rxmiss_prev) * 1000U) / dms);
+                rx_rate = (uint32_t)(((uint64_t)(rx_ok - rx_ok_prev) * 1000U) / dms);
+                miss_rate = (uint32_t)(((uint64_t)(rx_miss - rxmiss_prev) * 1000U) / dms);
+                rej_rate = (uint32_t)(((uint64_t)(rx_rej - rxrej_prev) * 1000U) / dms);
             }
         }
+        rx_ok_prev = rx_ok;
         rxmiss_prev = rx_miss;
-        rxmiss_prev_tick = now;
-        rxmiss_prev_valid = true;
+        rxrej_prev = rx_rej;
+        rate_prev_tick = now;
+        rate_prev_valid = true;
     }
 
     /* Edge: announce connect<->disconnect the moment it happens, so the drop gets a timestamp
@@ -3180,40 +3184,63 @@ static void emit_crash_dump(void)
         prev_connected = connected;
     }
 
-    /* Line 1 -- which binary, and what it thinks the link is doing. The compile timestamp in
-     * AT_CMD_CORE_BUILD_ID changes on every rebuild, which is the quick way to confirm the
-     * board is running the build you think it is (a hardcoded label cannot). */
-    snprintf(buf, sizeof(buf),
-             "+CRASH_DUMP: build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d t=%lu "
-             "swc=%s conn=%s fb=%u lm=%u\r\n",
-             (device_pairing_state == DEVICE_PAIRED) ? 1 : 0, (unsigned long)now,
-             (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
-             have_conn ? (connected ? "OK" : "LOST") : "N/A",
-             (unsigned)fb_mode, (unsigned)info.link_margin);
-    facade_stats_write(buf);
-
-    /* Radio HW liveness (dual-radio BSPs; zeroed and reported as 0 on single-radio boards) and
-     * scheduler liveness: mrt=multi-radio timer (TIM4) heartbeat, frt=free-running (TIM8) tick.
-     * Compare across two dumps: mrt frozen -> SWC scheduler died; mrt ticking while irq/dma
-     * frozen -> scheduler alive but radios not serviced. */
+    /* frt is deliberately discarded: facade_get_sched_liveness() fills it from
+     * quasar_timer_free_running_ms_get_tick_count(), the same counter facade_get_tick_ms()
+     * returns above, so printing it would repeat t=. mrt is the one that can freeze on its
+     * own, and it only means anything on a dual-radio build. */
     uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
     (void)facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma);
 
-    uint32_t mrt = 0, frt = 0;
+    uint32_t mrt = 0, frt_unused = 0;
     bool irq1 = false, irq2 = false;
-    (void)facade_get_sched_liveness(&mrt, &frt, &irq1, &irq2);
+    (void)facade_get_sched_liveness(&mrt, &frt_unused, &irq1, &irq2);
 
-    /* Line 2 -- the counters, all of which are read as deltas across two dumps. */
-    snprintf(buf, sizeof(buf),
-             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu cca_fail=%lu tx_drop=%lu err=%d/%d "
-             "send_err=%d(%lu) irq=%lu/%lu dma=%lu/%lu mrt=%lu frt=%lu\r\n",
-             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
-             (unsigned long)rx_rej,
-             (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
-             (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count,
-             (unsigned long)r1_irq, (unsigned long)r2_irq,
-             (unsigned long)r1_dma, (unsigned long)r2_dma,
-             (unsigned long)mrt, (unsigned long)frt);
+    int n = snprintf(buf, sizeof(buf),
+                     "[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] %s fb=%u coord_lm=%u "
+                     "rx=%lu/s miss=%lu/s rej=%lu/s",
+                     (unsigned long)now,
+                     (device_pairing_state != DEVICE_PAIRED) ? "Unpaired    "
+                                                             : (connected ? "Connected   " : "Disconnected"),
+                     (unsigned)fb_mode, (unsigned)info.link_margin,
+                     (unsigned long)rx_rate, (unsigned long)miss_rate, (unsigned long)rej_rate);
+
+    /* Appended only when they carry information, the same rule the DG line follows: on a
+     * healthy run every one of these is 0 or RUNNING on every line, forever. */
+    if (n > 0 && n < (int)sizeof(buf) && swc_state != SWC_STATUS_RUNNING) {
+        n += snprintf(buf + n, sizeof(buf) - n, " swc=STOP");
+    }
+    if (n > 0 && n < (int)sizeof(buf) && info.cca_fail_count != 0) {
+        n += snprintf(buf + n, sizeof(buf) - n, " cca_fail=%lu", (unsigned long)info.cca_fail_count);
+    }
+    if (n > 0 && n < (int)sizeof(buf) && info.tx_pkt_dropped != 0) {
+        n += snprintf(buf + n, sizeof(buf) - n, " tx_drop=%lu", (unsigned long)info.tx_pkt_dropped);
+    }
+    if (n > 0 && n < (int)sizeof(buf) && (conn_err != SWC_ERR_NONE || stat_err != SWC_ERR_NONE)) {
+        n += snprintf(buf + n, sizeof(buf) - n, " err=%d/%d", (int)conn_err, (int)stat_err);
+    }
+    if (n > 0 && n < (int)sizeof(buf) && (s_last_send_err != SWC_ERR_NONE || s_send_err_count != 0)) {
+        n += snprintf(buf + n, sizeof(buf) - n, " send_err=%d(%lu)",
+                      (int)s_last_send_err, (unsigned long)s_send_err_count);
+    }
+#if (SWC_RADIO_COUNT == 2)
+    /* Dual-radio only: one radio's IRQ/DMA path freezing while the other keeps running is the
+     * wedge signature, and it cannot be seen in rx/s alone. On a single-radio build the second
+     * of each pair is always 0 and the first says nothing rx/s does not already say. */
+    if (n > 0 && n < (int)sizeof(buf)) {
+        n += snprintf(buf + n, sizeof(buf) - n, " irq=%lu/%lu dma=%lu/%lu mrt=%lu",
+                      (unsigned long)r1_irq, (unsigned long)r2_irq,
+                      (unsigned long)r1_dma, (unsigned long)r2_dma, (unsigned long)mrt);
+    }
+#else
+    (void)r1_irq;
+    (void)r2_irq;
+    (void)r1_dma;
+    (void)r2_dma;
+    (void)mrt;
+#endif
+    if (n > 0 && n < (int)sizeof(buf)) {
+        snprintf(buf + n, sizeof(buf) - n, "\r\n");
+    }
     facade_stats_write(buf);
 
     /* Raw multi-radio scheduler timer (TIM4) state, to pin WHY mrt froze:
