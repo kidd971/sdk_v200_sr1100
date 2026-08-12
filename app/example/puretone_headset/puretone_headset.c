@@ -71,9 +71,16 @@
  *   - The t= tick lets you tell a real RF loss (keeps printing Disconnected)
  *     apart from a firmware hang (log freezes mid-stream).
  * Set LINK_WATCH to 0 to compile it out. */
+/* OFF, because the periodic crash dump below now says everything this said and then some.
+ * The two ran at the same cadence on the same port, and the LINK_WATCH line was a subset of
+ * the dump's two -- three lines a second from the HS against the DG's one, two of them
+ * duplicates. What the dump was missing when this went off (t=, miss/s, the connect/disconnect
+ * edge announcement) moved into it, so nothing was lost by switching this off.
+ *
+ * Set to 1 to get the single-line form back; expect the edge announcement twice, once from
+ * each path, for as long as both are on. */
 #ifndef LINK_WATCH
-#define LINK_WATCH 1  /* ON for dual-radio crash-log collection: prints every LINK_WATCH_INTERVAL_MS
-                       * on the AT/expansion UART (LPUART1 TX). Set to 0 for release. */
+#define LINK_WATCH 0
 #endif
 /* Poll/print cadence for the link watch in ms. One second, matched to the DG and to the
  * crash dump below, so the two boards' logs interleave one-for-one and a line from either
@@ -3019,10 +3026,20 @@ static int32_t at_get_link_margin(void)
  *  before pairing" case as long as the CPU is still running).
  *
  *  Two lines when nothing is wrong:
- *    +CRASH_DUMP: build=<ver> <tag> <date> <time> role=HS paired=<0|1> swc=<RUN|STOP>
- *        conn=<OK|LOST|N/A> fb=<n> lm=<n>
- *    rx_ok=<n> rx_miss=<n> rx_rej=<n> cca_fail=<n> tx_drop=<n> err=<connErr>/<statErr>
+ *    +CRASH_DUMP: build=<ver> <tag> <date> <time> role=HS paired=<0|1> t=<ms>
+ *        swc=<RUN|STOP> conn=<OK|LOST|N/A> fb=<n> lm=<n>
+ *    rx_ok=<n> rx_miss=<n> miss/s=<n> rx_rej=<n> cca_fail=<n> tx_drop=<n> err=<connErr>/<statErr>
  *        send_err=<lastErr>(<count>) irq=<r1>/<r2> dma=<r1>/<r2> mrt=<n> frt=<n>
+ *
+ *  This is the HS's only periodic log (LINK_WATCH is off by default -- see its comment), so
+ *  it carries what that used to: t= advances every dump, which is both how you line an HS
+ *  line up with the DG line of the same second and how you tell a real RF loss (keeps
+ *  printing conn=LOST) from a firmware hang (log freezes mid-stream), and connect/disconnect
+ *  edges are announced the moment they happen rather than waiting for the next dump.
+ *
+ *  miss/s is the per-second delta of rx_miss, which is the readable form: against the DG's
+ *  prod=<n>/s on the same time axis, a high miss/s while the DG is healthy (prod~2400) means
+ *  the empty slots are fallback-mode slot occupancy, not a starved producer.
  *
  *  The TIM4 and HardFault groups get their own lines only when they carry information:
  *  at 2 Hz they were two thirds of the dump while reading all-zero, because TIM4 is the
@@ -3091,6 +3108,11 @@ static void stall_auto_recover(void)
 static void emit_crash_dump(void)
 {
     char buf[288];
+    static uint32_t rxmiss_prev;
+    static uint32_t rxmiss_prev_tick;
+    static bool rxmiss_prev_valid;
+    static bool prev_connected;
+    static bool edge_initialized;
 
     /* Board-dependent routing (same channel as print_stats via facade_stats_write):
      * u535 -> ST-Link VCP (UART4, PC10/PC11); u5a5 EVK & others -> USB CDC. This is a
@@ -3126,13 +3148,45 @@ static void emit_crash_dump(void)
         rx_rej = (rx_stats != NULL) ? rx_stats->packet_rejected_count : 0;
     }
     swc_status_t swc_state = swc_get_status();
+    uint32_t now = facade_get_tick_ms();
+
+    /* rx_miss per second, over the real elapsed interval. Reset the baseline whenever there is
+     * no connection so the first dump after a reconnect does not report the whole gap as one
+     * second's worth of misses. */
+    uint32_t rxmiss_rate = 0;
+    if (!have_conn) {
+        rxmiss_prev_valid = false;
+    } else {
+        if (rxmiss_prev_valid) {
+            uint32_t dms = now - rxmiss_prev_tick;
+            if (dms > 0) {
+                rxmiss_rate = (uint32_t)(((uint64_t)(rx_miss - rxmiss_prev) * 1000U) / dms);
+            }
+        }
+        rxmiss_prev = rx_miss;
+        rxmiss_prev_tick = now;
+        rxmiss_prev_valid = true;
+    }
+
+    /* Edge: announce connect<->disconnect the moment it happens, so the drop gets a timestamp
+     * of its own instead of being inferred from whichever dump reported it first. */
+    if (!edge_initialized) {
+        prev_connected = connected;
+        edge_initialized = true;
+    } else if (connected != prev_connected) {
+        snprintf(buf, sizeof(buf), "[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] link %s\r\n",
+                 (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
+        facade_stats_write(buf);
+        prev_connected = connected;
+    }
 
     /* Line 1 -- which binary, and what it thinks the link is doing. The compile timestamp in
      * AT_CMD_CORE_BUILD_ID changes on every rebuild, which is the quick way to confirm the
      * board is running the build you think it is (a hardcoded label cannot). */
     snprintf(buf, sizeof(buf),
-             "+CRASH_DUMP: build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d swc=%s conn=%s fb=%u lm=%u\r\n",
-             (device_pairing_state == DEVICE_PAIRED) ? 1 : 0,
+             "+CRASH_DUMP: build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d t=%lu "
+             "swc=%s conn=%s fb=%u lm=%u\r\n",
+             (device_pairing_state == DEVICE_PAIRED) ? 1 : 0, (unsigned long)now,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              have_conn ? (connected ? "OK" : "LOST") : "N/A",
              (unsigned)fb_mode, (unsigned)info.link_margin);
@@ -3151,9 +3205,10 @@ static void emit_crash_dump(void)
 
     /* Line 2 -- the counters, all of which are read as deltas across two dumps. */
     snprintf(buf, sizeof(buf),
-             "rx_ok=%lu rx_miss=%lu rx_rej=%lu cca_fail=%lu tx_drop=%lu err=%d/%d send_err=%d(%lu)"
-             " irq=%lu/%lu dma=%lu/%lu mrt=%lu frt=%lu\r\n",
-             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
+             "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu cca_fail=%lu tx_drop=%lu err=%d/%d "
+             "send_err=%d(%lu) irq=%lu/%lu dma=%lu/%lu mrt=%lu frt=%lu\r\n",
+             (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rxmiss_rate,
+             (unsigned long)rx_rej,
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
              (int)conn_err, (int)stat_err, (int)s_last_send_err, (unsigned long)s_send_err_count,
              (unsigned long)r1_irq, (unsigned long)r2_irq,
