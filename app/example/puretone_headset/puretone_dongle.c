@@ -574,6 +574,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .role = SWC_ROLE_COORDINATOR,
         .coordinator_address = local_address,
         .local_address = local_address,
+        .isi_mitig = NODE_ISI_MITIG,
     };
     swc_init(core_cfg, node_cfg, facade_context_switch_trigger, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
