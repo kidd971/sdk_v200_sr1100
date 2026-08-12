@@ -98,9 +98,10 @@ static void audio_deinit_sai_dma(quasar_bsp_status_t *err);
 static void sai_dma_start_it(DMA_HandleTypeDef *hdma, uint32_t source_addr, uint32_t destination_addr, uint32_t size);
 static void sai_dma_tx_complete_callback(DMA_HandleTypeDef *hdma);
 static void sai_dma_rx_complete_callback(DMA_HandleTypeDef *hdma);
-static quasar_i2c_config_t audio_get_i2c_config(void);
 static audio_sai_gpios_config_t audio_get_sai_gpios_config(void);
-// audio_init_codec_mux_gpio: not needed, PC2 is NC, I2S goes directly to expansion port.
+// audio_get_i2c_config / audio_init_codec_mux_gpio: not needed. The u535 board carries no
+// on-board codec, so quasar_audio_init_i2c() and the I2C byte accessors are deliberate stubs
+// (see their definitions), and PC2 is NC with I2S going straight to the expansion port.
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void quasar_audio_init_sai(quasar_sai_config_t sai_config, quasar_bsp_status_t *err)
@@ -534,41 +535,6 @@ static void sai_dma_rx_complete_callback(DMA_HandleTypeDef *hdma)
     /* Disable SAI Rx DMA Request */
     hdma->Instance->CCR &= (uint32_t)(~SAI_xCR1_DMAEN);
     sai_dma_rx_irq_callback();
-}
-
-/** @brief Retrieve the configuration of the I2C peripheral used for audio.
- *
- *  @return Configuration of the I2C peripheral.
- */
-static quasar_i2c_config_t audio_get_i2c_config(void)
-{
-    quasar_gpio_config_t gpio_config_i2c_scl = {
-        .port = QUASAR_DEF_AUDIO_I2C_SCL_PORT,
-        .pin = QUASAR_DEF_AUDIO_I2C_SCL_PIN,
-        .mode = QUASAR_GPIO_MODE_ALTERNATE,
-        .type = QUASAR_GPIO_TYPE_OD,
-        .pull = QUASAR_GPIO_PULL_UP,
-        .speed = QUASAR_GPIO_SPEED_LOW,
-        .alternate = QUASAR_GPIO_ALTERNATE_AF4,
-    };
-    quasar_gpio_config_t gpio_config_i2c_sda = {
-        .port = QUASAR_DEF_AUDIO_I2C_SDA_PORT,
-        .pin = QUASAR_DEF_AUDIO_I2C_SDA_PIN,
-        .mode = QUASAR_GPIO_MODE_ALTERNATE,
-        .type = QUASAR_GPIO_TYPE_OD,
-        .pull = QUASAR_GPIO_PULL_UP,
-        .speed = QUASAR_GPIO_SPEED_LOW,
-        .alternate = QUASAR_GPIO_ALTERNATE_AF4,
-    };
-
-    quasar_i2c_config_t i2c_config = {
-        .gpio_config_scl = gpio_config_i2c_scl,
-        .gpio_config_sda = gpio_config_i2c_sda,
-        .i2c_selection = QUASAR_DEF_I2C_SELECTION_CODEC,
-        .irq_priority = QUASAR_IRQ_PRIORITY_NONE,
-    };
-
-    return i2c_config;
 }
 
 /** @brief Retrieve the configurations of the GPIOs used for the SAI peripheral in the audio system.
