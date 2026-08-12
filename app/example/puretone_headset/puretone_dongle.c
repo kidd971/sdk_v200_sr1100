@@ -85,7 +85,7 @@
 #define LINK_WATCH 1
 #endif
 /* Poll/print cadence for the link watch in ms. */
-#define LINK_WATCH_INTERVAL_MS 500
+#define LINK_WATCH_INTERVAL_MS 1000
 /* Temporarily silence the per-second statistics dump so the CDC port only shows the
  * link watch. Set back to 1 to restore the normal stats print. */
 #define STATS_PRINT_ENABLED 0

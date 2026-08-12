@@ -68,22 +68,24 @@
  * report so we can see WHY/WHEN the HS link drops and whether it recovers.
  *   - All SWC reads use a local err and DO NOT call ASSERT_SWC_STATUS, so the watch
  *     itself can never trap in swc_error_handler()'s while(1).
- *   - A monotonically increasing sequence number lets you tell a real RF loss
- *     (keeps printing "LOST") apart from a firmware hang (log freezes mid-stream).
+ *   - The t= tick lets you tell a real RF loss (keeps printing Disconnected)
+ *     apart from a firmware hang (log freezes mid-stream).
  * Set LINK_WATCH to 0 to compile it out. */
 #ifndef LINK_WATCH
 #define LINK_WATCH 1  /* ON for dual-radio crash-log collection: prints every LINK_WATCH_INTERVAL_MS
                        * on the AT/expansion UART (LPUART1 TX). Set to 0 for release. */
 #endif
-/* Poll/print cadence for the link watch in ms. */
-#define LINK_WATCH_INTERVAL_MS 2000
+/* Poll/print cadence for the link watch in ms. One second, matched to the DG and to the
+ * crash dump below, so the two boards' logs interleave one-for-one and a line from either
+ * side can be lined up with its counterpart by eye. */
+#define LINK_WATCH_INTERVAL_MS 1000
 
 /* Periodic on-board crash/stall snapshot: emit the consolidated dump every N ms,
  * WITHOUT waiting for a stall or any command (the AT-UART RX pad is unusable on this
  * board, so the log is grabbed automatically). Output goes to LPUART1 TX. Set to 0
  * to disable. */
 #ifndef CRASH_DUMP_PERIODIC_MS
-#define CRASH_DUMP_PERIODIC_MS 2000
+#define CRASH_DUMP_PERIODIC_MS 1000
 #endif
 
 /* Periodic print_stats() dump. Turned OFF by default on this debug branch so the
@@ -3017,10 +3019,10 @@ static int32_t at_get_link_margin(void)
  *  before pairing" case as long as the CPU is still running).
  *
  *  Two lines when nothing is wrong:
- *    +CRASH_DUMP:
- *     build=<ver> <tag> <date> <time> role=HS paired=<0|1> swc=<RUN|STOP> conn=<OK|LOST|N/A> fb=<n> lm=<n>
- *     rx_ok=<n> rx_miss=<n> rx_rej=<n> cca_fail=<n> tx_drop=<n> err=<connErr>/<statErr>
- *         send_err=<lastErr>(<count>) irq=<r1>/<r2> dma=<r1>/<r2> mrt=<n> frt=<n>
+ *    +CRASH_DUMP: build=<ver> <tag> <date> <time> role=HS paired=<0|1> swc=<RUN|STOP>
+ *        conn=<OK|LOST|N/A> fb=<n> lm=<n>
+ *    rx_ok=<n> rx_miss=<n> rx_rej=<n> cca_fail=<n> tx_drop=<n> err=<connErr>/<statErr>
+ *        send_err=<lastErr>(<count>) irq=<r1>/<r2> dma=<r1>/<r2> mrt=<n> frt=<n>
  *
  *  The TIM4 and HardFault groups get their own lines only when they carry information:
  *  at 2 Hz they were two thirds of the dump while reading all-zero, because TIM4 is the
@@ -3100,7 +3102,6 @@ static void emit_crash_dump(void)
      * alive -- at_cmd_core_process() runs in the same loop -- and says nothing about
      * whether the AT UART can transmit. To answer that, look for +EVENT: BUILD: and
      * UWB_READY on the AT port at boot. */
-    facade_stats_write("\r\n+CRASH_DUMP:\r\n");
 
     /* Read everything first, then lay it out: the identity and the link verdict belong on
      * the same line, and whether the TIM4/fault groups print at all depends on their values.
@@ -3130,7 +3131,7 @@ static void emit_crash_dump(void)
      * AT_CMD_CORE_BUILD_ID changes on every rebuild, which is the quick way to confirm the
      * board is running the build you think it is (a hardcoded label cannot). */
     snprintf(buf, sizeof(buf),
-             " build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d swc=%s conn=%s fb=%u lm=%u\r\n",
+             "+CRASH_DUMP: build=" AT_CMD_CORE_BUILD_ID " role=HS paired=%d swc=%s conn=%s fb=%u lm=%u\r\n",
              (device_pairing_state == DEVICE_PAIRED) ? 1 : 0,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              have_conn ? (connected ? "OK" : "LOST") : "N/A",
@@ -3150,7 +3151,7 @@ static void emit_crash_dump(void)
 
     /* Line 2 -- the counters, all of which are read as deltas across two dumps. */
     snprintf(buf, sizeof(buf),
-             " rx_ok=%lu rx_miss=%lu rx_rej=%lu cca_fail=%lu tx_drop=%lu err=%d/%d send_err=%d(%lu)"
+             "rx_ok=%lu rx_miss=%lu rx_rej=%lu cca_fail=%lu tx_drop=%lu err=%d/%d send_err=%d(%lu)"
              " irq=%lu/%lu dma=%lu/%lu mrt=%lu frt=%lu\r\n",
              (unsigned long)rx_ok, (unsigned long)rx_miss, (unsigned long)rx_rej,
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,
@@ -3171,7 +3172,7 @@ static void emit_crash_dump(void)
     if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier) &&
         ((t_cr1 | t_arr | t_cnt | t_dier) != 0 || irq1 || irq2)) {
         snprintf(buf, sizeof(buf),
-                 " tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX) irq1=%d irq2=%d\r\n",
+                 "tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX) irq1=%d irq2=%d\r\n",
                  (unsigned long)(t_cr1 & 0x1u), (unsigned long)t_arr, (unsigned long)t_cnt,
                  (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier,
                  (int)irq1, (int)irq2);
@@ -3182,7 +3183,7 @@ static void emit_crash_dump(void)
      * been captured, which is the normal case and says nothing worth two Hz of UART. */
     uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
     if (facade_get_hardfault_snapshot(&cfsr, &hfsr, &pc, &lr) && (cfsr | hfsr | pc | lr) != 0) {
-        snprintf(buf, sizeof(buf), " fault: cfsr=0x%08lX hfsr=0x%08lX pc=0x%08lX lr=0x%08lX\r\n",
+        snprintf(buf, sizeof(buf), "fault: cfsr=0x%08lX hfsr=0x%08lX pc=0x%08lX lr=0x%08lX\r\n",
                  (unsigned long)cfsr, (unsigned long)hfsr, (unsigned long)pc, (unsigned long)lr);
         facade_stats_write(buf);
     }
