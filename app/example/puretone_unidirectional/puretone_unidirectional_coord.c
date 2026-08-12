@@ -35,8 +35,15 @@
 #include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
-/* Total memory needed for the Audio Core. */
-#define SAC_MEM_POOL_SIZE 35000
+/* Total memory needed for the Audio Core.
+ *
+ * Raised with the bottom rungs' latency. The queues are sized in packets --
+ * (sample_rate * (target_ms - codec_ms)) / (sample_count * 1000) -- so 15 -> 40 ms takes the
+ * deepest queue from ~33 packets to ~93, and every one of them is a buffer out of this pool.
+ * Deliberately generous: the pool is a fixed array, so running short is not a degradation but an
+ * init failure, and print_stats() now reports what is actually allocated -- trim this to the
+ * measured figure rather than to a calculation. */
+#define SAC_MEM_POOL_SIZE 100000
 /* Total memory needed for the Wireless Core. */
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
@@ -1311,6 +1318,12 @@ static void print_stats(void)
 
     /* ** Audio statistics ** */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, audio_stats_str);
+    /* What the pool actually cost, so SAC_MEM_POOL_SIZE can be set from a measurement. Allocation
+     * happens once at init and never grows, so this figure is final by the first print. */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
+                              "Mem Pool: %lu/%u bytes\r\n",
+                              (unsigned long)sac_get_allocated_bytes(&sac_status), (unsigned)SAC_MEM_POOL_SIZE);
+    ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_update_stats(sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     string_length += sac_pipeline_format_stats(sac_pipeline, stats_string + string_length,

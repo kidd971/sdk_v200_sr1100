@@ -38,8 +38,15 @@
 #include "swc_utils.h"
 
 /* CONSTANTS ******************************************************************/
-/* Total memory needed for the Audio Core. */
-#define SAC_MEM_POOL_SIZE 40000
+/* Total memory needed for the Audio Core.
+ *
+ * Raised with the bottom rungs' latency. The queues are sized in packets --
+ * (sample_rate * (target_ms - codec_ms)) / (sample_count * 1000) -- so 15 -> 40 ms takes the
+ * deepest queue from ~33 packets to ~93, and every one of them is a buffer out of this pool.
+ * Deliberately generous: the pool is a fixed array, so running short is not a degradation but an
+ * init failure, and print_stats() now reports what is actually allocated -- trim this to the
+ * measured figure rather than to a calculation. */
+#define SAC_MEM_POOL_SIZE 110000
 /* Total memory needed for the Wireless Core. */
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
@@ -167,9 +174,23 @@ static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 
-/* Fallback latency. */
-uint8_t main_channel_fbk_latency_queue_size[] = MAIN_CHANNEL_FALLBACK_LATENCY_QUEUE_SIZE;
-uint8_t main_channel_fbk_latency_fifo_size[] = MAIN_CHANNEL_FALLBACK_LATENCY_FIFO_SIZE;
+/* Fallback latency.
+ *
+ * uint16_t, not uint8_t: the fifo figure is the queue depth times the bytes per sample, so it
+ * passes 255 once the bottom rungs carry 40 ms -- 90 packets x 3 bytes = 270, which as a uint8_t
+ * wrapped to 14 and would have set a two-packet target instead of a deep one. Both consumers take
+ * a wider type already (facade_app_audio_usb_set_epin_target_fifo_size is uint16_t, the queue size
+ * goes into a uint32_t), so nothing downstream had to change. The assertions keep the next
+ * latency increase from repeating it silently. */
+uint16_t main_channel_fbk_latency_queue_size[] = MAIN_CHANNEL_FALLBACK_LATENCY_QUEUE_SIZE;
+uint16_t main_channel_fbk_latency_fifo_size[] = MAIN_CHANNEL_FALLBACK_LATENCY_FIFO_SIZE;
+
+_Static_assert(MAIN_CHANNEL_FBK_3_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS) <=
+                   UINT16_MAX,
+               "fallback latency fifo size no longer fits its type");
+_Static_assert(MAIN_CHANNEL_FBK_4_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH + 7) / SAC_BYTE_SIZE_BITS) <=
+                   UINT16_MAX,
+               "fallback latency fifo size no longer fits its type");
 
 static volatile uint32_t main_channel_trigger_count;
 
@@ -1296,6 +1317,12 @@ static void print_stats(void)
 
     /* ** Audio statistics ** */
     string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length, audio_stats_str);
+    /* What the pool actually cost, so SAC_MEM_POOL_SIZE can be set from a measurement. Allocation
+     * happens once at init and never grows, so this figure is final by the first print. */
+    string_length += snprintf(stats_string + string_length, sizeof(stats_string) - string_length,
+                              "Mem Pool: %lu/%u bytes\r\n",
+                              (unsigned long)sac_get_allocated_bytes(&sac_status), (unsigned)SAC_MEM_POOL_SIZE);
+    ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_update_stats(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     string_length += sac_pipeline_format_stats(main_channel_sac_pipeline, stats_string + string_length,
