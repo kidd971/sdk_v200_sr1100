@@ -17,6 +17,34 @@
 /* Pulse count for SR1100. */
 #define SR1100_PULSE_COUNT 1
 
+/* Inter-symbol interference mitigation level, applied to both roles through swc_node_cfg_t.
+ *
+ * Naming it here makes it a knob instead of an accident: swc_node_cfg_t was zero-initialised,
+ * which gave SWC_ISI_MITIG_0 implicitly. Higher levels insert pauses between symbols and
+ * lengthen the preamble accordingly, so they cost airtime.
+ *
+ * Level 2 is what close-range obstruction wants. Obstruction is a non-line-of-sight case: the
+ * direct path is gone and what arrives is reflections, so packets land corrupted rather than
+ * not at all -- rx_rej climbing while rx_ok holds is the signature -- and that is precisely
+ * what ISI mitigation is for. Level 1, which is what SPARK's reference demo ships, was measured
+ * and was not enough.
+ *
+ * Level 3 does not work here, and not by a small margin: it crackles with no obstruction at
+ * all. The preamble belongs to the connection, not to a fallback mode, so it has to fit the
+ * largest payload on the ladder inside a 250 us slot, and at level 3 it no longer reliably
+ * does. Note the failure is audible corruption at the TOP of the ladder, not the red LED at
+ * init that an unaffordable setting gives -- it boots and links, then sounds wrong.
+ *
+ * Level 2 only pays off alongside the wider accumulator on the bottom rungs. Either one alone
+ * left the dropouts unchanged: ISI raises the odds of decoding a single attempt through
+ * multipath, the accumulator supplies enough attempts for those odds to cash in.
+ *
+ * Must be identical on the coordinator and the node: it changes the preamble both ends use to
+ * find each other. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) for an A/B arm. */
+#ifndef NODE_ISI_MITIG
+#define NODE_ISI_MITIG SWC_ISI_MITIG_2
+#endif
+
 /* Specifies the schedule configuration. */
 // clang-format off
 #define SCHEDULE                 \

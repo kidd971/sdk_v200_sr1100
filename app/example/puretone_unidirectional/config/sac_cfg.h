@@ -34,16 +34,29 @@
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
 #define MAIN_CHANNEL_FBK_2_SAMPLE_COUNT 34
-#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT 46
 
-/* **** Mode 4: the 24 kHz ADPCM rung **** */
-/* Accumulator ratio, as mul/div. Left at mode 3's 23/10 so this change moves one thing: the
- * sample rate. The accumulator is the retransmission-headroom knob -- it sits before the
- * resampler, so it alone sets how often a packet leaves, and attempts per packet is the
- * coordinator's slot rate over the packet rate. Raising it here would put mode 4 back on mode 3's
- * 54 B and collapse the two SWC thresholds onto each other; that is a follow-up, not this. */
-#define MAIN_CHANNEL_FBK_4_ACC_MUL 23
+/* **** Bottom rungs (modes 3 and 4) knobs **** */
+/* Accumulator ratio, as mul/div. This is the retransmission-headroom knob, and the only one: the
+ * accumulator sits BEFORE the resampler, so it alone decides how often a packet leaves, and
+ * attempts per packet is just the coordinator's slot rate divided by the packet rate. Slots are
+ * spent per packet, not per byte -- which is why nothing else on the ladder moved the close-range
+ * dropouts. A lower sample rate, more FEC and more ISI all change how likely one transmission is
+ * to survive; none of them change how many transmissions a packet gets.
+ *   23/10 -> 0.96 ms per packet -> 1043 pkt/s -> 3.0 attempts
+ *   46/10 -> 1.92 ms per packet ->  522 pkt/s -> 6.0 attempts
+ * Both bottom rungs take 46/10. Their payloads still descend, because they differ by sample rate
+ * rather than by packet rate: 100 B at 48 kHz against 54 B at 24 kHz. */
+#define MAIN_CHANNEL_FBK_3_ACC_MUL 46
+#define MAIN_CHANNEL_FBK_3_ACC_DIV 10
+#define MAIN_CHANNEL_FBK_4_ACC_MUL 46
 #define MAIN_CHANNEL_FBK_4_ACC_DIV 10
+/* Resampler ratio for mode 3: 2 puts it at 48 kHz. */
+#define MAIN_CHANNEL_FBK_3_RUNG_DIV 2
+/* DERIVED -- never hand-written, for the reason given on mode 4's count below.
+ *   40 x 46/10 = 184 @96 kHz, / 2 = 92 @48 kHz. */
+#define MAIN_CHANNEL_FBK_3_SAMPLE_COUNT                                                       \
+    ((MAIN_CHANNEL_SAMPLE_COUNT * MAIN_CHANNEL_FBK_3_ACC_MUL / MAIN_CHANNEL_FBK_3_ACC_DIV) / \
+     MAIN_CHANNEL_FBK_3_RUNG_DIV)
 /* Resampler ratio: 4 puts the rung at 24 kHz against the 96 kHz base. It has to be a single 1:4
  * and not two chained 1:2 -- the interpolation path validates its input against
  * pipeline->_internal.current_sample_count, which the fallback stage writes once per packet and
@@ -52,8 +65,8 @@
 #define MAIN_CHANNEL_FBK_4_RUNG_DIV 4
 /* DERIVED -- never hand-written. The accumulator collects SAMPLE_COUNT x ACC_MUL/ACC_DIV samples
  * per channel at 96 kHz and the resampler divides by the rung ratio:
- *   40 x 23/10 = 92 @96 kHz, / 4 = 23 @24 kHz.
- * 92 / 4 divides exactly, which is required: the fallback stage copies this into
+ *   40 x 46/10 = 184 @96 kHz, / 4 = 46 @24 kHz.
+ * 184 / 4 divides exactly, which is required: the fallback stage copies this into
  * current_sample_count once per packet and the node's interpolator rejects any packet that does
  * not match, so a value out of step with the accumulator is not a glitch -- it is every mode 4
  * packet dropped and silence on that rung. */
@@ -118,16 +131,16 @@
     }
 
 /* Accumulator settings. Sizes the accumulator buffer, so it must be the largest ratio any mode
- * asks for. Mode 4 shares mode 3's ratio, so this does not move. */
-#define MAIN_CHANNEL_MAX_ACC_MUL 23
-#define MAIN_CHANNEL_MAX_ACC_DIV 10
+ * asks for -- which is the bottom rungs'. */
+#define MAIN_CHANNEL_MAX_ACC_MUL MAIN_CHANNEL_FBK_3_ACC_MUL
+#define MAIN_CHANNEL_MAX_ACC_DIV MAIN_CHANNEL_FBK_3_ACC_DIV
 
 #define MAIN_CHANNEL_ACC_MUL           \
     {                                  \
         1,                             \
         17,                            \
         17,                            \
-        23,                            \
+        MAIN_CHANNEL_FBK_3_ACC_MUL,    \
         MAIN_CHANNEL_FBK_4_ACC_MUL,    \
     }
 #define MAIN_CHANNEL_ACC_DIV           \
@@ -135,7 +148,7 @@
         1,                             \
         10,                            \
         10,                            \
-        10,                            \
+        MAIN_CHANNEL_FBK_3_ACC_DIV,    \
         MAIN_CHANNEL_FBK_4_ACC_DIV,    \
     }
 
