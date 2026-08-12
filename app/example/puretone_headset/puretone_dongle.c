@@ -2085,15 +2085,23 @@ static bool should_print_stats(void)
  *         elsewhere). Non-asserting reads, so it keeps running through a link drop.
  *
  *  Line format:
- *    [DG <ver> t=<ms>] <Connected|Disconnected> fb=<mode> node_lm=<n> bk_ok=<n> bk_miss=<n>
- *        tx_slot=<n> tx_noframe=<n> tx_drop=<n> swc=<RUN|STOP> send_err=<e>(<n>)
+ *    [DG <ver> t=<ms>] <Connected|Disconnected> fb=<mode> node_lm=<n> prod=<n>/s send=<n>/s
+ *        bk=<ok>/<miss> tx_drop=<n>
+ *  followed, only when they say something, by swc=STOP and send_err=<e>(<n>).
+ *
+ *  Rates, not raw counters, for the two that matter: tx_slot/tx_noframe were free-running,
+ *  so answering "is the coordinator still putting frames on air" meant diffing two lines by
+ *  hand. send/s is the same information already differenced.
  *
  *  How to read it against the HS log:
  *    - node_lm low/0 while the HS prints lm=255  => HS->DG back channel is dead; the DG
- *      never learns the link is good and keeps audio at the worst fallback. Watch bk_ok/
- *      bk_miss: if bk_miss climbs and bk_ok stalls, the node's reports are not arriving.
- *    - tx_noframe climbing in lockstep with the HS rx_miss => the DG audio producer is
- *      starved (nothing queued to send), so the HS sees empty slots. Not an RF problem.
+ *      never learns the link is good and keeps audio at the worst fallback. Watch bk=ok/miss:
+ *      if miss climbs and ok stalls, the node's reports are not arriving.
+ *    - prod/s below 2400 (96000/40) => the DG audio producer is starved (nothing queued to
+ *      send), so the HS sees empty slots and records them as rx_miss. Not an RF problem.
+ *    - send/s against prod/s is the retransmission read: the audio packet rate is prod/s
+ *      divided by the current accumulator ratio, so send/s well above that is spare slots
+ *      being spent on retries, which is what widening the accumulator buys.
  *    - fb mode here is what the DG decided and transmits; the node follows it. */
 static void link_watch(void)
 {
@@ -2101,12 +2109,13 @@ static void link_watch(void)
     static bool initialized;
     static bool prev_connected;
     static uint32_t produce_prev;
-    static uint32_t produce_prev_tick;
-    static bool produce_prev_valid;
+    static uint32_t sent_prev;
+    static uint32_t rate_prev_tick;
+    static bool rate_prev_valid;
 
     if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
         initialized = false;
-        produce_prev_valid = false;
+        rate_prev_valid = false;
         return;
     }
 
@@ -2132,20 +2141,27 @@ static void link_watch(void)
     uint32_t bk_ok = (bk_stats != NULL) ? bk_stats->packet_successfully_received_count : 0;
     uint32_t bk_miss = (bk_stats != NULL) ? bk_stats->no_packet_reception_count : 0;
 
-    /* DG audio production rate (buffers/s). Expect 2400 (96000/40). A sustained value below that
-     * = producer starved (dead air), which is what the node records as rx_miss. Computed as the
-     * delta of dbg_dg_produce_cnt over the real elapsed interval, normalized to per-second. */
+    /* Both rates over the real elapsed interval, normalized to per-second:
+     *   prod/s -- DG audio production (buffers/s). Expect 2400 (96000/40); a sustained value
+     *             below that is a starved producer, i.e. dead air the node records as rx_miss.
+     *   send/s -- timeslots that actually carried a frame (occurrence minus no-transmission).
+     * Sharing one timestamp keeps the two directly comparable, which is the whole point of
+     * printing them side by side. */
     uint32_t produce_now = dbg_dg_produce_cnt;
+    uint32_t sent_now = tx_slot - tx_noframe;
     uint32_t prod_rate = 0;
-    if (produce_prev_valid) {
-        uint32_t dms = now - produce_prev_tick;
+    uint32_t send_rate = 0;
+    if (rate_prev_valid) {
+        uint32_t dms = now - rate_prev_tick;
         if (dms > 0) {
             prod_rate = (uint32_t)(((uint64_t)(produce_now - produce_prev) * 1000U) / dms);
+            send_rate = (uint32_t)(((uint64_t)(sent_now - sent_prev) * 1000U) / dms);
         }
     }
     produce_prev = produce_now;
-    produce_prev_tick = now;
-    produce_prev_valid = true;
+    sent_prev = sent_now;
+    rate_prev_tick = now;
+    rate_prev_valid = true;
 
     /* Sized for the worst case, not the typical one: bk_ok/tx_slot are free-running counters
      * that reach 10 digits on a long soak, and the prefix now carries the version. Too small
@@ -2163,16 +2179,27 @@ static void link_watch(void)
         prev_connected = connected;
     }
 
-    snprintf(line, sizeof(line),
-             "[DG " AT_CMD_CORE_SDK_VERSION " t=%lu] %s fb=%u node_lm=%u bk_ok=%lu bk_miss=%lu "
-             "tx_slot=%lu tx_noframe=%lu tx_drop=%lu prod=%lu/s swc=%s send_err=%d(%lu)\r\n",
-             (unsigned long)now, connected ? "Connected   " : "Disconnected",
-             (unsigned)fb_mode, (unsigned)s_node_rx_lm,
-             (unsigned long)bk_ok, (unsigned long)bk_miss,
-             (unsigned long)tx_slot, (unsigned long)tx_noframe, (unsigned long)tx_drop,
-             (unsigned long)prod_rate,
-             (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
-             (int)s_last_send_err, (unsigned long)s_send_err_count);
+    int n = snprintf(line, sizeof(line),
+                     "[DG " AT_CMD_CORE_SDK_VERSION " t=%lu] %s fb=%u node_lm=%u "
+                     "prod=%lu/s send=%lu/s bk=%lu/%lu tx_drop=%lu",
+                     (unsigned long)now, connected ? "Connected   " : "Disconnected",
+                     (unsigned)fb_mode, (unsigned)s_node_rx_lm,
+                     (unsigned long)prod_rate, (unsigned long)send_rate,
+                     (unsigned long)bk_ok, (unsigned long)bk_miss, (unsigned long)tx_drop);
+
+    /* Appended only when they carry information, the same rule the HS crash dump follows:
+     * swc is RUNNING and send_err is 0(0) for every line of a healthy run, and a field that
+     * never changes is one more thing to read past on every line for a year. */
+    if (n > 0 && n < (int)sizeof(line) && swc_state != SWC_STATUS_RUNNING) {
+        n += snprintf(line + n, sizeof(line) - n, " swc=STOP");
+    }
+    if (n > 0 && n < (int)sizeof(line) && (s_last_send_err != SWC_ERR_NONE || s_send_err_count != 0)) {
+        n += snprintf(line + n, sizeof(line) - n, " send_err=%d(%lu)",
+                      (int)s_last_send_err, (unsigned long)s_send_err_count);
+    }
+    if (n > 0 && n < (int)sizeof(line)) {
+        snprintf(line + n, sizeof(line) - n, "\r\n");
+    }
     facade_stats_write(line);
 }
 #endif /* LINK_WATCH */
