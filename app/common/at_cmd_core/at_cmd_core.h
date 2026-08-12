@@ -35,10 +35,15 @@ extern "C" {
 
 /** @brief SPARK SDK version this firmware is built from.
  *
- *  Single source of truth for AT+VER, AT+FW_VERSION and the crash-dump build line.
- *  Bump this when the underlying SDK is updated (v2.3.0 -> v2.3.1 dual-radio re-sync fix).
+ *  Single source of truth for AT+VER, AT+FW_VERSION, the crash-dump build line and the
+ *  LINK_WATCH line prefix. Bump this when the underlying SDK is updated (v2.3.0 -> v2.3.1
+ *  dual-radio re-sync fix -> v2.4.0-rc2).
+ *
+ *  Kept short because LINK_WATCH now prints it on every line at 2 Hz: it is the field that
+ *  tells you which binary produced a log someone pasted at you, which only works if it is
+ *  cheap enough to leave on.
  */
-#define AT_CMD_CORE_SDK_VERSION  "v2.3.1"
+#define AT_CMD_CORE_SDK_VERSION  "v2.4.0-rc2"
 
 /** @brief Release / package tag for this binary, e.g. the ODM release candidate it belongs to.
  *

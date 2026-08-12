@@ -2128,7 +2128,7 @@ static bool should_print_stats(void)
  *  running through a link drop instead of trapping.
  *
  *  Line format:
- *    [LW seq t=<ms>] <OK|LOST> lm=<link_margin> fb=<mode> swc=<RUN|STOP> cca_fail=<n>
+ *    [HS <ver> t=<ms>] <Connected|Disconnected> lm=<link_margin> fb=<mode> swc=<RUN|STOP> cca_fail=<n>
  *        tx_drop=<n> rx_ok=<n> rx_miss=<n> miss/s=<n> rx_rej=<n> err=<connErr>/<statErr>
  *        send_err=<lastErr>(<count>)
  *
@@ -2138,14 +2138,13 @@ static bool should_print_stats(void)
  *    - fb (fallback mode): 0=96k/24b, 1=48k/24b, 2=48k/16b, 3=48k/ADPCM. Climbing
  *      0->3 before a drop is the link degrading down the fallback ladder.
  *    - OK->LOST edge prints the moment the link layer declares the conn down.
- *    - If the log FREEZES at/after the drop (seq stops advancing), the firmware
+ *    - If the log FREEZES at/after the drop (t= stops advancing), the firmware
  *      trapped in swc_error_handler()'s while(1) -- that's a hang, not RF.
  *    - If it keeps printing LOST forever, the node never re-syncs (true RF loss);
  *      if it returns to OK on its own, auto-resync worked. */
 static void link_watch(void)
 {
     static uint32_t tick_start;
-    static uint32_t seq;
     static bool initialized;
     static bool prev_connected;
     static uint32_t rxmiss_prev;
@@ -2194,28 +2193,31 @@ static void link_watch(void)
     rxmiss_prev_tick = now;
     rxmiss_prev_valid = true;
 
-    /* Dual-radio HW liveness: if one of these freezes while the LW seq keeps
-     * advancing, that radio's IRQ/DMA path stalled (the dual-only failure mode). */
+    /* Dual-radio HW liveness: if one of these freezes while t= keeps advancing,
+     * that radio's IRQ/DMA path stalled (the dual-only failure mode). */
     uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
     bool have_hw = facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma);
 
-    char line[256];
+    /* Sized for the worst case, not the typical one: rx_ok/rx_miss are free-running counters
+     * that reach 10 digits on a long soak, the dual-radio build appends four more of them, and
+     * the prefix now carries the version. Too small and snprintf drops the trailing \r\n. */
+    char line[320];
 
     /* Edge: announce connect<->disconnect transitions immediately. */
     if (!initialized) {
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
     }
 
     int n = snprintf(line, sizeof(line),
-             "[LW %lu t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
+             "[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
              "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)",
-             (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
+             (unsigned long)now, connected ? "Connected   " : "Disconnected",
              (unsigned)info.link_margin, (unsigned)fb_mode,
              (swc_state == SWC_STATUS_RUNNING) ? "RUN" : "STOP",
              (unsigned long)info.cca_fail_count, (unsigned long)info.tx_pkt_dropped,

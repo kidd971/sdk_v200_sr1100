@@ -2085,7 +2085,7 @@ static bool should_print_stats(void)
  *         elsewhere). Non-asserting reads, so it keeps running through a link drop.
  *
  *  Line format:
- *    [LW seq t=<ms>] <OK|LOST> fb=<mode> node_lm=<n> bk_ok=<n> bk_miss=<n>
+ *    [DG <ver> t=<ms>] <Connected|Disconnected> fb=<mode> node_lm=<n> bk_ok=<n> bk_miss=<n>
  *        tx_slot=<n> tx_noframe=<n> tx_drop=<n> swc=<RUN|STOP> send_err=<e>(<n>)
  *
  *  How to read it against the HS log:
@@ -2098,7 +2098,6 @@ static bool should_print_stats(void)
 static void link_watch(void)
 {
     static uint32_t tick_start;
-    static uint32_t seq;
     static bool initialized;
     static bool prev_connected;
     static uint32_t produce_prev;
@@ -2148,23 +2147,26 @@ static void link_watch(void)
     produce_prev_tick = now;
     produce_prev_valid = true;
 
-    char line[224];
+    /* Sized for the worst case, not the typical one: bk_ok/tx_slot are free-running counters
+     * that reach 10 digits on a long soak, and the prefix now carries the version. Too small
+     * and snprintf drops the trailing \r\n, which runs the next line into this one. */
+    char line[256];
 
     /* Edge: announce connect<->disconnect transitions immediately. */
     if (!initialized) {
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[LW EVENT t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[DG " AT_CMD_CORE_SDK_VERSION " t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
     }
 
     snprintf(line, sizeof(line),
-             "[LW %lu t=%lu] %s fb=%u node_lm=%u bk_ok=%lu bk_miss=%lu "
+             "[DG " AT_CMD_CORE_SDK_VERSION " t=%lu] %s fb=%u node_lm=%u bk_ok=%lu bk_miss=%lu "
              "tx_slot=%lu tx_noframe=%lu tx_drop=%lu prod=%lu/s swc=%s send_err=%d(%lu)\r\n",
-             (unsigned long)seq++, (unsigned long)now, connected ? "OK  " : "LOST",
+             (unsigned long)now, connected ? "Connected   " : "Disconnected",
              (unsigned)fb_mode, (unsigned)s_node_rx_lm,
              (unsigned long)bk_ok, (unsigned long)bk_miss,
              (unsigned long)tx_slot, (unsigned long)tx_noframe, (unsigned long)tx_drop,
