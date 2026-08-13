@@ -8,7 +8,9 @@
  */
 
 /* INCLUDES *******************************************************************/
+#if !NO_CODEC
 #include "max98091.h"
+#endif
 #include "puretone_unidirectional_facade.h"
 #include "quasar.h"
 #include "sac_cfg.h"
@@ -26,17 +28,43 @@ typedef struct sai_cfg {
 } sai_cfg_t;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
+#if !NO_CODEC
 static void codec_i2c_write(uint8_t dev_addr, uint8_t mem_addr, uint8_t data);
 static void codec_i2c_read(uint8_t dev_addr, uint8_t mem_addr, uint8_t *data);
 static void configure_max98091(bool input_enabled, bool output_enabled);
+#endif
 static void configure_sai(sai_cfg_t sai_cfg);
 
 /* PRIVATE GLOBALS ************************************************************/
+/* I2S clock role. 0 (the default) makes the SOC the slave and takes MCLK from the other side,
+ * which is what the u5a5 boards want; 1 makes it the master, which is what the u535 node wants.
+ * The two roles on a link must disagree -- one side supplies the clock -- so this is set per
+ * preset per role, not once per board. */
+#if defined(I2S_MASTER_MODE) && (I2S_MASTER_MODE) == 1
+static const quasar_sai_mode_t s_sai_mode = QUASAR_SAI_MASTER_MODE;
+#else
+static const quasar_sai_mode_t s_sai_mode = QUASAR_SAI_SLAVE_MODE_MCLK;
+#endif
+
+/* I2S frame format. Default is LSB-justified (right-justified), which is what the u5a5 boards
+ * use and what this file assumed unconditionally before. 2 selects the I2S standard format, used
+ * on u535. Both ends of a link must agree, and a mismatch is not silent -- it sounds like noise
+ * or like one channel, which is worth knowing because it looks like a codec fault. */
+#if defined(I2S_FMT_DEFAULT) && (I2S_FMT_DEFAULT) == 1
+static const quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_MSBJUSTIFIED;
+#elif defined(I2S_FMT_DEFAULT) && (I2S_FMT_DEFAULT) == 2
+static const quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_STANDARD;
+#else
+static const quasar_sai_protocol_t s_sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED;
+#endif
+
+#if !NO_CODEC
 static max98091_i2c_hal_t codec_hal = {
     .i2c_addr = MAX98091A_I2C_ADDR,
     .read = codec_i2c_read,
     .write = codec_i2c_write,
 };
+#endif
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 void facade_audio_coord_init(void)
@@ -46,18 +74,24 @@ void facade_audio_coord_init(void)
         .rx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
     };
 
+#if !NO_CODEC
     /* Initialize the Codec's I2C interface. */
     quasar_audio_init_i2c();
 
     /* Reset codec before initializing the SAI. */
     max98091_reset_codec(&codec_hal);
     quasar_timer_delay_ms(1);
+#endif
 
-    /* Initialize the SAI peripheral. */
+    /* Initialize the SAI peripheral. The SAI is the whole audio interface on a board with no
+     * codec: I2S runs straight to the expansion connector, and there is nothing to configure
+     * over I2C. */
     configure_sai(sai_cfg);
 
+#if !NO_CODEC
     /* Configure the codec. */
     configure_max98091(true, false);
+#endif
 }
 
 void facade_audio_node_init(void)
@@ -67,18 +101,24 @@ void facade_audio_node_init(void)
         .tx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
     };
 
+#if !NO_CODEC
     /* Initialize the Codec's I2C interface. */
     quasar_audio_init_i2c();
 
     /* Reset codec before initializing the SAI. */
     max98091_reset_codec(&codec_hal);
     quasar_timer_delay_ms(1);
+#endif
 
-    /* Initialize the SAI peripheral. */
+    /* Initialize the SAI peripheral. The SAI is the whole audio interface on a board with no
+     * codec: I2S runs straight to the expansion connector, and there is nothing to configure
+     * over I2C. */
     configure_sai(sai_cfg);
 
+#if !NO_CODEC
     /* Configure the codec. */
     configure_max98091(false, true);
+#endif
 }
 
 void facade_audio_deinit(void)
@@ -88,7 +128,9 @@ void facade_audio_deinit(void)
     quasar_audio_deinit_sai(&quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
 
+#if !NO_CODEC
     max98091_reset_codec(&codec_hal);
+#endif
 }
 
 void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_callback)(void))
@@ -98,6 +140,7 @@ void facade_set_audio_complete_callback(void (*tx_callback)(void), void (*rx_cal
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
+#if !NO_CODEC
 /** @brief Wrapper for I2C write to match MAX98091 driver expected signature.
  *
  *  @param[in] dev_addr  I2C device address.
@@ -194,6 +237,7 @@ static void configure_max98091(bool input_enabled, bool output_enabled)
 
     max98091_init(&codec_hal, &cfg);
 }
+#endif /* !NO_CODEC */
 
 /** @brief Configure the SAI peripheral.
  *
@@ -204,8 +248,8 @@ static void configure_sai(sai_cfg_t sai_cfg)
     quasar_bsp_status_t quasar_err = QUASAR_OK;
 
     quasar_sai_config_t sai_config = {
-        .sai_mode = QUASAR_SAI_SLAVE_MODE_MCLK,
-        .sai_protocol = QUASAR_SAI_PROTOCOL_I2S_LSBJUSTIFIED,
+        .sai_mode = s_sai_mode,
+        .sai_protocol = s_sai_protocol,
     };
 
     /* Configure SAI bit depth. */
