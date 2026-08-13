@@ -1,4 +1,4 @@
-/** @file  sac_cfg.h
+﻿/** @file  sac_cfg.h
  *  @brief Configuration constants for the SPARK Audio Core.
  *
  *  @copyright Copyright (C) 2026 SPARK Microsystems International Inc. All rights reserved.
@@ -50,13 +50,25 @@
  * spent per packet, not per byte -- which is why nothing else on the ladder moved the close-range
  * dropouts. A lower sample rate, more FEC and more ISI all change how likely one transmission is
  * to survive; none of them change how many transmissions a packet gets.
- *   23/10 -> 0.96 ms per packet -> 1043 pkt/s -> 3.0 attempts
- *   46/10 -> 1.92 ms per packet ->  522 pkt/s -> 6.0 attempts
- * Both bottom rungs take 46/10. Their payloads still descend, because they differ by sample rate
- * rather than by packet rate: 100 B at 48 kHz against 54 B at 24 kHz. */
-#define MAIN_CHANNEL_FBK_3_ACC_MUL 46
+ * Against this app's schedule -- 21 slots of 250 us, of which the coordinator holds 20, so 3810
+ * slots/s, shared with the data connection:
+ *   23/10 -> 0.96 ms per packet -> 1043 pkt/s -> 3.7 attempts
+ *   40/10 -> 1.67 ms per packet ->  600 pkt/s -> 6.4 attempts
+ *   46/10 -> 1.92 ms per packet ->  522 pkt/s -> 7.3 attempts
+ *
+ * The retransmission is bought on mode 4 and NOT on mode 3, because airtime is the other budget
+ * in play. Mode 3 at 46/10 was 100 B, which is the configuration ISI level 2 crashed under during
+ * sustained long-range obstruction; at 23/10 it is back to the 54 B that ISI 2 had already run
+ * against without crashing. Mode 4 carries the retransmission instead, and being at 24 kHz it can:
+ * 40/10 gives it 6.4 attempts at 48 B, smaller than mode 3 rather than larger.
+ *
+ * The ceiling on mode 4's ratio is structural, not a preference. Payload goes as acc/rung_div, so
+ * keeping mode 4 below mode 3 requires acc4 < 2 x acc3 -- at exactly 2x the two rungs land on the
+ * same size and the SWC thresholds stop descending, which is an assert at init. 46/10 is that 2x
+ * boundary. 40/10 sits under it. */
+#define MAIN_CHANNEL_FBK_3_ACC_MUL 23
 #define MAIN_CHANNEL_FBK_3_ACC_DIV 10
-#define MAIN_CHANNEL_FBK_4_ACC_MUL 46
+#define MAIN_CHANNEL_FBK_4_ACC_MUL 40
 #define MAIN_CHANNEL_FBK_4_ACC_DIV 10
 /* Resampler ratio for mode 3: 2 puts it at 48 kHz. */
 #define MAIN_CHANNEL_FBK_3_RUNG_DIV 2
@@ -138,10 +150,12 @@
         MAIN_CHANNEL_FBK_4_PAYLOAD_SIZE,   \
     }
 
-/* Accumulator settings. Sizes the accumulator buffer, so it must be the largest ratio any mode
- * asks for -- which is the bottom rungs'. */
-#define MAIN_CHANNEL_MAX_ACC_MUL MAIN_CHANNEL_FBK_3_ACC_MUL
-#define MAIN_CHANNEL_MAX_ACC_DIV MAIN_CHANNEL_FBK_3_ACC_DIV
+/* Accumulator settings. Sizes the accumulator buffer and the resampler payload budgets, so it must
+ * be the largest ratio any mode asks for -- which is now mode 4's, not mode 3's. Getting this
+ * wrong undersizes buffers for the rung that collects the most, so it tracks the knob rather than
+ * repeating a number. */
+#define MAIN_CHANNEL_MAX_ACC_MUL MAIN_CHANNEL_FBK_4_ACC_MUL
+#define MAIN_CHANNEL_MAX_ACC_DIV MAIN_CHANNEL_FBK_4_ACC_DIV
 
 #define MAIN_CHANNEL_ACC_MUL           \
     {                                  \

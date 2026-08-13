@@ -47,7 +47,7 @@
  * Must be identical on the coordinator and the node: it changes the preamble both ends use to
  * find each other. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) for an A/B arm. */
 #ifndef NODE_ISI_MITIG
-#define NODE_ISI_MITIG SWC_ISI_MITIG_1
+#define NODE_ISI_MITIG SWC_ISI_MITIG_2
 #endif
 
 /* Specifies the schedule configuration. */
