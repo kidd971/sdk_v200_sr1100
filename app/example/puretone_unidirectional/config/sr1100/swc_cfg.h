@@ -23,11 +23,16 @@
  * which gave SWC_ISI_MITIG_0 implicitly. Higher levels insert pauses between symbols and
  * lengthen the preamble accordingly, so they cost airtime.
  *
- * Level 2 is what close-range obstruction wants. Obstruction is a non-line-of-sight case: the
- * direct path is gone and what arrives is reflections, so packets land corrupted rather than
- * not at all -- rx_rej climbing while rx_ok holds is the signature -- and that is precisely
- * what ISI mitigation is for. Level 1, which is what SPARK's reference demo ships, was measured
- * and was not enough.
+ * Level 1 is what SPARK's shipping demo runs on both roles. Level 2 helped close-range
+ * obstruction on the older configuration: obstruction is a non-line-of-sight case, so the direct
+ * path is gone and what arrives is reflections, packets landing corrupted rather than missing --
+ * rx_rej climbing while rx_ok holds is the signature -- and that is what ISI mitigation is for.
+ *
+ * Back at 1 to measure it against the current ladder, where the trade has changed: the wider
+ * accumulator took mode 3's payload from 54 B to 100 B, so a longer preamble now has to fit
+ * beside a bigger bottom-rung packet than when level 2 was chosen. Slot pressure is also the
+ * leading suspect for the crash under sustained long-range obstruction, and this is the cheapest
+ * way to take some off.
  *
  * Level 3 does not work here, and not by a small margin: it crackles with no obstruction at
  * all. The preamble belongs to the connection, not to a fallback mode, so it has to fit the
@@ -42,7 +47,7 @@
  * Must be identical on the coordinator and the node: it changes the preamble both ends use to
  * find each other. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) for an A/B arm. */
 #ifndef NODE_ISI_MITIG
-#define NODE_ISI_MITIG SWC_ISI_MITIG_2
+#define NODE_ISI_MITIG SWC_ISI_MITIG_1
 #endif
 
 /* Specifies the schedule configuration. */
