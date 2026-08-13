@@ -22,7 +22,7 @@
 /* Maximum Latency. */
 /* Caps every per-mode latency below, because the consumer endpoint queue is sized from it --
  * a mode asking for more than this wants a target the queue cannot physically hold. */
-#define MAIN_CHANNEL_MAX_LATENCY_MS 30
+#define MAIN_CHANNEL_MAX_LATENCY_MS 40
 /* Fallback modes Latency.
  *
  * Buffer depth is how long an outage the rung can ride out, and it is a different resource from
@@ -36,8 +36,8 @@
 #define MAIN_CHANNEL_FBK_0_LATENCY_MS 5
 #define MAIN_CHANNEL_FBK_1_LATENCY_MS 7
 #define MAIN_CHANNEL_FBK_2_LATENCY_MS 10
-#define MAIN_CHANNEL_FBK_3_LATENCY_MS 30
-#define MAIN_CHANNEL_FBK_4_LATENCY_MS 30
+#define MAIN_CHANNEL_FBK_3_LATENCY_MS 40
+#define MAIN_CHANNEL_FBK_4_LATENCY_MS 40
 /* Fallback modes sample count. */
 #define MAIN_CHANNEL_FBK_0_SAMPLE_COUNT 40
 #define MAIN_CHANNEL_FBK_1_SAMPLE_COUNT 34
