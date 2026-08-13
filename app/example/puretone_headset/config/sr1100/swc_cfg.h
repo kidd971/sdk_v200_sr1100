@@ -42,6 +42,22 @@
  * the accumulator supplies enough attempts for those odds to cash in. Three attempts at good
  * odds and six attempts at bad odds both lose.
  *
+ * UNVERIFIED HERE, AND KNOWN BAD ON THE OTHER LINE. puretone_unidirectional ran level 2 beside a
+ * mode 3 that the same accumulator change had grown to 100 B, and it crashed under sustained
+ * long-range obstruction -- reproducibly, and cured by taking mode 3 back to 54 B. This app's
+ * mode 3 is also 100 B (see MAIN_CHANNEL_FBK_3_ACC_MUL), so it carries the same pair. Nobody has
+ * flashed this app since that was learned.
+ *
+ * Left as is deliberately: the presets are moving to puretone_unidirectional, and the fix that
+ * worked there -- move the retransmission down to a fifth rung -- has nowhere to go here, because
+ * this ladder stops at mode 3. Taking mode 3 back to 2.3x would simply give up the retransmission
+ * rather than relocate it. So the choice is a real trade either way, and it is not worth paying on
+ * a line that is being retired.
+ *
+ * If this app is flashed again for anything more than a bench smoke test, decide first: either
+ * mode 3 back to 2.3x (safe, no retransmission gain) or this level back to 1 (keeps the gain,
+ * gives up the near-field improvement). Do not assume the pair is fine because it builds.
+ *
  * Must be identical on the dongle and the headset: it changes the preamble both ends use to
  * find each other. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) so an A/B arm can
  * be cut without editing this file -- which is how the level last drifted without anyone

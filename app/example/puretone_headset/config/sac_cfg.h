@@ -61,7 +61,13 @@
  *   46/10 -> 1.92 ms per packet ->  522 pkt/s -> 6.0 attempts
  * The cost is 1.92 ms of packetisation delay inside mode 3's latency budget, and a payload that
  * grows in proportion: 100 B against the 54 B of 23/10. Both fit -- mode 0 already puts 242 B in
- * the same slot, and the SWC fallback thresholds stay in descending order at 206 / 138 / 100. */
+ * the same slot, and the SWC fallback thresholds stay in descending order at 206 / 138 / 100.
+ *
+ * "Both fit" was about the descending order and the slot, and it held. What it missed is that the
+ * 100 B lands beside an ISI level 2 preamble: puretone_unidirectional ran exactly that pair and
+ * crashed under sustained long-range obstruction, reproducibly, and stopped when mode 3 went back
+ * to 54 B. Read the note on NODE_ISI_MITIG in sr1100/swc_cfg.h before flashing this app for
+ * anything real -- the pair is still here, and untested since. */
 #ifndef MAIN_CHANNEL_FBK_3_ACC_MUL
 #define MAIN_CHANNEL_FBK_3_ACC_MUL 46
 #endif
