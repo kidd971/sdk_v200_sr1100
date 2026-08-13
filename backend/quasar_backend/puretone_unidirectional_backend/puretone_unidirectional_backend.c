@@ -10,6 +10,7 @@
 /* INCLUDES *******************************************************************/
 #include "puretone_unidirectional_facade.h"
 #include "quasar.h"
+#include "quasar_it.h" /* dual-radio HW counters + HardFault snapshot (u535 & u5a5) */
 #include "sac_cfg.h"
 
 /* CONSTANTS ******************************************************************/
@@ -253,6 +254,88 @@ void facade_notify_pairing_successful(void)
     }
     quasar_rgb_configure_color(QUASAR_RGB_COLOR_GREEN);
     quasar_rgb_set();
+}
+
+/* **** Diagnostics ****
+ *
+ * Readers only -- every one of these reports state the BSP already keeps. The counters, the
+ * scheduler timer and the HardFault snapshot live in quasar_it.c, which both quasar BSPs share,
+ * so nothing new is being captured here; it was simply unreachable from this application.
+ *
+ * That is worth knowing when reading a crash: the snapshot below was already being written by
+ * binaries built before this file changed. A board that hung can be interrogated over SWD by
+ * reading hardfault_cfsr directly, with or without these accessors.
+ */
+
+bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *r1_dma, uint32_t *r2_dma)
+{
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
+    *r1_irq = radio1_irq_count;
+    *r2_irq = radio2_irq_count;
+    *r1_dma = radio1_dma_count;
+    *r2_dma = radio2_dma_count;
+    return true;
+#else
+    (void)r1_irq;
+    (void)r2_irq;
+    (void)r1_dma;
+    (void)r2_dma;
+    return false; /* per-radio debug counters exist only on the quasar u535/u5a5 BSPs */
+#endif
+}
+
+bool facade_get_sched_liveness(uint32_t *mrt, uint32_t *frt, bool *irq1, bool *irq2)
+{
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
+    *mrt = multi_radio_timer_count;
+    *frt = (uint32_t)quasar_timer_free_running_ms_get_tick_count();
+    *irq1 = quasar_radio_1_read_irq_pin();
+    *irq2 = quasar_radio_2_read_irq_pin();
+    return true;
+#else
+    (void)mrt;
+    (void)frt;
+    (void)irq1;
+    (void)irq2;
+    return false; /* scheduler-liveness signals exist only on the quasar u535/u5a5 BSPs */
+#endif
+}
+
+bool facade_get_multi_radio_timer_regs(uint32_t *cr1, uint32_t *arr, uint32_t *cnt, uint32_t *dier)
+{
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
+    /* TIM4 is the SWC dual-radio "multi-radio" scheduler timer on both quasar BSPs
+     * (quasar_timer_multi_radio_set_callback -> timer4). Read its live state to see
+     * whether/why it stopped generating updates when the radio HW counters froze. */
+    *cr1 = TIM4->CR1;
+    *arr = TIM4->ARR;
+    *cnt = TIM4->CNT;
+    *dier = TIM4->DIER;
+    return true;
+#else
+    (void)cr1;
+    (void)arr;
+    (void)cnt;
+    (void)dier;
+    return false; /* multi-radio timer is TIM4 only on the quasar u535/u5a5 BSPs */
+#endif
+}
+
+bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr)
+{
+#if defined(STM32U535xx) || defined(STM32U5A5xx)
+    *cfsr = hardfault_cfsr;
+    *hfsr = hardfault_hfsr;
+    *pc = hardfault_regs.pc;
+    *lr = hardfault_regs.lr;
+    return true;
+#else
+    (void)cfsr;
+    (void)hfsr;
+    (void)pc;
+    (void)lr;
+    return false; /* HardFault snapshot globals exist only on the quasar u535/u5a5 BSPs */
+#endif
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/

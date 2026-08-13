@@ -211,6 +211,73 @@ uint32_t facade_app_audio_usb_get_epin_fifo_remaining(void);
 void facade_app_audio_usb_set_epin_target_fifo_size(uint16_t target_fifo_size);
 #endif
 
+/* **** Diagnostics ****
+ *
+ * All four report state the BSP keeps regardless of whether anyone reads it, and all four return
+ * false on boards that do not keep it, leaving the outputs untouched -- so a caller can ignore the
+ * return and print zeros, or use it to omit the line entirely.
+ */
+
+/** @brief Read the per-radio IRQ and DMA counters.
+ *
+ *  One radio's counters freezing while the other keeps moving is the dual-radio wedge signature,
+ *  and it cannot be seen in the packet statistics: the connection simply goes quiet either way.
+ *
+ *  @param[out] r1_irq  Radio 1 interrupt count.
+ *  @param[out] r2_irq  Radio 2 interrupt count.
+ *  @param[out] r1_dma  Radio 1 DMA transfer count.
+ *  @param[out] r2_dma  Radio 2 DMA transfer count.
+ *  @retval true   Counters available on this board.
+ *  @retval false  Board keeps no per-radio counters; outputs untouched.
+ */
+bool facade_get_radio_hw_counters(uint32_t *r1_irq, uint32_t *r2_irq, uint32_t *r1_dma, uint32_t *r2_dma);
+
+/** @brief Read the scheduler liveness signals.
+ *
+ *  Compare across two reads: mrt frozen means the wireless core's scheduler stopped; mrt moving
+ *  while the radio counters are frozen means the scheduler is alive but the radios are not being
+ *  serviced. The two cases have different causes and different fixes.
+ *
+ *  @param[out] mrt   Multi-radio (TIM4) scheduler tick count.
+ *  @param[out] frt   Free-running millisecond tick. Same counter facade_get_tick_ms() returns.
+ *  @param[out] irq1  Radio 1 IRQ pin level.
+ *  @param[out] irq2  Radio 2 IRQ pin level.
+ *  @retval true   Signals available on this board.
+ *  @retval false  Board exposes none; outputs untouched.
+ */
+bool facade_get_sched_liveness(uint32_t *mrt, uint32_t *frt, bool *irq1, bool *irq2);
+
+/** @brief Read the raw multi-radio scheduler timer registers, to pin down WHY mrt froze.
+ *
+ *  cen=0 means the timer was stopped; cen=1 with arr=0 means the period was programmed to zero
+ *  and the timer stalled; cen=1 with a sane arr and a counter that advances means the timer is
+ *  not the problem. A single-radio board never starts this timer, so all-zero is normal there.
+ *
+ *  @param[out] cr1   Control register 1.
+ *  @param[out] arr   Auto-reload register.
+ *  @param[out] cnt   Counter register.
+ *  @param[out] dier  DMA/interrupt enable register.
+ *  @retval true   Timer readable on this board.
+ *  @retval false  No such timer here; outputs untouched.
+ */
+bool facade_get_multi_radio_timer_regs(uint32_t *cr1, uint32_t *arr, uint32_t *cnt, uint32_t *dier);
+
+/** @brief Read the last captured HardFault register snapshot.
+ *
+ *  All-zero means no HardFault has been taken, which is the normal case. A non-zero cfsr says the
+ *  board faulted rather than hanging in a while(1) somewhere -- the two look identical from the
+ *  outside and are worth separating before looking for a cause. Cross-reference pc and lr against
+ *  the .elf.
+ *
+ *  @param[out] cfsr  Configurable Fault Status Register at the time of the fault.
+ *  @param[out] hfsr  HardFault Status Register.
+ *  @param[out] pc    Program counter of the faulting instruction.
+ *  @param[out] lr    Link register at the fault.
+ *  @retval true   Snapshot available on this board.
+ *  @retval false  Board captures none; outputs untouched.
+ */
+bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr);
+
 #ifdef __cplusplus
 }
 #endif

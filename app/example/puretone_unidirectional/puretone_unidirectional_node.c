@@ -231,6 +231,7 @@ static void abort_pairing_procedure(void);
 static void fallback_led_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
+static void print_diagnostics(void);
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -1354,6 +1355,57 @@ static void print_stats(void)
     }
 
     facade_print_string(stats_string);
+
+    print_diagnostics();
+}
+
+/** @brief Print the liveness counters, and the HardFault snapshot if there is one.
+ *
+ *  This is the role that can be built dual-radio, so the per-radio split earns its place here: one
+ *  radio's interrupt and DMA counters freezing while the other keeps ticking is the wedge
+ *  signature, and the packet statistics cannot show it -- the connection goes quiet either way.
+ *  mrt separates a dead scheduler from radios that are simply not being serviced.
+ *
+ *  The fault line appears only when there has been a fault. Its absence proves nothing, since a
+ *  board stuck in a while(1) faults nothing; its presence proves the failure was a fault rather
+ *  than a hang, which is the first thing worth knowing and is invisible from outside.
+ */
+static void print_diagnostics(void)
+{
+    char line[160];
+    uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
+    uint32_t mrt = 0, frt_unused = 0;
+    bool irq1 = false, irq2 = false;
+
+    (void)facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma);
+    /* frt is discarded: it is the same counter facade_get_tick_ms() returns. */
+    (void)facade_get_sched_liveness(&mrt, &frt_unused, &irq1, &irq2);
+
+    snprintf(line, sizeof(line), "Liveness: irq=%lu/%lu dma=%lu/%lu mrt=%lu irq_pin=%d/%d\r\n",
+             (unsigned long)r1_irq, (unsigned long)r2_irq, (unsigned long)r1_dma, (unsigned long)r2_dma,
+             (unsigned long)mrt, (int)irq1, (int)irq2);
+    facade_print_string(line);
+
+    uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
+
+    if (facade_get_hardfault_snapshot(&cfsr, &hfsr, &pc, &lr) && ((cfsr | hfsr | pc | lr) != 0)) {
+        snprintf(line, sizeof(line), "Fault: cfsr=0x%08lX hfsr=0x%08lX pc=0x%08lX lr=0x%08lX\r\n",
+                 (unsigned long)cfsr, (unsigned long)hfsr, (unsigned long)pc, (unsigned long)lr);
+        facade_print_string(line);
+    }
+
+    /* Raw scheduler-timer state, only when it is not the all-zero a single-radio board always
+     * reads: cen=0 means stopped, cen=1 with arr=0 means the period was programmed to zero and
+     * the timer stalled, a sane arr with a moving cnt means the timer is not the problem. */
+    uint32_t t_cr1 = 0, t_arr = 0, t_cnt = 0, t_dier = 0;
+
+    if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier) &&
+        ((t_cr1 | t_arr | t_cnt | t_dier) != 0)) {
+        snprintf(line, sizeof(line), "Tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX)\r\n",
+                 (unsigned long)(t_cr1 & 0x1u), (unsigned long)t_arr, (unsigned long)t_cnt,
+                 (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier);
+        facade_print_string(line);
+    }
 }
 
 /** @brief Callback sends the button state and link margin at the DATA_TX_PERIOD_MS interval.

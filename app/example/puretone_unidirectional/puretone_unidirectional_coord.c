@@ -228,6 +228,7 @@ static void abort_pairing_procedure(void);
 static void fallback_led_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
+static void print_diagnostics(void);
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -1373,6 +1374,48 @@ static void print_stats(void)
     }
 
     facade_print_string(stats_string);
+
+    print_diagnostics();
+}
+
+/** @brief Print the liveness counters, and the HardFault snapshot if there is one.
+ *
+ *  Liveness is read as a delta across two prints: the radio interrupt and DMA counters tick
+ *  thousands of times a second in normal operation, even out of range, so all of them holding
+ *  still while the log keeps printing means the radios stopped being serviced rather than the
+ *  link being bad. mrt is the wireless core's scheduler tick and separates the two cases -- it
+ *  frozen means the scheduler died, it moving beside frozen radio counters means the scheduler
+ *  is alive and the radios are not.
+ *
+ *  The fault line is printed only when there has been a fault, because all-zero is the normal
+ *  reading and this block is verbose enough already. Its absence is not proof of health, mind:
+ *  a board stuck in a while(1) faults nothing and prints nothing here. What it does prove, when
+ *  present, is that the failure was a fault and not a hang -- which is the first fork in
+ *  diagnosing one, and is otherwise indistinguishable from the outside.
+ */
+static void print_diagnostics(void)
+{
+    char line[160];
+    uint32_t r1_irq = 0, r2_irq = 0, r1_dma = 0, r2_dma = 0;
+    uint32_t mrt = 0, frt_unused = 0;
+    bool irq1 = false, irq2 = false;
+
+    (void)facade_get_radio_hw_counters(&r1_irq, &r2_irq, &r1_dma, &r2_dma);
+    /* frt is discarded: facade_get_sched_liveness fills it from the same counter
+     * facade_get_tick_ms() returns, so printing it would only repeat a number already available. */
+    (void)facade_get_sched_liveness(&mrt, &frt_unused, &irq1, &irq2);
+
+    snprintf(line, sizeof(line), "Liveness: irq=%lu/%lu dma=%lu/%lu mrt=%lu\r\n", (unsigned long)r1_irq,
+             (unsigned long)r2_irq, (unsigned long)r1_dma, (unsigned long)r2_dma, (unsigned long)mrt);
+    facade_print_string(line);
+
+    uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
+
+    if (facade_get_hardfault_snapshot(&cfsr, &hfsr, &pc, &lr) && ((cfsr | hfsr | pc | lr) != 0)) {
+        snprintf(line, sizeof(line), "Fault: cfsr=0x%08lX hfsr=0x%08lX pc=0x%08lX lr=0x%08lX\r\n",
+                 (unsigned long)cfsr, (unsigned long)hfsr, (unsigned long)pc, (unsigned long)lr);
+        facade_print_string(line);
+    }
 }
 
 /** @brief Callback sends the button state at the DATA_TX_PERIOD_MS interval.
