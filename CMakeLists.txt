@@ -103,6 +103,10 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT=${MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT})
     endif()
 
+    if (DEFINED STATS_VERBOSE)
+        add_compile_definitions(STATS_VERBOSE=${STATS_VERBOSE})
+    endif()
+
     if (DEFINED SINE_INJECT_DG)
         add_compile_definitions(SINE_INJECT_DG=1)
     endif()

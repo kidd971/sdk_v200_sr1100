@@ -60,6 +60,12 @@
 #define ERROR_MESSAGE_BUFFER_SIZE 50
 /* Interval to print statistics in ms. */
 #define PRINT_INTERVAL_MS 1000
+/* The stock statistics block is about thirty lines a second, which is unreadable while listening
+ * for a dropout that lasts a few tens of milliseconds. Set to 1 to get it back; the compact line
+ * carries the counters that separate the failure modes and nothing else. */
+#ifndef STATS_VERBOSE
+#define STATS_VERBOSE 0
+#endif
 
 /* **** Fallback **** */
 /* Number of SWC fallback modes. */
@@ -229,6 +235,10 @@ static void fallback_led_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
 static void print_diagnostics(void);
+#if !STATS_VERBOSE
+static void print_stats_compact(void);
+static const char *fallback_mode_name(uint8_t mode);
+#endif
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -1297,6 +1307,10 @@ static void print_stats(void)
         return;
     }
 
+#if !STATS_VERBOSE
+    print_stats_compact();
+#else
+
     static char stats_string[STATS_ARRAY_LENGTH];
     int string_length = 0;
     sac_status_t sac_status = SAC_OK;
@@ -1374,9 +1388,70 @@ static void print_stats(void)
     }
 
     facade_print_string(stats_string);
+#endif /* !STATS_VERBOSE */
 
     print_diagnostics();
 }
+
+#if !STATS_VERBOSE
+/** @brief Map a fallback mode index to the rung's name. */
+static const char *fallback_mode_name(uint8_t mode)
+{
+    static const char *const names[] = {
+        "96kHz 24-bit", "48kHz 24-bit", "48kHz 16-bit", "48kHz ADPCM", "24kHz ADPCM",
+    };
+
+    return (mode < ARRAY_SIZE(names)) ? names[mode] : "?";
+}
+
+/** @brief One line a second: which rung, and the counter that belongs to this role.
+ *
+ *  The coordinator transmits, so clear-channel assessment is its business. cca_fail counts
+ *  packets this side never put on air because the channel never looked clear -- the connection's
+ *  fail action is SWC_CCA_ABORT_TX, so a failed assessment loses the packet rather than delaying
+ *  it.
+ *
+ *  Read it against the node's rej/s, which counts packets that were sent, arrived, and could not
+ *  be decoded. The two failures need different fixes and are indistinguishable from the listening
+ *  position: cca_fail is answered by more CCA tries, rej by ISI mitigation, and neither helps the
+ *  other.
+ *
+ *  Rates rather than totals, because a dropout lasts tens of milliseconds and a free-running
+ *  counter cannot show one without differencing two lines by eye.
+ */
+static void print_stats_compact(void)
+{
+    static uint32_t prev_cca_fail, prev_tx_drop, prev_tick;
+    static bool prev_valid;
+
+    char line[128];
+    swc_error_t swc_err = SWC_ERR_NONE;
+    sac_status_t sac_status = SAC_OK;
+    uint32_t now = facade_get_tick_ms();
+    swc_fallback_info_t info = swc_connection_get_fallback_info(tx_audio_conn, &swc_err);
+    uint8_t fb_mode = sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status);
+    uint32_t cca_rate = 0;
+    uint32_t drop_rate = 0;
+
+    if (prev_valid) {
+        uint32_t dms = now - prev_tick;
+
+        if (dms > 0) {
+            cca_rate = (uint32_t)(((uint64_t)(info.cca_fail_count - prev_cca_fail) * 1000U) / dms);
+            drop_rate = (uint32_t)(((uint64_t)(info.tx_pkt_dropped - prev_tx_drop) * 1000U) / dms);
+        }
+    }
+    prev_cca_fail = info.cca_fail_count;
+    prev_tx_drop = info.tx_pkt_dropped;
+    prev_tick = now;
+    prev_valid = true;
+
+    snprintf(line, sizeof(line), "[DG t=%lu] fb=%u %-13s cca_fail=%lu/s tx_drop=%lu/s\r\n", (unsigned long)now,
+             (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)cca_rate, (unsigned long)drop_rate);
+    facade_print_string(line);
+}
+#endif /* !STATS_VERBOSE */
+
 
 /** @brief Print the liveness counters, and the HardFault snapshot if there is one.
  *
@@ -1405,9 +1480,12 @@ static void print_diagnostics(void)
      * facade_get_tick_ms() returns, so printing it would only repeat a number already available. */
     (void)facade_get_sched_liveness(&mrt, &frt_unused, &irq1, &irq2);
 
+#if STATS_VERBOSE
     snprintf(line, sizeof(line), "Liveness: irq=%lu/%lu dma=%lu/%lu mrt=%lu\r\n", (unsigned long)r1_irq,
              (unsigned long)r2_irq, (unsigned long)r1_dma, (unsigned long)r2_dma, (unsigned long)mrt);
     facade_print_string(line);
+#endif
+
 
     uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
 

@@ -59,6 +59,12 @@
 #define ERROR_MESSAGE_BUFFER_SIZE 120
 /* Interval to print statistics in ms. */
 #define PRINT_INTERVAL_MS 1000
+/* The stock statistics block is about thirty lines a second, which is unreadable while listening
+ * for a dropout that lasts a few tens of milliseconds. Set to 1 to get it back; the compact line
+ * carries the counters that separate the failure modes and nothing else. */
+#ifndef STATS_VERBOSE
+#define STATS_VERBOSE 0
+#endif
 
 /* **** Fallback **** */
 /* Fallback channel index. */
@@ -232,6 +238,10 @@ static void fallback_led_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
 static void print_diagnostics(void);
+#if !STATS_VERBOSE
+static void print_stats_compact(void);
+static const char *fallback_mode_name(uint8_t mode);
+#endif
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -1296,6 +1306,10 @@ static void print_stats(void)
         return;
     }
 
+#if !STATS_VERBOSE
+    print_stats_compact();
+#else
+
     static char stats_string[STATS_ARRAY_LENGTH];
     int string_length = 0;
     sac_status_t sac_status = SAC_OK;
@@ -1355,9 +1369,77 @@ static void print_stats(void)
     }
 
     facade_print_string(stats_string);
+#endif /* !STATS_VERBOSE */
 
     print_diagnostics();
 }
+
+#if !STATS_VERBOSE
+/** @brief Map a fallback mode index to the rung's name. */
+static const char *fallback_mode_name(uint8_t mode)
+{
+    static const char *const names[] = {
+        "96kHz 24-bit", "48kHz 24-bit", "48kHz 16-bit", "48kHz ADPCM", "24kHz ADPCM",
+    };
+
+    return (mode < ARRAY_SIZE(names)) ? names[mode] : "?";
+}
+
+/** @brief One line a second: which rung, and the counters that belong to this role.
+ *
+ *  The node receives, so rejected packets are its business. rej/s counts packets that arrived and
+ *  could not be decoded -- which is what close-range obstruction is expected to produce, since the
+ *  direct path is blocked and what reaches the antenna is reflections at different delays. That is
+ *  inter-symbol interference, and it is answered by ISI mitigation, not by retransmission: every
+ *  retry of a smeared packet is smeared the same way.
+ *
+ *  Read against the coordinator's cca_fail/s, which counts packets that were never sent at all.
+ *  rej climbing while rx holds is the multipath signature; cca_fail climbing is the busy-channel
+ *  one. They need different fixes and sound identical.
+ *
+ *  Rates rather than totals, because a dropout lasts tens of milliseconds and a free-running
+ *  counter cannot show one without differencing two lines by eye.
+ */
+static void print_stats_compact(void)
+{
+    static uint32_t prev_rx_ok, prev_rej, prev_miss, prev_tick;
+    static bool prev_valid;
+
+    char line[144];
+    swc_error_t swc_err = SWC_ERR_NONE;
+    sac_status_t sac_status = SAC_OK;
+    uint32_t now = facade_get_tick_ms();
+    swc_fallback_info_t info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
+    swc_statistics_t *rx = swc_connection_update_stats(rx_audio_conn, &swc_err);
+    uint8_t fb_mode = sac_fallback_get_current_mode(&main_channel_fallback_instance, &sac_status);
+    uint32_t rx_ok = (rx != NULL) ? rx->packet_successfully_received_count : 0;
+    uint32_t rej = (rx != NULL) ? rx->packet_rejected_count : 0;
+    uint32_t miss = (rx != NULL) ? rx->no_packet_reception_count : 0;
+    uint32_t rx_rate = 0;
+    uint32_t rej_rate = 0;
+    uint32_t miss_rate = 0;
+
+    if (prev_valid) {
+        uint32_t dms = now - prev_tick;
+
+        if (dms > 0) {
+            rx_rate = (uint32_t)(((uint64_t)(rx_ok - prev_rx_ok) * 1000U) / dms);
+            rej_rate = (uint32_t)(((uint64_t)(rej - prev_rej) * 1000U) / dms);
+            miss_rate = (uint32_t)(((uint64_t)(miss - prev_miss) * 1000U) / dms);
+        }
+    }
+    prev_rx_ok = rx_ok;
+    prev_rej = rej;
+    prev_miss = miss;
+    prev_tick = now;
+    prev_valid = true;
+
+    snprintf(line, sizeof(line), "[HS t=%lu] fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s lm=%u\r\n", (unsigned long)now,
+             (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)rx_rate, (unsigned long)rej_rate,
+             (unsigned long)miss_rate, (unsigned)info.link_margin);
+    facade_print_string(line);
+}
+#endif /* !STATS_VERBOSE */
 
 /** @brief Print the liveness counters, and the HardFault snapshot if there is one.
  *
@@ -1381,10 +1463,13 @@ static void print_diagnostics(void)
     /* frt is discarded: it is the same counter facade_get_tick_ms() returns. */
     (void)facade_get_sched_liveness(&mrt, &frt_unused, &irq1, &irq2);
 
+#if STATS_VERBOSE
     snprintf(line, sizeof(line), "Liveness: irq=%lu/%lu dma=%lu/%lu mrt=%lu irq_pin=%d/%d\r\n",
              (unsigned long)r1_irq, (unsigned long)r2_irq, (unsigned long)r1_dma, (unsigned long)r2_dma,
              (unsigned long)mrt, (int)irq1, (int)irq2);
     facade_print_string(line);
+#endif
+
 
     uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
 
