@@ -107,6 +107,10 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(STATS_VERBOSE=${STATS_VERBOSE})
     endif()
 
+    if (DEFINED FBK4_TX_POWER_REF)
+        add_compile_definitions(FBK4_TX_POWER_REF=${FBK4_TX_POWER_REF})
+    endif()
+
     if (DEFINED SINE_INJECT_DG)
         add_compile_definitions(SINE_INJECT_DG=1)
     endif()
