@@ -85,20 +85,25 @@
  * At 2 tries the whole assessment lasts about 9 us, so a channel that is busy for longer than
  * that costs an audio packet.
  *
- * Raised to 14 to match what SPARK's own audio demo runs on its main audio connection. The 2 here
- * was the SDK example's default rather than anyone's decision, and it sat oddly beside the
- * fallback levels in swc_cfg_coord.h, which already ask for 7 / 13 / 14 / 14 -- the main
- * connection was the least patient of the five.
+ * MEASURED AND RULED OUT as the cause of the close-range dropouts, so this is back at the SDK
+ * example's 2 rather than the 14 SPARK's own audio demo runs. Do not re-run this experiment
+ * without a reason: raising it was tried precisely because 2 looked out of place beside the
+ * fallback levels in swc_cfg_coord.h, which ask for 7 / 13 / 14 / 14, and because the demo uses
+ * 14. The statistics settled it -- under close-range obstruction the node's rx_rej climbs, not
+ * the coordinator's cca_fail.
  *
- * Worth being clear about what this can and cannot fix, because it is easy to conflate with ISI:
- * CCA is about the channel being occupied, and its failure drops the packet before it is sent;
- * ISI mitigation is about a packet that was sent and arrived but could not be decoded through
- * multipath. The two show up differently in the statistics -- cca_fail climbing against rx_rej
- * climbing while rx_ok holds -- and only the second is what close-range obstruction is expected
- * to produce. */
+ * That distinction is the useful part. CCA is about the channel being occupied and its failure
+ * drops the packet before it is sent; a rejected packet was sent, arrived, and could not be
+ * decoded through multipath. Close-range obstruction is the second kind by construction -- the
+ * direct path is blocked and what reaches the antenna is reflections at different delays, which
+ * is inter-symbol interference -- so it is answered by ISI mitigation and by nothing else here.
+ * It also explains why every retransmission increase left the near field unchanged: each retry
+ * of a smeared packet is smeared the same way.
+ *
+ * Overridable, so putting 14 back for a comparison costs no edit. */
 #define MAIN_CHANNEL_SWC_CCA_AUDIO_RETRY_TIME 96 /* 4.688 us CCA intervals. */
 #ifndef MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT
-#define MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT 14
+#define MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT 2
 #endif
 
 #define MAIN_CHANNEL_SWC_CCA_DATA_RETRY_TIME  160 /* 7.813 us CCA intervals. */
