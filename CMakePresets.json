@@ -781,6 +781,7 @@
         },
         {
             "name": "puretone-unidirectional-quasar-u535-coord-slave-std-smps",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -797,6 +798,7 @@
         },
         {
             "name": "puretone-unidirectional-quasar-u535-coord-slave-std-ldo",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -847,6 +849,7 @@
         },
         {
             "name": "puretone-unidirectional-quasar-u535-node-master-std-smps-dualradio",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -864,6 +867,7 @@
         },
         {
             "name": "puretone-unidirectional-quasar-u535-node-master-std-ldo-dualradio",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
