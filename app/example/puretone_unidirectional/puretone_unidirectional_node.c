@@ -58,6 +58,11 @@
 /* Size of the buffer used to print errors. */
 #define ERROR_MESSAGE_BUFFER_SIZE 120
 /* Interval to print statistics in ms. */
+/* Bring the receiver up on the calibration saved in the radio's NVM as well as the fresh one.
+ * SPARK's audio demo does; the SDK example this app came from does not. */
+#ifndef RADIO_USE_SAVED_CALIB
+#define RADIO_USE_SAVED_CALIB false
+#endif
 #define PRINT_INTERVAL_MS 1000
 /* The stock statistics block is about thirty lines a second, which is unreadable while listening
  * for a dropout that lasts a few tens of milliseconds. Set to 1 to get it back; the compact line
@@ -362,8 +367,20 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     radio_handle = swc_radio_module_calib(SWC_RADIO_ID_1, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    /* Initialize the radio. */
-    swc_radio_module_init(radio_handle, false, swc_err);
+    /* Initialize the radio.
+     *
+     * The flag is pwr_cycle_saved_calib -- whether to bring up the receiver using the calibration
+     * saved in the radio's NVM rather than only what swc_radio_module_calib() just produced. The
+     * SDK example passes false and this app inherited it; SPARK's own audio demo passes true on
+     * the same EVK hardware.
+     *
+     * It is a candidate for the close-range dropouts because calibration is what the demodulator
+     * runs on, and the measured failure is decode failure -- rx_rej climbing while cca_fail does
+     * not. Everything else comparable between the two firmwares has been checked and matches or
+     * favours this one, on the same board, so what is left is either this, the schedule, or a
+     * difference inside the prebuilt wireless core between SDK versions.
+     */
+    swc_radio_module_init(radio_handle, RADIO_USE_SAVED_CALIB, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
 #if (SWC_RADIO_COUNT == 2)
@@ -371,7 +388,7 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     ASSERT_SWC_STATUS(*swc_err);
 
     /* Initialize the radio. */
-    swc_radio_module_init(radio_handle_2, false, swc_err);
+    swc_radio_module_init(radio_handle_2, RADIO_USE_SAVED_CALIB, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 #endif
 

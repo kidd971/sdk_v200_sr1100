@@ -111,6 +111,10 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(FBK4_TX_POWER_REF=${FBK4_TX_POWER_REF})
     endif()
 
+    if (DEFINED RADIO_USE_SAVED_CALIB)
+        add_compile_definitions(RADIO_USE_SAVED_CALIB=${RADIO_USE_SAVED_CALIB})
+    endif()
+
     if (DEFINED SINE_INJECT_DG)
         add_compile_definitions(SINE_INJECT_DG=1)
     endif()
