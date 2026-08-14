@@ -91,6 +91,18 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(NO_CODEC=1)
     endif()
 
+    # Radio-tuning knobs whose headers guard them with #ifndef, so that a comparison arm is a
+    # -D on the configure line instead of an edit that has to be remembered and undone. Both
+    # take their value through rather than being turned into a flag: NODE_ISI_MITIG is an
+    # enumerator, and the CCA count is a number.
+    if (DEFINED NODE_ISI_MITIG)
+        add_compile_definitions(NODE_ISI_MITIG=${NODE_ISI_MITIG})
+    endif()
+
+    if (DEFINED MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT)
+        add_compile_definitions(MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT=${MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT})
+    endif()
+
     if (DEFINED SINE_INJECT_DG)
         add_compile_definitions(SINE_INJECT_DG=1)
     endif()

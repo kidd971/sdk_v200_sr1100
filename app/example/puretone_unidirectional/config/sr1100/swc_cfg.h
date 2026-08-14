@@ -78,9 +78,28 @@
 #define CHANNEL_FREQ     {164, 174, 184, 194}
 #define CHANNEL_SEQUENCE {0, 1, 2, 3}
 
-/* CCA settings. */
+/* CCA settings.
+ *
+ * try_count is how many times the radio re-checks for a clear channel before giving up, and the
+ * give-up action on this connection is SWC_CCA_ABORT_TX -- the packet is dropped, not delayed.
+ * At 2 tries the whole assessment lasts about 9 us, so a channel that is busy for longer than
+ * that costs an audio packet.
+ *
+ * Raised to 14 to match what SPARK's own audio demo runs on its main audio connection. The 2 here
+ * was the SDK example's default rather than anyone's decision, and it sat oddly beside the
+ * fallback levels in swc_cfg_coord.h, which already ask for 7 / 13 / 14 / 14 -- the main
+ * connection was the least patient of the five.
+ *
+ * Worth being clear about what this can and cannot fix, because it is easy to conflate with ISI:
+ * CCA is about the channel being occupied, and its failure drops the packet before it is sent;
+ * ISI mitigation is about a packet that was sent and arrived but could not be decoded through
+ * multipath. The two show up differently in the statistics -- cca_fail climbing against rx_rej
+ * climbing while rx_ok holds -- and only the second is what close-range obstruction is expected
+ * to produce. */
 #define MAIN_CHANNEL_SWC_CCA_AUDIO_RETRY_TIME 96 /* 4.688 us CCA intervals. */
-#define MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT  2
+#ifndef MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT
+#define MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT 14
+#endif
 
 #define MAIN_CHANNEL_SWC_CCA_DATA_RETRY_TIME  160 /* 7.813 us CCA intervals. */
 #define MAIN_CHANNEL_SWC_CCA_DATA_TRY_COUNT   15
