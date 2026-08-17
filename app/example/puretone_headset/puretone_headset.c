@@ -442,6 +442,7 @@ static void at_start_connect(void);
 static void at_start_disconnect(void);
 static void at_start_shutdown(void);
 static void app_teardown(void);
+static bool link_is_up(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
 static void emit_crash_dump(void);
@@ -2384,8 +2385,10 @@ static void data_callback(void)
      * on, which is what stands in for an acknowledgement. */
     user_data_pack_vendor(&transmitted_user_data);
 
-    /* Send the button state to the Coordinator. */
-    wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);
+    /* Send the button state to the Coordinator. Length, not sizeof: the vendor payload is
+     * empty in almost every packet and must not be put on the air when it is. See
+     * user_data_tx_size(). */
+    wireless_send_data(&transmitted_user_data, user_data_tx_size(&transmitted_user_data), &swc_err);
 }
 
 /** @brief Handle pairing button callback.
@@ -2501,7 +2504,6 @@ static void enter_pairing_mode(void)
  */
 static boot_reconnect_result_t try_boot_reconnect(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
     uint32_t start;
     bool connected = false;
 
@@ -2533,8 +2535,12 @@ static boot_reconnect_result_t try_boot_reconnect(void)
 
     start = facade_get_tick_ms();
     while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
-        swc_err = SWC_ERR_NONE;
-        if (swc_connection_get_connect_status(rx_audio_conn, &swc_err)) {
+        /* link_is_up(), not the audio connection alone: a DG whose audio source is paused
+         * transmits nothing on the audio timeslots, so waiting for that one to come up made
+         * a reconnect into a silent DG time out and power this module down -- a headset that
+         * would not come back until someone pressed play first. The data connection the DG
+         * sends on every 10 ms regardless is what says the peer is there. */
+        if (link_is_up()) {
             connected = true;
             break;
         }
@@ -2546,8 +2552,9 @@ static boot_reconnect_result_t try_boot_reconnect(void)
         }
         /* Belt-and-braces: every teardown path NULLs the connection handles, and
          * swc_connection_get_connect_status() would dereference that on the next
-         * pass. Never poll a handle the app has already released. */
-        if (rx_audio_conn == NULL) {
+         * pass. link_is_up() NULL-checks both handles itself, so this is only about
+         * leaving a loop that can no longer succeed. */
+        if (rx_audio_conn == NULL && rx_data_conn == NULL) {
             break;
         }
     }
@@ -2970,8 +2977,6 @@ static void at_start_shutdown(void)
 
 static bool at_get_link_status(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
-
     /* device_pairing_state alone only says "the app believes it is paired" -- it is set
      * unconditionally right after app_init(), so it reported a link that may never have
      * come up. Ask the Wireless Core instead. Non-asserting read, like link_watch(), so a
@@ -2985,14 +2990,45 @@ static bool at_get_link_status(void)
      * again. UWB_DISCONNECTED could not fire at all, and UWB_CONNECT_FAIL never got the
      * chance to. The host saw one bogus connect and then silence.
      *
-     * The main audio connection is the one to ask: it runs with ACKs, so its status is
-     * driven by real over-the-air traffic (bad frames for 20 ms -> disconnected, one good
-     * frame -> connected). rx_audio_conn is the node's side of it, and is the same handle
-     * try_boot_reconnect() already polls. */
-    if (device_pairing_state != DEVICE_PAIRED || rx_audio_conn == NULL) {
+     * What to ask the core is link_is_up()'s business; both this poll and
+     * try_boot_reconnect() go through it so they cannot drift apart. */
+    if (device_pairing_state != DEVICE_PAIRED) {
         return false;
     }
-    return swc_connection_get_connect_status(rx_audio_conn, &swc_err);
+    return link_is_up();
+}
+
+/** @brief True while the coordinator is still reaching this node on either main connection.
+ *
+ *  Asking rx_audio_conn alone answers "is audio flowing", not "is the peer there", and the
+ *  two part company the moment playback pauses. With nothing queued the DG's audio timeslots
+ *  are transmitted empty (auto-sync is off on every connection, so an idle queue means no
+ *  frame at all goes out), every audio RX slot here counts as a lost frame, and 20 ms later
+ *  the Wireless Core calls that connection disconnected -- with the peer sitting right there.
+ *
+ *  rx_data_conn is the honest signal: the DG's data_callback() sends on it every 10 ms
+ *  regardless of what the audio source is doing, carrying link margin, media keys and the
+ *  vendor pass-through. It is what actually keeps this node synced through a pause, so it is
+ *  what "connected" should mean. Either connection being up is enough; a peer that really
+ *  goes away takes both down inside the same 20 ms.
+ *
+ *  Non-asserting reads, like link_watch(), so a status poll during a drop cannot itself trap.
+ *  Both handles are NULL-checked: every teardown path releases them.
+ */
+static bool link_is_up(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+
+    if ((rx_audio_conn != NULL) && swc_connection_get_connect_status(rx_audio_conn, &swc_err)) {
+        return true;
+    }
+
+    swc_err = SWC_ERR_NONE;
+    if ((rx_data_conn != NULL) && swc_connection_get_connect_status(rx_data_conn, &swc_err)) {
+        return true;
+    }
+
+    return false;
 }
 
 static int32_t at_get_link_margin(void)

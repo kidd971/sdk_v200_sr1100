@@ -89,6 +89,22 @@ typedef enum {
  */
 #define AT_UWB_CONNECT_TIMEOUT_MS  10000
 
+/** @brief How long the link must read down before +EVENT: LE_UWB_DISCONNECTED is sent.
+ *
+ *  Only the down edge is debounced; a link that comes back is reported immediately.
+ *
+ *  The Wireless Core calls a connection disconnected after 20 ms of lost frames, which is the
+ *  right threshold for the audio pipeline but far too twitchy to hand a host as a connection
+ *  event: any brief stall in the audio source empties the TX queue, the coordinator's audio
+ *  timeslots go silent, and 20 ms later the status flips even though the peer never went
+ *  anywhere. Without this the host saw DISCONNECTED/CONNECTED pairs on every pause.
+ *
+ *  Chosen an order of magnitude above the Wireless Core's own threshold so a real drop is
+ *  still reported promptly -- the host learns about a peer that walked away within half a
+ *  second, which is well inside human reaction time for an audio device.
+ */
+#define AT_UWB_DISCONNECT_DEBOUNCE_MS  400
+
 /** @brief Link margin threshold (dB) below which +EVENT: LE_UWB_QUALITY:WEAK is sent. */
 #define AT_UWB_LINK_QUALITY_WEAK_THRESHOLD_DB   5
 

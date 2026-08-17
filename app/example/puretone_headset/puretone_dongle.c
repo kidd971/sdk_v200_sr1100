@@ -395,6 +395,7 @@ static void at_start_connect(void);
 static void at_start_disconnect(void);
 static void app_teardown(void);
 static void at_start_shutdown(void);
+static bool link_is_up(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
 static void at_set_vol(uint8_t vol);
@@ -2274,7 +2275,9 @@ static void data_callback(void)
      * on, which is what stands in for an acknowledgement. */
     user_data_pack_vendor(&transmitted_user_data);
 
-    wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);
+    /* Length, not sizeof: the vendor payload is empty in almost every packet and must not be
+     * put on the air when it is. See user_data_tx_size(). */
+    wireless_send_data(&transmitted_user_data, user_data_tx_size(&transmitted_user_data), &swc_err);
 }
 
 /** @brief Handle pairing button callback.
@@ -2390,7 +2393,6 @@ static void enter_pairing_mode(void)
  */
 static boot_reconnect_result_t try_boot_reconnect(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
     uint32_t start;
     bool connected = false;
 
@@ -2421,17 +2423,20 @@ static boot_reconnect_result_t try_boot_reconnect(void)
     app_init();
     device_pairing_state = DEVICE_PAIRED;
 
-    /* Poll the real SWC link status (the same tx_audio_conn indicator link_watch
-     * uses on the coordinator) until the node is reachable or the timeout
+    /* Poll the real SWC link status until the node is reachable or the timeout
      * elapses. Keep servicing buttons and AT commands meanwhile; those handlers
-     * defer their teardown through s_boot_reconnect_abort. */
+     * defer their teardown through s_boot_reconnect_abort.
+     *
+     * link_is_up(), not tx_audio_conn: this runs before the host has necessarily
+     * started feeding audio, and waiting on the audio connection made a reconnect
+     * to a perfectly reachable node report CONNECT_FAIL and sit in IDLE until
+     * someone pressed play. */
     s_boot_reconnect_abort = false;
     s_boot_reconnect_active = true;
 
     start = facade_get_tick_ms();
     while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
-        swc_err = SWC_ERR_NONE;
-        if (swc_connection_get_connect_status(tx_audio_conn, &swc_err)) {
+        if (link_is_up()) {
             connected = true;
             break;
         }
@@ -2834,16 +2839,46 @@ static void at_start_shutdown(void)
 
 static bool at_get_link_status(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
-
     /* device_pairing_state alone only says "the app believes it is paired" — it is set
      * unconditionally right after app_init(), so it reported a link that may never have
-     * come up. Ask the Wireless Core instead. Non-asserting read, like link_watch(), so a
-     * status poll during a drop cannot itself trap. */
-    if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
+     * come up. Ask the Wireless Core instead, through link_is_up(). */
+    if (device_pairing_state != DEVICE_PAIRED) {
         return false;
     }
-    return swc_connection_get_connect_status(tx_audio_conn, &swc_err);
+    return link_is_up();
+}
+
+/** @brief True while the node is still answering this coordinator.
+ *
+ *  The data connections, not tx_audio_conn. On the coordinator the audio connection's status
+ *  is only a statement about audio: with an idle source there is nothing queued, auto-sync is
+ *  off on every connection, so the audio timeslots go out empty and the frame outcome is
+ *  FRAME_WAIT -- which link_update_connect_status() ignores. The status therefore freezes at
+ *  whatever it was when the music stopped and stays there until playback resumes. Frozen is
+ *  worse than wrong here: OR-ing it in would mask a node that switched off mid-pause.
+ *
+ *  Both data connections are exercised every 10 ms whatever the audio source is doing --
+ *  tx_data_conn by data_callback() (and ACK'd by the node), rx_data_conn by the node's own
+ *  report -- so their status is live evidence that the peer is there. Either one up is
+ *  enough; a node that really goes away takes both down inside the same 20 ms.
+ *
+ *  Non-asserting reads, like link_watch(), so a status poll during a drop cannot itself trap.
+ *  Both handles are NULL-checked: every teardown path releases them.
+ */
+static bool link_is_up(void)
+{
+    swc_error_t swc_err = SWC_ERR_NONE;
+
+    if ((tx_data_conn != NULL) && swc_connection_get_connect_status(tx_data_conn, &swc_err)) {
+        return true;
+    }
+
+    swc_err = SWC_ERR_NONE;
+    if ((rx_data_conn != NULL) && swc_connection_get_connect_status(rx_data_conn, &swc_err)) {
+        return true;
+    }
+
+    return false;
 }
 
 static int32_t at_get_link_margin(void)

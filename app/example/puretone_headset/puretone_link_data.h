@@ -15,6 +15,12 @@
  *     degrade to "the fields both builds know about" instead of failing. Reordering turns
  *     that graceful degradation into silent misinterpretation.
  *
+ *     The corollary, since packets are now truncated deliberately as well as accidentally:
+ *     ORDER FIELDS BY HOW OFTEN THEY ARE SENT, most often first. Anything appended after the
+ *     vendor block would never be transmitted at all, because user_data_tx_size() stops at
+ *     the end of the vendor payload. A new always-present field belongs immediately before
+ *     vendor_id, and moving that boundary means changing user_data_tx_size() with it.
+ *
  *  2. EVERY FIELD IS uint8_t (or bool, which is one byte). The struct is memcpy'd straight
  *     onto the air with no packing attribute, so it must have no padding. A uint16_t or
  *     uint32_t member would introduce alignment padding whose contents are undefined.
@@ -38,6 +44,7 @@
 #define PURETONE_LINK_DATA_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -82,24 +89,75 @@ typedef struct user_data {
     uint8_t cmd_type;
     /*! Battery level of the node (0-100%). */
     uint8_t battery_pct;
+    /*! Last vendor sequence number the SENDER of this packet received from the peer, echoed
+     *  in every packet. This is the acknowledgement for commands sent with the ack flag.
+     *  A level rather than a one-shot: an acknowledgement transmitted once would be exactly
+     *  as losable as the command it acknowledges. 0 = nothing received yet.
+     *
+     *  Sits ahead of the vendor command fields because it is the only one of them that has
+     *  to go out in every packet; everything below is omitted when there is no command. */
+    uint8_t vendor_ack;
+
+    /* ---- Everything below here is sent ONLY when a vendor command is present. ---- */
+
     /*! Vendor pass-through: ODM-defined command id, or AT_VENDOR_ID_NONE (0) for "none".
-     *  Opaque to this firmware -- see at_cmd_core.h. */
+     *  Opaque to this firmware -- see at_cmd_core.h. When the packet is truncated before this
+     *  field, the receiver's zero-initialized copy reads 0, which already means "none" -- so
+     *  a short packet needs no flag to say it is short. */
     uint8_t vendor_id;
     /*! Sequence number for the vendor command, used by the receiver to drop the repeats. */
     uint8_t vendor_seq;
     /*! Vendor payload length, 0..AT_VENDOR_PAYLOAD_MAX. */
     uint8_t vendor_len;
-    /*! Vendor payload. */
+    /*! Vendor payload. Only the first vendor_len bytes are transmitted. */
     uint8_t vendor_data[AT_VENDOR_PAYLOAD_MAX];
-    /*! Last vendor sequence number the SENDER of this packet received from the peer, echoed
-     *  in every packet. This is the acknowledgement for commands sent with the ack flag.
-     *  A level rather than a one-shot: an acknowledgement transmitted once would be exactly
-     *  as losable as the command it acknowledges. 0 = nothing received yet. */
-    uint8_t vendor_ack;
 } user_data_t;
 
 _Static_assert(sizeof(user_data_t) <= MAX_DATA_PAYLOAD_SIZE,
                "user_data_t no longer fits the data connection payload");
+_Static_assert(offsetof(user_data_t, vendor_data) + AT_VENDOR_PAYLOAD_MAX == sizeof(user_data_t),
+               "the vendor payload must stay last -- see user_data_tx_size()");
+
+/** @brief How many bytes of a packet to actually transmit.
+ *
+ *  The vendor block is the large part of this struct and is empty in almost every packet, so
+ *  it is not transmitted unless there is something in it. Sending the full struct regardless
+ *  would put the whole vendor payload on the air 100 times a second to carry nothing.
+ *
+ *  This matters more than it looks. These packets go out every 10 ms in both directions, and
+ *  the data connection shares its timeslots with the back-channel audio, so payload length is
+ *  airtime taken from an allocation that is already tight -- the same budget the fb=0 park
+ *  investigation traced its margin problems to. Adding the vendor block unconditionally would
+ *  have taken this packet from 4 bytes to 14 forever; this keeps the common case at 5.
+ *
+ *  Three lengths result:
+ *    - no vendor command  -> through vendor_ack, 5 bytes (one more than before the vendor
+ *      block existed; the acknowledgement is a level and has to be in every packet)
+ *    - command, no payload -> through vendor_len, 8 bytes
+ *    - command with payload -> 8 + vendor_len, at most 14
+ *
+ *  The receiver needs no length flag: it zero-initializes its copy and wireless_read_data()
+ *  fills only what arrived, so a truncated packet leaves vendor_id at 0, which already means
+ *  "no vendor command". The rule that every field's zero means "absent" is what makes
+ *  variable-length transmission free.
+ *
+ *  @param[in] packet  Fully built packet.
+ *  @return Number of leading bytes to hand to wireless_send_data().
+ */
+static inline uint8_t user_data_tx_size(const user_data_t *packet)
+{
+    uint8_t len;
+
+    if (packet->vendor_id == AT_VENDOR_ID_NONE) {
+        return (uint8_t)offsetof(user_data_t, vendor_id);
+    }
+
+    /* Clamp before trusting it as a length. vendor_len is validated where the command is
+     * parsed, but this is the value that decides how far into the struct we read. */
+    len = (packet->vendor_len > AT_VENDOR_PAYLOAD_MAX) ? AT_VENDOR_PAYLOAD_MAX : packet->vendor_len;
+
+    return (uint8_t)(offsetof(user_data_t, vendor_data) + len);
+}
 
 /** @brief Copy the outgoing vendor block into a packet being built.
  *

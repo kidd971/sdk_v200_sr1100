@@ -229,14 +229,39 @@ typedef struct user_data {
     uint8_t  link_margin;
     uint8_t  cmd_type;                    /* 1-4 既有媒體鍵,不可更動 */
     uint8_t  battery_pct;
-    /* ---- vendor pass-through ---- */
+    uint8_t  vendor_ack;                  /* 我方最後收到對方的哪個 seq */
+    /* ---- 以下只在「本包有 vendor 指令」時才送 ---- */
     uint8_t  vendor_id;                   /* 0 = 本包無 vendor 指令 */
     uint8_t  vendor_seq;                  /* 1-255,收端據此去重;0 保留 */
     uint8_t  vendor_len;                  /* 0..AT_VENDOR_PAYLOAD_MAX */
     uint8_t  vendor_data[AT_VENDOR_PAYLOAD_MAX];
-    uint8_t  vendor_ack;                  /* 我方最後收到對方的哪個 seq */
 } user_data_t;                            /* 14 bytes ≤ MAX_DATA_PAYLOAD_SIZE (16) */
 ```
+
+### 但**不是每包都送 14 bytes** —— 這件事比它看起來重要
+
+vendor 是極低機率事件。若無條件送滿整個 struct,等於為了載空氣把
+**每 10 ms、雙向**的封包從 4 bytes permanently 拉到 14。
+
+這條線的 payload 長度就是空中時間,而 data 連線**與 back-channel audio 共用 timeslot**
+——正是 fb=0 park 追查時把邊際問題歸因到的那個預算。所以送出長度是算出來的
+(`user_data_tx_size()`),不是 `sizeof`:
+
+| 情況 | 送出 |
+|---|---|
+| 無 vendor 指令(≈ 全部封包) | **5 bytes** |
+| 有指令、無 payload | 8 bytes |
+| 有指令 + N bytes payload | 8+N,最多 14 |
+
+**穩態成本是 +1 byte,不是 +10。** 那 1 byte 是 `vendor_ack`,它是 level 必須每包送,
+所以它排在 vendor 區塊**前面**;整個 vendor 區塊排在最後,才切得掉。
+
+收端不需要任何長度旗標:它零初始化、`wireless_read_data()` 只填收到的部分,
+所以被截掉的封包 `vendor_id` 讀到 0,本來就是「沒有指令」。
+**「每個欄位的 0 代表不存在」這條規則(§6.2),就是變長傳輸免費的原因。**
+
+代價是 append-only 規則多一條推論:**欄位要按「多常被送」排序,常送的在前**。
+加在 vendor 區塊後面的新欄位**永遠不會被送出去**,因為長度算到 payload 就停了。
 
 **全部欄位都是 byte,所以沒有 padding,`sizeof` 兩端必然一致。**
 以後新增欄位務必維持 `uint8_t`——塞一個 `uint16_t` 進來會引入對齊 padding,
