@@ -9,8 +9,8 @@
  *    AT+HELP        — list all registered AT commands
  *    AT+PING            — connectivity check, responds OK
  *    AT+MODULE_INFO?    — HW model, FW version, chip version, IC serial, device address
- *    AT+UWB_CONN_STATUS? — current UWB connection status (0=Standby,1=Pairing,2=Connected)
- *    AT+UWB_PAIR        — trigger UWB pairing (invokes registered pair callback)
+ *    AT+LE_UWB_CONN_STATUS? — current UWB connection status (0=Standby,1=Pairing,2=Connected)
+ *    AT+LE_UWB_PAIR        — trigger UWB pairing (invokes registered pair callback)
  *
  *  Applications that need additional commands call at_server_register()
  *  directly after at_cmd_core_init().
@@ -68,20 +68,20 @@ extern "C" {
  */
 #define AT_CMD_CORE_BUILD_ID  AT_CMD_CORE_SDK_VERSION " " AT_CMD_CORE_RELEASE_TAG " " __DATE__ " " __TIME__
 
-/** @brief UWB connection status codes reported by AT+UWB_CONN_STATUS?. */
+/** @brief UWB connection status codes reported by AT+LE_UWB_CONN_STATUS?. */
 typedef enum {
     AT_UWB_CONN_STATUS_STANDBY    = 0, /*!< Idle, not yet started. */
     AT_UWB_CONN_STATUS_PAIRING    = 1, /*!< Pairing procedure in progress. */
     AT_UWB_CONN_STATUS_CONNECTED  = 2, /*!< Link established and running. */
-    AT_UWB_CONN_STATUS_CONNECTING = 3, /*!< Connection attempt in progress (after AT+UWB_CONNECT). */
+    AT_UWB_CONN_STATUS_CONNECTING = 3, /*!< Connection attempt in progress (after AT+LE_UWB_CONNECT). */
 } at_uwb_conn_status_t;
 
 /** @brief Timeout for a UWB connection attempt, whoever opened it.
  *
  *  If the link is not established within this many milliseconds of the status going to
- *  CONNECTING, a +EVENT: UWB_CONNECT_FAIL notification is sent.
+ *  CONNECTING, a +EVENT: LE_UWB_CONNECT_FAIL notification is sent.
  *
- *  Kept equal to the applications' RECONNECT_TIMEOUT_MS: both AT+UWB_CONNECT (which resets
+ *  Kept equal to the applications' RECONNECT_TIMEOUT_MS: both AT+LE_UWB_CONNECT (which resets
  *  the MCU into boot auto-reconnect) and a plain boot land in the same reconnect window, and
  *  a shorter value here made the host see CONNECT_FAIL while the application was still
  *  trying. The status is stamped just before the window opens, so CONNECT_FAIL is still
@@ -89,7 +89,7 @@ typedef enum {
  */
 #define AT_UWB_CONNECT_TIMEOUT_MS  10000
 
-/** @brief Link margin threshold (dB) below which +EVENT: UWB_QUALITY:WEAK is sent. */
+/** @brief Link margin threshold (dB) below which +EVENT: LE_UWB_QUALITY:WEAK is sent. */
 #define AT_UWB_LINK_QUALITY_WEAK_THRESHOLD_DB   5
 
 /** @brief Link margin threshold (dB) above which the WEAK state clears (hysteresis). */
@@ -98,11 +98,130 @@ typedef enum {
 /** @brief Interval (ms) between link quality polls when connected. */
 #define AT_UWB_LINK_QUALITY_CHECK_INTERVAL_MS   1000
 
-/** @brief Device role codes reported by AT+UWB_GET_ROLE?. */
+/** @brief Device role codes reported by AT+LE_UWB_GET_ROLE?. */
 typedef enum {
     AT_DEVICE_ROLE_NODE        = 0, /*!< Node (leaf) device. */
     AT_DEVICE_ROLE_COORDINATOR = 1, /*!< Coordinator device. */
 } at_device_role_t;
+
+/** @brief Command codes carried in the user_data_t cmd_type field over the UWB data channel.
+ *
+ *  THE VALUES 1-4 ARE ON THE WIRE AND CANNOT BE CHANGED. An ODM host MCU is already
+ *  integrated against them on the HS->DG path, and its firmware release schedule is not ours
+ *  to control, so a renumbering opens a window in which the two sides disagree. The failure
+ *  mode in that window is not "nothing happens" -- it is silently executing the wrong
+ *  command: ask for PLAY, get STOP. In the field that looks like a hardware fault, and the
+ *  numbering is the last thing anyone would suspect.
+ *
+ *  These deliberately do NOT match the 0x01-0x05 table this file's handlers used to pass to
+ *  the DG->HS forwarding callback (VOL=1, PLAY=2, STOP=3, NEXT=4, PRE=5). That table was
+ *  written for a forwarding path that was never enabled -- no application ever registered
+ *  the callback -- so it never reached a wire. Where a documented-but-dead encoding conflicts
+ *  with an undocumented-but-shipping one, the shipping one is the fact. See
+ *  at_cmd_bidir_decision_spec.md section 5.
+ *
+ *  AT_CMD_VOL is the one value still free to choose: volume is not forwarded over UWB by
+ *  either side today (the DG applies AT+VOL to its own back channel; see
+ *  at_cmd_core_register_vol_cb()), so no wire has ever carried it.
+ */
+typedef enum {
+    AT_CMD_NONE       = 0, /*!< No command in this packet. Must stay 0: user_data_t is
+                            *   zero-initialized and reads 0 when no packet has arrived, so
+                            *   0 has to mean "absent" rather than being a real command. */
+    AT_CMD_NEXT_TRACK = 1, /*!< On the wire, do not change. */
+    AT_CMD_PRE_TRACK  = 2, /*!< On the wire, do not change. */
+    AT_CMD_PLAY       = 3, /*!< On the wire, do not change. */
+    AT_CMD_STOP       = 4, /*!< On the wire, do not change. */
+    AT_CMD_VOL        = 5, /*!< Reserved, not yet forwarded over UWB. Value still free. */
+} at_cmd_code_t;
+
+/** @brief Maximum vendor pass-through payload, in bytes.
+ *
+ *  Sized to what is left in the 10 ms packet, not to a requirement, because there was no
+ *  requirement to size it to -- that is the point of a pass-through. Raising it means either
+ *  taking bytes from a future field or raising the connection's max_payload_size, and the
+ *  latter lengthens the frame and eats airtime in a data timeslot that is already tight. If a
+ *  vendor command ever needs more than this, chunk it across packets using the sequence
+ *  number rather than growing the frame.
+ *
+ *  Was 8 before acknowledged delivery was added; the ack byte and the margin the packet
+ *  should keep came out of here.
+ *
+ *  Frozen once an ODM integrates against it, exactly like the at_cmd_code_t values.
+ */
+#define AT_VENDOR_PAYLOAD_MAX  6
+
+/** @brief Reserved vendor command id meaning "no vendor command in this packet".
+ *
+ *  Must stay 0 and must never be handed to an ODM as a usable id. The packet struct is
+ *  zero-initialized at both ends and reads as all zeros when nothing has been received, so if
+ *  0 were a legal command id an empty packet would be indistinguishable from that command.
+ */
+#define AT_VENDOR_ID_NONE      0
+
+/** @brief Reserved sequence number meaning "no vendor frame" / "nothing to acknowledge".
+ *
+ *  Sequence numbers run 1..255 and skip 0 on wrap for the same reason ids do: the ack field
+ *  is zero in every packet from a peer that has not received anything, and that must not be
+ *  mistaken for an acknowledgement of sequence 0.
+ */
+#define AT_VENDOR_SEQ_NONE     0
+
+/** @brief How many consecutive packets a best-effort vendor command is transmitted in.
+ *
+ *  Applies only to commands sent WITHOUT the acknowledgement flag. Three is a starting point
+ *  chosen from "loss probability cubed", not from a measurement of this link's actual packet
+ *  loss under fallback. If best-effort vendor commands are seen to go missing in the field,
+ *  measure the loss rate before raising this -- a larger number without a measurement just
+ *  moves the same unknown further away. Commands that genuinely must arrive should ask for
+ *  an acknowledgement instead of buying more repeats.
+ */
+#define AT_VENDOR_TX_REPEAT    3
+
+/** @brief How many packets an acknowledged vendor command is retransmitted for before it is
+ *         declared failed. At the 10 ms data period this is the timeout in centiseconds.
+ *
+ *  100 packets = ~1 s. Chosen to outlast a brief RF dropout but to fail well inside a human's
+ *  patience, because the whole point of asking for an acknowledgement is to be TOLD. A
+ *  timeout long enough to cover a real disconnection would just be a slower way of never
+ *  answering.
+ */
+#define AT_VENDOR_ACK_TIMEOUT_PACKETS  100
+
+/** @brief How many vendor commands may be queued for transmission at once.
+ *
+ *  A best-effort command occupies the vendor field for AT_VENDOR_TX_REPEAT packets (~30 ms);
+ *  an acknowledged one holds it until acked or timed out (up to ~1 s). Beyond this depth
+ *  AT+VENDOR_CMD returns an error rather than silently dropping, so the host can back off
+ *  instead of believing it succeeded.
+ */
+#define AT_VENDOR_TX_PENDING_MAX  4
+
+/** @brief The vendor block as it travels in the periodic data packet.
+ *
+ *  The module assigns no meaning to id or data. Both are defined by the two host SOCs
+ *  between themselves, which is the whole purpose: adding a command becomes their release,
+ *  not ours. The module only guarantees delivery semantics -- see
+ *  at_cmd_core_vendor_tx_fill() for exactly what those are.
+ *
+ *  data is ONE opaque byte string, not a parameter list. The module cannot offer multiple
+ *  parameters honestly: with a single length field it would have to concatenate them on the
+ *  way out and could not tell the receiver where to split them again, so the peer would
+ *  receive one blob where two were sent. Per-parameter length bytes would fix that at a cost
+ *  of one byte each out of six. Any internal structure therefore belongs to the ODM's
+ *  definition of that id, where both of its host SOCs already agree on it.
+ */
+typedef struct {
+    uint8_t id;                        /*!< 1-255, allocated by the ODM. 0 means "none". */
+    uint8_t seq;                       /*!< 1-255, assigned by the core. 0 means "none". */
+    uint8_t len;                       /*!< 0..AT_VENDOR_PAYLOAD_MAX. */
+    uint8_t data[AT_VENDOR_PAYLOAD_MAX];  /*!< Opaque to the module. */
+    uint8_t ack_seq;                   /*!< Piggybacked: the last seq THIS device received
+                                        *   from the peer, echoed in every packet whether or
+                                        *   not this packet carries a command. Being a level
+                                        *   rather than a one-shot is what makes the
+                                        *   acknowledgement itself survive packet loss. */
+} at_vendor_frame_t;
 
 /**
  * @brief Initialize the AT command core.
@@ -120,7 +239,7 @@ void at_cmd_core_init(void);
 void at_cmd_core_process(void);
 
 /**
- * @brief Update the UWB connection status reported by AT+UWB_CONN_STATUS?.
+ * @brief Update the UWB connection status reported by AT+LE_UWB_CONN_STATUS?.
  *
  * Call this whenever the application state machine transitions state.
  * Default value before any call is AT_UWB_CONN_STATUS_STANDBY.
@@ -140,7 +259,7 @@ void at_cmd_core_set_uwb_conn_status(at_uwb_conn_status_t status);
 void at_cmd_core_set_device_address(uint8_t addr);
 
 /**
- * @brief Set the device role reported by AT+UWB_GET_ROLE?.
+ * @brief Set the device role reported by AT+LE_UWB_GET_ROLE?.
  *
  * Call once during application startup (before the main loop).
  * Node applications pass AT_DEVICE_ROLE_NODE; coordinator applications
@@ -170,7 +289,7 @@ void at_cmd_core_set_device_role(at_device_role_t role);
 void at_cmd_core_notify_build(const char *build_id);
 
 /**
- * @brief Send +EVENT: UWB_READY to the external MCU.
+ * @brief Send +EVENT: LE_UWB_READY to the external MCU.
  *
  * Call once after SWC initialization is complete and the device is ready
  * to connect or accept pairing.
@@ -178,12 +297,12 @@ void at_cmd_core_notify_build(const char *build_id);
 void at_cmd_core_notify_uwb_ready(void);
 
 /**
- * @brief Send +EVENT: UWB_UNPAIRED to the external MCU.
+ * @brief Send +EVENT: LE_UWB_UNPAIRED to the external MCU.
  *
  * Call from the application's unpair path, after the persisted pairing address has been
  * erased. Tells the host the difference the link events cannot express: UWB_DISCONNECTED
- * means the peer is unreachable but still remembered, so AT+UWB_CONNECT is worth sending;
- * UWB_UNPAIRED means the stored address is gone, so only AT+UWB_PAIR can get the link back.
+ * means the peer is unreachable but still remembered, so AT+LE_UWB_CONNECT is worth sending;
+ * UWB_UNPAIRED means the stored address is gone, so only AT+LE_UWB_PAIR can get the link back.
  *
  * Additive: the status is left alone, so the normal poll still emits UWB_DISCONNECTED
  * afterwards and a host that only knows that event is unaffected.
@@ -191,7 +310,7 @@ void at_cmd_core_notify_uwb_ready(void);
 void at_cmd_core_notify_unpaired(void);
 
 /**
- * @brief Send +EVENT: UWB_PAIRING and move the status to Pairing for the procedure.
+ * @brief Send +EVENT: LE_UWB_PAIRING and move the status to Pairing for the procedure.
  *
  * Call when entering pairing. Link polling is suspended while the status is Pairing, so the
  * torn-down wireless core is not misreported as a dropped link. Always pair this with
@@ -206,7 +325,7 @@ void at_cmd_core_notify_pairing_started(void);
 /**
  * @brief Report the outcome of pairing and release the status.
  *
- * Sends +EVENT: UWB_PAIRED or +EVENT: UWB_PAIR_FAIL and returns the status to Standby. On
+ * Sends +EVENT: LE_UWB_PAIRED or +EVENT: LE_UWB_PAIR_FAIL and returns the status to Standby. On
  * success the link still has to come up; the usual poll reports that with UWB_CONNECTED.
  *
  * @param[in] success  true if the peer was paired, false on timeout / abort / failure.
@@ -214,7 +333,7 @@ void at_cmd_core_notify_pairing_started(void);
 void at_cmd_core_notify_pairing_result(bool success);
 
 /**
- * @brief Set the status to Standby and send +EVENT: UWB_DISCONNECTED then +EVENT: UWB_STANDBY.
+ * @brief Set the status to Standby and send +EVENT: LE_UWB_DISCONNECTED then +EVENT: LE_UWB_STANDBY.
  *
  * Call immediately before powering the module down (facade_enter_standby()), and only there.
  * The normal status machine cannot report this: entering Standby does not return, so
@@ -235,7 +354,7 @@ void at_cmd_core_notify_standby(void);
  *
  * The callback returns true when the UWB link is up, false otherwise.
  * at_cmd_core_process() polls this every main-loop iteration and sends
- * +EVENT: UWB_CONNECTED or +EVENT: UWB_DISCONNECTED only when the status
+ * +EVENT: LE_UWB_CONNECTED or +EVENT: LE_UWB_DISCONNECTED only when the status
  * changes. Polling is skipped while status is AT_UWB_CONN_STATUS_PAIRING.
  *
  * Typical usage (call once after app_init()):
@@ -246,12 +365,12 @@ void at_cmd_core_notify_standby(void);
 void at_cmd_core_register_link_status_cb(bool (*cb)(void));
 
 /**
- * @brief Register a callback invoked when AT+UWB_PAIR is received.
+ * @brief Register a callback invoked when AT+LE_UWB_PAIR is received.
  *
  * The callback should initiate the application's pairing procedure.
  * If no callback is registered the command still returns OK but does nothing.
  *
- * @param[in] cb  Function to call on AT+UWB_PAIR. May be NULL to unregister.
+ * @param[in] cb  Function to call on AT+LE_UWB_PAIR. May be NULL to unregister.
  */
 void at_cmd_core_register_pair_cb(void (*cb)(void));
 
@@ -284,9 +403,13 @@ void at_cmd_core_register_link_margin_cb(int32_t (*cb)(void));
  * @brief Register a callback invoked when an AT command requires sending a
  *        control command to the remote device over the UWB data channel.
  *
- * The callback receives the command type and value (see app_cmd.h) and is
- * responsible for packing an app_cmd_t and calling wireless_send_data().
- * Used on the DG side only; HS does not register this callback.
+ * The callback receives an at_cmd_code_t and its value, and is responsible for getting it
+ * into the application's outgoing data packet (queue it for the next transmission; do not
+ * transmit from here -- this runs in AT command context).
+ *
+ * Registered by whichever side wants the command to travel rather than be applied locally.
+ * The HS does not use this: it registers the hardware callbacks instead and implements them
+ * as "queue for the DG", which predates this hook and is what is on the wire today.
  *
  * @param[in] cb  Function accepting (cmd_type, value). May be NULL to unregister.
  */
@@ -295,11 +418,20 @@ void at_cmd_core_register_cmd_tx_cb(void (*cb)(uint8_t cmd_type, uint8_t value))
 /**
  * @brief Register a callback invoked when volume should be applied to hardware.
  *
- * Used on the HS side. Called when AT+VOL=N is received from the local SOC
- * OR when a CMD_VOL packet arrives from the DG over the UWB data channel.
- * The callback receives the new volume level (0-100) and should apply it to
- * the audio hardware (e.g. via sac_volume_ctrl).
- * Not used on the DG side — DG forwards the command over UWB instead.
+ * Called when AT+VOL=N is received from the local SOC, or when a volume value arrives from
+ * the peer over the UWB data channel. The callback receives the new level (0-100) and should
+ * apply it to the audio hardware (e.g. via sac_processing_ctrl / sac_volume).
+ *
+ * BOTH roles register this, and it is not the mistake it looks like. This comment used to
+ * say "not used on the DG side -- DG forwards the command over UWB instead", but the DG has
+ * always registered it and applies AT+VOL to its own back channel (the HS->DG audio it
+ * receives). That is the behaviour ODM hosts see today, so it is the behaviour that stays;
+ * the comment was what was wrong. Volume is consequently NOT forwarded over UWB by either
+ * side, which is why AT_CMD_VOL is still marked reserved.
+ *
+ * The consequence to keep in mind when wiring the DG->HS path: registering a cmd_tx callback
+ * on the DG would make AT+VOL both forward to the HS and change the DG's own back channel.
+ * Those are two different speakers. Decide which one AT+VOL means before enabling it.
  *
  * @param[in] cb  Function accepting volume level 0-100. May be NULL to unregister.
  */
@@ -390,7 +522,61 @@ void at_cmd_core_set_battery_level(uint8_t level);
 void at_cmd_core_register_battery_cb(uint8_t (*cb)(void));
 
 /**
- * @brief Register a callback invoked when AT+UWB_SHUTDOWN is received.
+ * @brief Build the vendor block for the next outgoing data packet.
+ *
+ * Call once per periodic data callback, before packing, and copy every field of the result
+ * into the packet. Always fills the frame: with nothing queued it yields id
+ * AT_VENDOR_ID_NONE, which is what almost every packet carries, but ack_seq is still set and
+ * still has to be transmitted.
+ *
+ * DELIVERY SEMANTICS, which are the only thing the module promises about vendor traffic.
+ * There are two modes, chosen per command by the host:
+ *
+ *   BEST EFFORT (default). The command goes out in AT_VENDOR_TX_REPEAT consecutive packets
+ *   and is then dropped from the queue. The receiver discards the duplicates. Three
+ *   back-to-back copies take the loss probability to its cube with no timers and no state,
+ *   at a bounded, known cost of ~30 ms of the vendor field. Delivery is NOT guaranteed and
+ *   the sender is never told either way. Right for anything the host resends periodically
+ *   anyway, and for anything a human will retry.
+ *
+ *   ACKNOWLEDGED. The command is retransmitted in EVERY packet until the peer echoes its
+ *   sequence number back in ack_seq, or until AT_VENDOR_ACK_TIMEOUT_PACKETS have passed.
+ *   Either way the host is told, by +EVENT: VENDOR_CMD_ACK:<id> or
+ *   +EVENT: VENDOR_CMD_FAIL:<id>. This is real delivery confirmation, not more repeats: it
+ *   reports what happened rather than making failure less likely. The cost is that the
+ *   command holds the vendor field until it resolves, so queued commands behind it wait.
+ *
+ * Ordering is preserved in both modes: the queue is FIFO and a command resolves before the
+ * next one starts.
+ *
+ * Safe to call from the timer/interrupt context that builds the packet. This function is the
+ * ONLY place the queue head moves -- acknowledgements arriving on the RX side just park a
+ * byte for it to read -- so there is exactly one consumer despite two contexts being involved.
+ *
+ * @param[out] frame  Filled with the vendor block to transmit. Never left untouched.
+ */
+void at_cmd_core_vendor_tx_fill(at_vendor_frame_t *frame);
+
+/**
+ * @brief Handle a received vendor block: deliver a new command, and record the peer's ack.
+ *
+ * Call from the application's RX data handler for every received packet, passing the packet's
+ * vendor fields verbatim. Blocks with id AT_VENDOR_ID_NONE still carry a meaningful ack_seq,
+ * so call this unconditionally rather than testing the id first.
+ *
+ * De-duplication happens here: the repeated copies described in at_cmd_core_vendor_tx_fill()
+ * arrive as identical (id, seq) pairs and only the first is emitted as
+ * "+EVENT: VENDOR_CMD:<id>,"<hex payload>"". Gaps in seq are deliberately NOT reported. In
+ * best-effort mode nothing could be done about them, and in acknowledged mode the sender's
+ * own timeout is the authority on whether a command arrived -- a receiver guessing from gaps
+ * would produce a second, contradictory answer.
+ *
+ * @param[in] frame  Vendor fields from the received packet. NULL is ignored.
+ */
+void at_cmd_core_notify_vendor_received(const at_vendor_frame_t *frame);
+
+/**
+ * @brief Register a callback invoked when AT+LE_UWB_SHUTDOWN is received.
  *
  * The callback should perform software cleanup (stop timers, call swc_disconnect,
  * stop audio pipelines) before the hardware shutdown pin is asserted by the core.
@@ -398,31 +584,31 @@ void at_cmd_core_register_battery_cb(uint8_t (*cb)(void));
  * regardless of whether a callback is registered.
  * If the device is already disconnected the callback should be a no-op.
  *
- * @param[in] cb  Function to call on AT+UWB_SHUTDOWN. May be NULL to unregister.
+ * @param[in] cb  Function to call on AT+LE_UWB_SHUTDOWN. May be NULL to unregister.
  */
 void at_cmd_core_register_shutdown_cb(void (*cb)(void));
 
 /**
- * @brief Register a callback invoked when AT+UWB_DISCONNECT is received.
+ * @brief Register a callback invoked when AT+LE_UWB_DISCONNECT is received.
  *
  * The callback should terminate the active UWB connection and stop all
  * associated timers/pipelines (i.e. call unpair_device()). The pairing
- * address is preserved so that AT+UWB_CONNECT can reconnect afterwards.
+ * address is preserved so that AT+LE_UWB_CONNECT can reconnect afterwards.
  * If the device is already disconnected the callback should be a no-op.
  *
- * @param[in] cb  Function to call on AT+UWB_DISCONNECT. May be NULL to unregister.
+ * @param[in] cb  Function to call on AT+LE_UWB_DISCONNECT. May be NULL to unregister.
  */
 void at_cmd_core_register_disconnect_cb(void (*cb)(void));
 
 /**
- * @brief Register a callback invoked when AT+UWB_CONNECT is received.
+ * @brief Register a callback invoked when AT+LE_UWB_CONNECT is received.
  *
  * The callback should attempt to re-establish the UWB connection using the
  * previously assigned pairing addresses, without entering the pairing procedure.
  * If the device is already connected the callback should be a no-op.
  * If no pairing address is available the callback should do nothing.
  *
- * @param[in] cb  Function to call on AT+UWB_CONNECT. May be NULL to unregister.
+ * @param[in] cb  Function to call on AT+LE_UWB_CONNECT. May be NULL to unregister.
  */
 void at_cmd_core_register_connect_cb(void (*cb)(void));
 
