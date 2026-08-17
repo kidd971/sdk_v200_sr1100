@@ -64,6 +64,9 @@ static bool                 s_connect_requested    = false;
 static uint32_t             s_connect_start_tick   = 0;
 static bool                 s_link_quality_weak    = false;
 static uint32_t             s_link_quality_last_check_tick = 0;
+/* Down-edge debounce for the link status poll; see AT_UWB_DISCONNECT_DEBOUNCE_MS. */
+static bool                 s_link_down_pending    = false;
+static uint32_t             s_link_down_since_tick = 0;
 static bool                 s_disconnect_requested = false;
 static bool                 s_shutdown_requested   = false;
 
@@ -290,8 +293,18 @@ void at_cmd_core_vendor_tx_fill(at_vendor_frame_t *frame)
 
     if (entry->need_ack) {
         /* Resolve first, so an acknowledgement that arrived since the last packet stops the
-         * retransmission immediately instead of costing one more copy. */
-        if (s_vendor_peer_ack == entry->frame.seq) {
+         * retransmission immediately instead of costing one more copy.
+         *
+         * The wait_packets test is not redundant: without it, a stale s_vendor_peer_ack left
+         * over from an earlier command could match a newly queued one before it has ever been
+         * transmitted, and the host would be told ACK for a command that never reached the
+         * air. That needs sequence numbers to wrap while the link is down -- 255 commands, so
+         * minutes of outage with a host still pushing -- but "we confirmed delivery of
+         * something we never sent" is the one answer this mechanism must never give, so it is
+         * cheaper to make it structurally impossible than to argue about the odds. The peer
+         * cannot have acknowledged a command we have not sent, so requiring one transmission
+         * first is simply the truth. */
+        if (s_vendor_tx_wait_packets > 0 && s_vendor_peer_ack == entry->frame.seq) {
             uint8_t id = entry->frame.id;
 
             vendor_tx_retire(head, id, true, true);
@@ -578,15 +591,29 @@ void at_cmd_core_process(void)
         return;
     }
 
-    at_uwb_conn_status_t new_status = s_link_status_cb()
-                                      ? AT_UWB_CONN_STATUS_CONNECTED
-                                      : AT_UWB_CONN_STATUS_STANDBY;
-
-    if (new_status != s_uwb_conn_status) {
-        s_uwb_conn_status = new_status;
-        if (new_status == AT_UWB_CONN_STATUS_CONNECTED) {
+    /* Asymmetric on purpose: the down edge waits out AT_UWB_DISCONNECT_DEBOUNCE_MS, the up
+     * edge is reported the moment it is seen. A link that is merely idle -- no audio flowing,
+     * so the coordinator's audio timeslots carry nothing -- reads as down within 20 ms even
+     * though the peer is still there and still answering on the data connection, and the host
+     * used to get a DISCONNECTED/CONNECTED pair every time playback paused.
+     *
+     * AT+LE_UWB_CONN_STATUS? reads the same variable, so it stays CONNECTED for the length of
+     * the window too. That is deliberate: the query and the event must not disagree. */
+    if (s_link_status_cb()) {
+        s_link_down_pending = false;
+        if (s_uwb_conn_status != AT_UWB_CONN_STATUS_CONNECTED) {
+            s_uwb_conn_status = AT_UWB_CONN_STATUS_CONNECTED;
             facade_expansion_uart_write("+EVENT: LE_UWB_CONNECTED\r\n");
-        } else {
+        }
+    } else if (s_uwb_conn_status == AT_UWB_CONN_STATUS_CONNECTED) {
+        uint32_t down_now = facade_get_tick_ms();
+
+        if (!s_link_down_pending) {
+            s_link_down_pending = true;
+            s_link_down_since_tick = down_now;
+        } else if ((down_now - s_link_down_since_tick) >= AT_UWB_DISCONNECT_DEBOUNCE_MS) {
+            s_link_down_pending = false;
+            s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
             s_link_quality_weak = false; /* reset on disconnect so WEAK can fire again */
             facade_expansion_uart_write("+EVENT: LE_UWB_DISCONNECTED\r\n");
         }
