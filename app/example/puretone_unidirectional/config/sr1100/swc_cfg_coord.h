@@ -78,25 +78,55 @@
         1,                \
     }
 
-/* Level 4 output power -- the 24 kHz rung's, and the only entry in this table that was not
- * measured. It shipped as a copy of level 3, on the reasoning that a rung below another should be
- * at least as robust; "at least as" is not the same as "enough", and levels 1 to 3 here are
- * identical to what SPARK's own audio demo runs while level 4 is not.
+/* Level 4 output power -- the 24 kHz rung's.
  *
- * 1 selects the demo's level 4: pulse width 6 across all bands, which is the widest entry in
- * their whole table, at gain 1/1/1/0. They keep adding energy on the way down; this table stops
- * adding at level 3.
+ * Now defaults to what SPARK's own audio demo runs at its bottom rung: pulse width 6 across all
+ * four bands at gain 1/1/1/0. Levels 1 to 3 of this table were already identical to theirs, value
+ * for value; level 4 was the one entry with no counterpart, because it was filled in by copying
+ * level 3 when the 24 kHz rung was added. Copying the reference removes the last place this table
+ * diverges from a configuration that is known to work on this hardware.
  *
- * Worth knowing what this can and cannot do. The close-range failure is multipath -- rx_rej
- * climbs while cca_fail does not -- and more energy does not unsmear a reflection, since the
- * reflections scale with it. What it can do is push the residual signal-to-noise after smearing
- * back over the decode threshold, so it helps if the near field is marginal rather than hopeless.
- * If it changes nothing, the failure is pure smearing and ISI mitigation is the only answer. */
+ * The node's audio ACK power needed no such change -- it is already width 5 gain 1 on every band,
+ * which is exactly the demo's ack_power for this mode.
+ *
+ * Note the gain field runs backwards: swc_api.h defines 0 as maximum amplitude (0 dB) and 3 as
+ * minimum (-1.8 dB), so smaller is louder. That is why the demo's level 4 is not uniformly louder
+ * than the old values -- it widens every band but moves band 3's gain from 0 to 1, trading a
+ * little amplitude on the band that had the most for width everywhere.
+ *
+ * Selecting it is not a fix for anything measured. It was tried as an arm and moved the drop-out
+ * distance not at all, over two runs, with the ladder locked to mode 4 and free-running. It is the
+ * default because matching the reference is worth more than an unmeasured value of our own, not
+ * because it changed a result.
+ *
+ *   0  the value this rung shipped with -- a copy of level 3, width 3/3/4/5, gain 1/1/0/0.
+ *      Kept so the comparison can be run in reverse without archaeology.
+ *   1  SPARK's demo level 4. The default.
+ *   2  the rail: width 7, the widest the field allows, at gain 0 on every band.
+ *
+ * 2 exists because 1 changed nothing, and one more step of width would have been worth a few
+ * tenths of a dB against three steps that did nothing -- so the useful experiment was the ceiling
+ * rather than another step. If the loudest this radio can transmit at level 4 leaves the distance
+ * where it is, level-4 output power is not what sets it, and the remaining candidates are the ones
+ * that do not move with the ladder: SR1100_PULSE_COUNT, still at 1 of a possible 3, and the ACK
+ * power above.
+ *
+ * 2 is a lab arm and not shippable -- maximum width at maximum amplitude on all four bands, with
+ * emissions compliance not considered. */
 #ifndef FBK4_TX_POWER_REF
-#define FBK4_TX_POWER_REF 0
+#define FBK4_TX_POWER_REF 1
 #endif
 
-#if FBK4_TX_POWER_REF
+#if FBK4_TX_POWER_REF == 2
+#define TX_AUDIO_FB_L4_WIDTH_B1 7
+#define TX_AUDIO_FB_L4_WIDTH_B2 7
+#define TX_AUDIO_FB_L4_WIDTH_B3 7
+#define TX_AUDIO_FB_L4_WIDTH_B4 7
+#define TX_AUDIO_FB_L4_GAIN_B1  0
+#define TX_AUDIO_FB_L4_GAIN_B2  0
+#define TX_AUDIO_FB_L4_GAIN_B3  0
+#define TX_AUDIO_FB_L4_GAIN_B4  0
+#elif FBK4_TX_POWER_REF
 #define TX_AUDIO_FB_L4_WIDTH_B1 6
 #define TX_AUDIO_FB_L4_WIDTH_B2 6
 #define TX_AUDIO_FB_L4_WIDTH_B3 6

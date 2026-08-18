@@ -28,11 +28,12 @@
  * path is gone and what arrives is reflections, packets landing corrupted rather than missing --
  * rx_rej climbing while rx_ok holds is the signature -- and that is what ISI mitigation is for.
  *
- * Back at 1 to measure it against the current ladder, where the trade has changed: the wider
- * accumulator took mode 3's payload from 54 B to 100 B, so a longer preamble now has to fit
- * beside a bigger bottom-rung packet than when level 2 was chosen. Slot pressure is also the
- * leading suspect for the crash under sustained long-range obstruction, and this is the cheapest
- * way to take some off.
+ * Level 2 is the value in force, and it is what the near field needs -- level 1 was measured on
+ * this ladder and the close-range dropouts came back. It was briefly set to 1 while the crash
+ * under sustained long-range obstruction was being chased, on the theory that its longer preamble
+ * did not fit beside a mode 3 the wider accumulator had grown to 100 B. That turned out to be the
+ * right diagnosis and the wrong lever: taking mode 3 back to 54 B fixed the crash and let level 2
+ * stay. This comment described the detour and outlived it.
  *
  * Level 3 does not work here, and not by a small margin: it crackles with no obstruction at
  * all. The preamble belongs to the connection, not to a fallback mode, so it has to fit the

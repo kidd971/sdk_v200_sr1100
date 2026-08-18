@@ -115,6 +115,10 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(RADIO_USE_SAVED_CALIB=${RADIO_USE_SAVED_CALIB})
     endif()
 
+    if (DEFINED ACK_TX_POWER_MAX)
+        add_compile_definitions(ACK_TX_POWER_MAX=${ACK_TX_POWER_MAX})
+    endif()
+
     if (DEFINED SINE_INJECT_DG)
         add_compile_definitions(SINE_INJECT_DG=1)
     endif()
