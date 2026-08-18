@@ -222,7 +222,7 @@ payload 沒被釋放。**舊版 FW 收到新版 FW 的大包 → 每 10 ms 洩�
 ### 線上格式
 
 ```c
-#define AT_VENDOR_PAYLOAD_MAX 6
+#define AT_VENDOR_PAYLOAD_MAX 8
 
 typedef struct user_data {
     bool     button_state;
@@ -235,7 +235,7 @@ typedef struct user_data {
     uint8_t  vendor_seq;                  /* 1-255,收端據此去重;0 保留 */
     uint8_t  vendor_len;                  /* 0..AT_VENDOR_PAYLOAD_MAX */
     uint8_t  vendor_data[AT_VENDOR_PAYLOAD_MAX];
-} user_data_t;                            /* 14 bytes ≤ MAX_DATA_PAYLOAD_SIZE (16) */
+} user_data_t;                            /* 16 bytes = MAX_DATA_PAYLOAD_SIZE */
 ```
 
 ### 但**不是每包都送 14 bytes** —— 這件事比它看起來重要
@@ -251,7 +251,7 @@ vendor 是極低機率事件。若無條件送滿整個 struct,等於為了載�
 |---|---|
 | 無 vendor 指令(≈ 全部封包) | **5 bytes** |
 | 有指令、無 payload | 8 bytes |
-| 有指令 + N bytes payload | 8+N,最多 14 |
+| 有指令 + N bytes payload | 8+N,最多 16 |
 
 **穩態成本是 +1 byte,不是 +10。** 那 1 byte 是 `vendor_ack`,它是 level 必須每包送,
 所以它排在 vendor 區塊**前面**;整個 vendor 區塊排在最後,才切得掉。
@@ -275,22 +275,33 @@ HS/DG 雙邊同燒 + 一個版本錯配窗口——就是 §5 花整節在避免
 
 12 bytes 本來就閒置在那裡沒人用。**用空間換掉一次未來的 wire format 改版,買。**
 
-### 為什麼 `AT_VENDOR_PAYLOAD_MAX` 是 6
+### 為什麼 `AT_VENDOR_PAYLOAD_MAX` 是 8
 
-struct 收在 14 bytes,**留 2 bytes 餘裕**。6 不是需求算出來的,是「把剩下的空間給它」
-——這正是 pass-through 該有的定價方式,因為根本沒有需求可以拿來算。
+8 是**不動 `MAX_DATA_PAYLOAD_SIZE` 前提下能給的最大值**:5(常送欄位)+ 3(vendor header)
++ 8 = 16。ODM 說 6 大致夠用但多一點更好,而多給不必付代價,所以給滿。
 
-(原本是 8。ACK 的 1 byte 和封包該保留的餘裕,都是從這裡扣的。)
+**它是上限不是保留區。** `user_data_tx_size()` 送的是 `offsetof(vendor_data) + vendor_len`,
+所以 payload 只放 1 byte 就只送 9 bytes,跟這個常數設多少無關。
+**把上限拉高,在真的有人用到之前是完全免費的。**
 
-它是上限,不是保留區:下一個要加欄位的人動的是這個數字,不是
-`MAX_DATA_PAYLOAD_SIZE`。後者會拉長 frame、吃掉 data timeslot 的空中時間,
-而這條線的 timeslot 已經是緊的(見 dualradio fb=0 park 的 slot 掃描結果),
-**不是可以順手改的數字**。
+大方給是因為兩個上限的時間性質相反:
 
-真的需要更長的 payload 時,`vendor_seq` 已經在那裡了,可以往上疊分段重組,
-一樣不必動 `max_payload_size`。
+| | 事後能不能改 |
+|---|---|
+| `AT_VENDOR_PAYLOAD_MAX` | **不能**。舊版收到較長 payload 會 clamp,那只防越界不防誤解——ODM 拿到砍半的指令照舊解析。必須在 ODM 對接前定案,跟 §5 的號碼表同性質 |
+| `MAX_DATA_PAYLOAD_SIZE` | **可以**。舊版收到較長封包直接截斷、忽略看不懂的部分,不會誤解 |
 
-**但 ODM 一開始用,這個數字就跟 §5 的號碼表一樣凍結了。** 交付前要問一次。
+所以**先把免費的空間花在前者,後者留著當以後的逃生口**,不是反過來。
+
+真的需要更長的 payload 時還有第二條路:`vendor_seq` 已經在那裡,可以往上疊分段重組。
+
+#### 代價:餘裕歸零
+
+16 = `MAX_DATA_PAYLOAD_SIZE`,一個 byte 都不剩。所以未來若真的需要一個**常送欄位**
+(照規則要 append 在 `vendor_data` 之後),就必須同時調大 `MAX_DATA_PAYLOAD_SIZE`。
+
+那是可以接受的,因為上表第二列:調大 frame 上限是向後相容的。而且照本規格的設計意圖,
+新功能本來就該走 vendor 通道而不是加欄位——`FACE` 就是第一個實例(§6)。
 
 ### 可靠性:兩種模式,由 host 逐指令選
 
@@ -433,7 +444,7 @@ host 對這兩者的反應完全不同,合併成一個 `ERROR` 等於逼它猜�
 
 不是 raw bytes:AT 通道是行導向的 ASCII 協定,raw bytes 裡出現 `\r` / `\n` / `\0`
 會把 parser 打爛。hex 是唯一不必替 AT 通道另外定義 escape 規則的選擇,
-代價只是長度 ×2(6 bytes → 12 字元)。
+代價只是長度 ×2(8 bytes → 16 字元)。
 
 不加分隔符(`01:FF`、`01 FF`),雖然那樣人比較好讀:
 
@@ -442,7 +453,7 @@ host 對這兩者的反應完全不同,合併成一個 `ERROR` 等於逼它猜�
 * **兩端產生與解析都最簡單。** 產生是 `sprintf("%02X", b)` 跑迴圈;
   加了分隔符就要對「第一個 byte 要不要加」做條件判斷,解析端也要跳過並驗證分隔符
   的位置正確——每個指令都多這點摩擦。
-* 長度上限只有 12 字元,可讀性的痛不會累積到失控。
+* 長度上限只有 16 字元,可讀性的痛不會累積到失控。
 
 **代價要記著:bring-up 時看 log 要自己數 byte 邊界。** 這是刻意付的,
 文件裡的範例應該幫忙分好組(如上面每行只放 1 個 byte),而不是改 wire format。
@@ -530,10 +541,9 @@ ODM 已經對接了,所以錯的是註解不是行為。
    先量 p 再決定調重送次數還是加 ACK,不要直接加大到 5、10——
    那只是把沒量測的問題往後推。
 
-3. **`AT_VENDOR_PAYLOAD_MAX = 6` 是否夠。** 交付 ODM 前要問一次。
-   一旦 ODM 開始用,這個數字就跟 §5 的號碼表一樣凍結了。
-   注意調大**沒有平滑路徑**:舊版收到較長的 payload 會 clamp 到 6,
-   那只防越界、不防誤解——ODM 會拿到被砍一半的資料照舊解析。要改只能兩端同版換。
+3. ~~`AT_VENDOR_PAYLOAD_MAX` 是否夠。~~ **已定為 8**(§6.5),
+   ODM 回覆「6 基本夠用,多一點更好」,而多給到 16-byte 封包的上限不必付代價。
+   注意它**沒有平滑放寬路徑**:舊版收到較長 payload 會 clamp,只防越界不防誤解。
 
 3a. ~~vendor id 號碼空間全給了 ODM。~~ **已保留 `224`–`255`**(§6.5),
    收發兩端都擋。

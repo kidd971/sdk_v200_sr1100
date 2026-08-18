@@ -160,12 +160,25 @@ typedef enum {
  *  vendor command ever needs more than this, chunk it across packets using the sequence
  *  number rather than growing the frame.
  *
- *  Was 8 before acknowledged delivery was added; the ack byte and the margin the packet
- *  should keep came out of here.
+ *  8 is the largest value that fits MAX_DATA_PAYLOAD_SIZE without raising it: 5 bytes of
+ *  always-present fields, 3 of vendor header, 8 of payload. It is an upper bound, not a
+ *  reservation -- user_data_tx_size() transmits offsetof(vendor_data) + vendor_len, so a
+ *  one-byte command still puts nine bytes on the air whatever this is set to. Raising the
+ *  ceiling therefore costs nothing until somebody actually uses the room.
  *
- *  Frozen once an ODM integrates against it, exactly like the at_cmd_code_t values.
+ *  Chosen generously on purpose, because the two limits behave differently over time:
+ *
+ *    - THIS one cannot be raised compatibly. An older peer clamps a longer payload down to
+ *      its own maximum, which is a defence against overrunning data[] and no defence at all
+ *      against misreading it -- the ODM receives a truncated command and parses it as if it
+ *      were whole. So it has to be right before an ODM integrates, like at_cmd_code_t.
+ *    - MAX_DATA_PAYLOAD_SIZE can be raised later without breaking anything, because an older
+ *      peer simply truncates what it does not understand. That is the escape hatch if a
+ *      future always-present field ever needs room beyond this 16-byte packet.
+ *
+ *  So spend the free space here now and leave the other limit for later, not the reverse.
  */
-#define AT_VENDOR_PAYLOAD_MAX  6
+#define AT_VENDOR_PAYLOAD_MAX  8
 
 /** @brief Reserved vendor command id meaning "no vendor command in this packet".
  *
