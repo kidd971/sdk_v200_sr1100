@@ -357,6 +357,15 @@ void at_cmd_core_notify_vendor_received(const at_vendor_frame_t *frame)
         return;
     }
 
+    /* Reserved for the module; never surfaced to the local SOC. Nothing sends these today,
+     * so this branch exists purely for the future: when a later firmware starts using the
+     * reserved range, units already in the field must ignore that traffic rather than
+     * forward it to their host as an invented vendor command. A reservation honoured only by
+     * the sender would fail in precisely the case it is meant to cover. */
+    if (frame->id >= AT_VENDOR_ID_RESERVED) {
+        return;
+    }
+
     /* Drop the repeats of a command already delivered. Sequence numbers never take the value
      * AT_VENDOR_SEQ_NONE, and s_vendor_rx_last_seq starts there, so the first frame after
      * boot always differs and no separate "have we received anything" flag is needed. */
@@ -874,6 +883,7 @@ static int hex_nibble(char c)
 
 /** @brief AT+VENDOR_CMD=<id>[,"<hex payload>"[,"ACK"]] — queue an ODM command for the peer.
  *
+ *  ids 1-223 belong to the ODM; 224-255 are reserved for the module (AT_VENDOR_ID_RESERVED).
  *  The module does not interpret id or payload, and deliberately has no table of valid ids:
  *  the point of this command is that the two host SOCs can agree on new commands without a
  *  module firmware release. Everything below is transport validation only -- is it
@@ -923,6 +933,14 @@ static bool handler_vendor_cmd(const char *args, char *resp, uint16_t resp_size)
     if (id == AT_VENDOR_ID_NONE) {
         /* Not a usable id: 0 is how a packet says "no vendor command". */
         snprintf(resp, resp_size, "BAD_ID");
+        return false;
+    }
+    if (id >= AT_VENDOR_ID_RESERVED) {
+        /* Held back for the module's own future in-band traffic. Reported separately from
+         * BAD_ID because the two need different reactions: BAD_ID means the host built a
+         * malformed command, RESERVED_ID means the command is well formed but the host is
+         * allocating from a range that is not its to allocate from. */
+        snprintf(resp, resp_size, "RESERVED_ID");
         return false;
     }
     frame.id = (uint8_t)id;
@@ -1088,7 +1106,7 @@ static bool handler_help(const char *args, char *resp, uint16_t resp_size)
         "  AT+NEXT_TRACK\r\n",
         "  AT+PRE_TRACK\r\n",
         "  AT+BATTERY?\r\n",
-        "  AT+VENDOR_CMD=<id>[,\"<hex>\"[,\"ACK\"]]\r\n",
+        "  AT+VENDOR_CMD=<id 1-223>[,\"<hex>\"[,\"ACK\"]]\r\n",
     };
 
     facade_expansion_uart_write("+HELP:\r\n");

@@ -175,6 +175,32 @@ typedef enum {
  */
 #define AT_VENDOR_ID_NONE      0
 
+/** @brief Highest vendor command id an ODM may allocate.
+ *
+ *  1..223 belong to the ODM; the module neither interprets nor reserves anything inside that
+ *  range. AT+VENDOR_CMD rejects anything above it with RESERVED_ID.
+ */
+#define AT_VENDOR_ID_ODM_MAX   223
+
+/** @brief First vendor command id reserved for the module's own use.
+ *
+ *  224..255 (32 ids) are held back for future in-band module traffic -- payload chunking, a
+ *  link-level probe, whatever turns out to be needed. None are used today.
+ *
+ *  Reserved NOW because this is the only moment it is free. The ODM allocates ids from its
+ *  own documents; once it has handed some out, taking any back means coordinating a change
+ *  across two host firmwares we do not control. Giving away all 255 and asking for some back
+ *  later is a trade with no good version of itself.
+ *
+ *  The reservation is only real because this build ALREADY ignores these ids on receive.
+ *  Rejecting them at AT+VENDOR_CMD stops an ODM adopting them; dropping them in
+ *  at_cmd_core_notify_vendor_received() is what stops a shipped unit from forwarding a future
+ *  firmware's internal traffic to its host as a bogus vendor event. A reservation that only
+ *  the sender honours would be worth nothing the first time the two ends run different
+ *  builds -- which is exactly when the reserved ids would start appearing.
+ */
+#define AT_VENDOR_ID_RESERVED  224
+
 /** @brief Reserved sequence number meaning "no vendor frame" / "nothing to acknowledge".
  *
  *  Sequence numbers run 1..255 and skip 0 on wrap for the same reason ids do: the ack field
