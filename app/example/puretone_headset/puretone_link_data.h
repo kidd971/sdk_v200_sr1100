@@ -15,11 +15,25 @@
  *     degrade to "the fields both builds know about" instead of failing. Reordering turns
  *     that graceful degradation into silent misinterpretation.
  *
- *     The corollary, since packets are now truncated deliberately as well as accidentally:
- *     ORDER FIELDS BY HOW OFTEN THEY ARE SENT, most often first. Anything appended after the
- *     vendor block would never be transmitted at all, because user_data_tx_size() stops at
- *     the end of the vendor payload. A new always-present field belongs immediately before
- *     vendor_id, and moving that boundary means changing user_data_tx_size() with it.
+ *     "Append only" means AFTER vendor_data, at the very end -- never in the gap before
+ *     vendor_id, however tempting that looks now that the vendor block is cut off there.
+ *     Inserting there shifts vendor_id/seq/len/data by the width of the new field, so a peer
+ *     running the older build reads the new field AS vendor_id and hands the ODM's SOC a
+ *     fabricated vendor command built from the bytes that follow. Silent misinterpretation,
+ *     not a missing field -- and pointed straight at the one interface whose contents this
+ *     firmware cannot sanity-check, because they are opaque by design.
+ *
+ *     The real answer is usually not to add a field at all. Vendor pass-through exists so
+ *     that new information can cross this link without a wire format change; anything
+ *     optional, occasional, or ODM-specific belongs there. Reach for a new field only for
+ *     something the module itself needs in every packet.
+ *
+ *     If it really is that, append it after vendor_data and extend user_data_tx_size() to
+ *     cover it. Note the cost honestly: a field beyond the vendor block can only be reached
+ *     by transmitting the vendor block too, so an always-present field there makes every
+ *     packet full length and gives up the saving user_data_tx_size() exists for. That is the
+ *     price of the layout, and it is the right way round -- it costs airtime, whereas the
+ *     tempting alternative costs correctness.
  *
  *  2. EVERY FIELD IS uint8_t (or bool, which is one byte). The struct is memcpy'd straight
  *     onto the air with no packing attribute, so it must have no padding. A uint16_t or
@@ -63,9 +77,10 @@ extern "C" {
 
 /** @brief The 10 ms status/command packet, identical in both directions.
  *
- *  Every field is sent in every packet; there is no framing, no length prefix and no
- *  sequence number at this level. Fields are therefore of two kinds, and which kind a field
- *  is determines whether it survives packet loss:
+ *  There is no framing, no length prefix and no sequence number at this level: a packet is
+ *  simply the first N bytes of this struct, and the receiver relies on rule 3 to read the
+ *  rest as absent. Fields are of two kinds, and which kind a field is determines whether it
+ *  survives packet loss:
  *
  *    - LEVEL fields (button_state, link_margin, battery_pct) carry current state and are
  *      resent every packet, so a lost packet self-corrects 10 ms later.
