@@ -3,7 +3,7 @@
 > 對象：`app/example/puretone_unidirectional`｜Quasar U5A5 + SR1100，single radio｜SDK v2.4.0-rc2
 > 對照組：SPARK 官方 audio demo `SPARK_AUDIO_DEMO_eng-v1.0.0-ext_codec_support-r1`（同一塊 EVK）
 > 前一世代的同一問題見 [fallback_mono_rung_rationale.md](fallback_mono_rung_rationale.md)
-> 日期：2026-08-18｜基準 commit：`ce44437`（+ 兩支未 commit 的 lab arm）
+> 日期：2026-08-18（§5 於同日重寫）｜基準 commit：`1c3a672`
 
 ---
 
@@ -11,8 +11,9 @@
 
 **近端已解，遠端未解。**
 近端的答案是 ISI 2 + 重傳餘裕 + 40 ms buffer 三個一起上（tag `v240-unidir-fbk5-ok`）。
-遠端把「輸出功率」這條線從頭走到底（coordinator level 4 → 天花板 → 連 node ACK 一起拉滿）都沒動到掉線距離。
-**唯一還沒測的旋鈕只剩 PHY rate，而它理論上是往反方向走的** —— 見 §5。
+遠端量到掉線當下 `lm = 0`，確認是真的鏈路預算耗盡；但把「輸出功率」這條線從頭走到底
+（level 4 → 天花板 → node ACK 拉滿）都沒動到距離。
+**發射設定現已與 demo 逐值對齊，距離仍然輸，而公開 API 裡已經沒有可加的旋鈕** —— 見 §5。
 
 ---
 
@@ -103,81 +104,94 @@ buffer 提供「撐過突發遮擋的時間」。三個各補一個獨立的資�
 
 ---
 
-## 5. 還沒測的
+## 5. 遠端距離：查證結果與剩餘候選
 
-### 5.1 PHY rate —— 唯一真正沒碰過的旋鈕，而且理論上相反
+### 5.1 遠端失效已確認是真的鏈路預算耗盡
 
-**現況：`swc_cfg_t.chip_rate` 在 `app_swc_core_init()` 裡沒有設定**
-（[puretone_unidirectional_coord.c:355](app/example/puretone_unidirectional/puretone_unidirectional_coord.c#L355)），
-零初始化 → `SWC_CHIP_RATE_20_48_MHZ`。搭配 `isi_mitig = SWC_ISI_MITIG_2`，
-對照 `swc_phy_mode_t` 的命名，本 app 等於跑在五檔裡**最慢的一檔**：
+遠端掉線的當下量到 **`lm = 0`**。不是假斷線、不是同步問題，是訊號弱到解不開。
+所以「加鏈路預算」是正確的方向 —— 問題是**已經沒有旋鈕可加了**，見下。
 
-| `swc_phy_mode_t` | 有效速率 | 位置 |
+### 5.2 發射端已與 demo 完全對齊（`1c3a672`）
+
+| 項目 | 狀態 |
+|---|---|
+| Fallback 輸出功率 level 1–3 | 本來就逐值相同 |
+| Fallback 輸出功率 level 4 | **已改採 demo 的值**（width 6/6/6/6 gain 1/1/1/0），`FBK4_TX_POWER_REF` 預設 1 |
+| Node ACK 功率 | 查證後**本來就相同**（width 5 / gain 1），無需更動 |
+| `SR1100_PULSE_COUNT` | **兩邊都是 1**（demo 定義在 `wireless_common.c:16`，全套件唯一一處） |
+| chip rate 基準 | 兩邊都是 20.48 MHz |
+| FEC / 調變 / 並行模式 / 通道 | 相同 |
+
+**同一塊板、同一支天線、發射設定逐值相同，距離仍然輸。**
+所以差異只可能在接收靈敏度或 PHY 內部。
+
+### 5.3 三個曾被視為候選的設定，逐一排除
+
+| 候選 | 判定 | 理由 |
 |---|---|---|
-| `SWC_CHIP_RATE_20_48_ISI_2` | **10.24 MHz** | ← **本 app 現在在這裡** |
-| `SWC_CHIP_RATE_27_30_ISI_2` | 14.15 MHz | |
-| `SWC_CHIP_RATE_20_48_ISI_1` | 20.48 MHz | ← SPARK demo 的頂階在這裡 |
-| `SWC_CHIP_RATE_27_30_ISI_1` | 27.30 MHz | |
-| `SWC_CHIP_RATE_40_96_ISI_1` | 40.96 MHz | |
+| **PHY rate / ISI** | ❌ 方向相反 | ISI mitigation 是在符號間插停頓，**不增加能量**。純距離靠 Eb/N0，ISI 只是花空中時間換抗多重路徑。而且本 app 已在五檔中最慢的一檔（10.24 MHz 有效），往上走是拿距離換頻寬 |
+| **`SR1100_PULSE_COUNT`** | ❌ 無差異 | 曾列為「+3 dB，比整個 gain 欄位範圍還大」的首選。實查**兩邊都是 1** |
+| **排程**（5.25 ms vs 2.25 ms） | ❌ 物理不對 | 週期短只讓重傳機會更密集。**距離不夠時每一次重傳都同樣太弱**，多試不會讓封包突然解得開。這跟近端遮擋是不同的物理 |
 
-**為什麼說「理論上相反」**：降速率／加 ISI = 增加 processing gain = 理論上**更遠**。
-本 app 已經在最慢的一檔，距離卻比 demo 差。照理論該往下走的方向已經走到底了，
-所以剩下能測的只有往**上**走 —— 用距離換回 airtime。
+### 5.4 `chip_repetition` —— 唯一真正的能量旋鈕，但兩邊都沒用
 
-**這不是亂猜，有結構性理由**：10.24 MHz 有效速率表示同樣一個 250 µs slot 只裝得下一半的 bit。
-ladder 頂階（mode 0）是 242 B，本來就吃緊；ISI 3 會爆音、mode 3 撐到 100 B 會當機，
-都是同一個 slot 預算在說話。**提高 PHY rate 是唯一能同時放鬆 slot 壓力的方向。**
+這是本次唯一能直接乘上每位元能量、因而直接換距離的設定（`SWC_CHIP_REPET_1..4`）。
 
-### 5.2 結構性發現：SPARK demo 可以逐階換 PHY preset，本 SDK 不行
+| | 本 SDK v2.4.0-rc2 | demo 的 SDK |
+|---|---|---|
+| 型別 `swc_chip_repetition_t` | 有（`swc_def.h:106`） | 有 |
+| `swc_connection_cfg_t.chip_repet` 欄位 | **沒有** | **有**（`swc_api.h:230`） |
+| 公開 API 接受它 | **沒有任何函式** | 透過連線設定 |
+| 預編譯庫符號 | 有 `wps_set_chip_repet`（無標頭宣告） | — |
+| **demo 實際設定的值** | — | **沒設，zero-init = `SWC_CHIP_REPET_1`** |
 
-demo 的 SDK 在 `swc_connection_fallback_cfg_t` 裡多一個欄位：
+**結論：欄位差異不是距離差異的來源。** 我們的 SDK 確實少了這個入口，
+但 demo 從頭到尾沒有用它，兩邊實際都跑在 chip repetition = 1。
 
-```c
-/*! Array of preset index. Array size must be equal to fallback_mode_count */
-uint8_t *presets;
-```
+> 附帶更正：先前推測「demo 的 preset 內含 `chip_repetition`，所以底階能多拿能量」是錯的。
+> preset 0 與 preset 1 的差別**只有 `isi_mitig`**，`chip_repetition` 屬於連線層、兩個 preset 共用。
+> preset 機制給的是「逐階切 ISI」（頂階短 preamble、底階抗多重路徑），
+> 那是**容量與近端**的好處，不是距離的。
 
-而 preset 是這樣建的（`lib/sdk/core/wireless/api/swc/sr1100/swc_api.c:2073`）：
+### 5.5 目前的處境
 
-```
-preset 0 = 連線的 fec/chip_code/chip_repetition + node 的 isi_mitig
-preset 1 = preset 0，但 isi_mitig 強制 SWC_ISI_MITIG_2
-```
+**在 v2.4.0-rc2 的公開 API 範圍內，已經沒有可以增加鏈路預算的旋鈕。**
+功率表已滿並與 demo 對齊、pulse count 相同、chip repetition 兩邊都是 1 且我們構不到、
+`swc_set_phy_mode()` 只能在有效速率階梯上移動而方向與需求相反。
 
-demo 的 ladder：**mode 1、2 用 preset 0（ISI 1），mode 3、4 用 preset 1（ISI 2）**。
+剩下無法從 app 這一側解決或驗證的：
 
-**本 SDK（v2.4.0-rc2）的 `swc_connection_fallback_cfg_t` 沒有 `presets` 欄位**
-（[core/wireless/swc_api.h:275](core/wireless/swc_api.h#L275)），wireless core 是 prebuilt `.a`，
-從 app 這一側無法逐階指定 preset。
+1. **排程**（2.25 ms / 7+2 槽 vs 5.25 ms / 20+1 槽）—— 論證上不該影響距離，但未實測
+2. **預編譯 wireless core 的版本差異** —— 兩邊 SDK 版本不同，PHY 與解調實作無法檢視
+3. **量測方法本身** —— 「掉線距離」兩邊是否以相同方式量的（路線、朝向、自由跑 vs 鎖階）
+   尚未書面確認。在把差異歸因於韌體之前值得先確定這點
 
-**這解釋了本 app 一直卡在哪裡**：ISI level 是**整條 ladder 共用**的。
-所以「頂階要短 preamble、底階要長 preamble」在這個 SDK 上表達不出來 ——
-選 ISI 2 就是全階都付長 preamble（頂階 242 B 因此更緊），選 ISI 1 就是底階近端會斷。
-demo 沒有這個限制。**這可能才是「差異在 prebuilt wireless core 裡」的具體內容。**
+### 5.6 建議向 SPARK 確認的兩件事
 
-### 5.3 其他沒測過的
+1. `swc_connection_cfg_t` 的 `chip_repet` 欄位在 v2.4.0 被移除是刻意的嗎？
+   型別仍在 `swc_def.h`、庫裡仍匯出 `wps_set_chip_repet`，但沒有標頭宣告 ——
+   看起來像漏掉的介面而非刻意移除
+2. `swc_connection_fallback_cfg_t.presets`（逐階 PHY preset）v2.4.0 正式版會補上嗎？
+   這不是距離問題的解，但它是「頂階要短 preamble、底階要抗多重路徑」在本 SDK 上
+   表達不出來的原因 —— 目前只能全階共用一個 ISI 等級
 
-| 項目 | 現值 | 可得 | 備註 |
-|---|---|---|---|
-| `SR1100_PULSE_COUNT` | 1 | 最大 3 | +3 dB @2、+4.8 dB @3（coherent integration），**比 gain 欄位整個 1.8 dB 的範圍還大**。不隨 ladder 移動。代價是 airtime |
-| Schedule | 21 槽 × 250 µs = 5.25 ms（coord 20 / node 1） | demo 是 2.25 ms（7 / 2） | `ce44437` 明列為消去法後剩下的兩個之一 |
-| `dynamic_phy_mode_enabled` | `false`（未設定） | `swc_set_phy_mode()` 需要它 | 要做 §5.1 就得先開這個 |
+### 5.7 其他沒測過的
 
----
+| 項目 | 現值 | 備註 |
+|---|---|---|
+| `dynamic_phy_mode_enabled` | `false`（未設定） | `swc_set_phy_mode()` 的前提。但速率階梯方向與需求相反 |
+| 排程 | 21 槽 × 250 µs | 見 §5.5 第 1 點 |
 
 ## 6. 建議順序
 
 1. **先補 §3 的三個空格**（l4max / allmax / calib）。三支 binary 都在 `bin/` 下，
    結果沒寫回去，下一個人會重跑。
-2. **`SR1100_PULSE_COUNT` = 2**。不隨 ladder 移動、+3 dB 比整個 gain 欄位的範圍還大、
-   一個 define 就到位。功率這條線要收尾的話這是最後一發。
-3. **PHY rate 往上一檔**（`SWC_CHIP_RATE_20_48_ISI_1`，即 ISI 降到 1 但整體有效速率加倍）。
-   需要 `dynamic_phy_mode_enabled = true` + `swc_set_phy_mode()`。
-   **注意這等於全階 ISI 1，近端斷音會回來** —— 這一支測的是「距離有沒有變遠」，
-   不是「能不能出貨」。近端要靠 §5.2 的 preset 機制才能兩全，而那需要 SDK 支援。
-4. 若 3 有效，向 SPARK 確認 v2.4.0 正式版是否會補上 fallback `presets`。
-
----
+2. **確認距離的量測方法**（§5.5 第 3 點）。在把差異歸因於韌體之前，先確定兩邊是
+   同樣的路線、朝向、以及自由跑或鎖階。這比再試一個設定便宜。
+3. **向 SPARK 提 §5.6 的兩個問題**。`chip_repet` 欄位與 fallback `presets` 都是
+   本 SDK 構不到、而 demo 的 SDK 有的東西。這是目前唯一還有槓桿的方向。
+4. **不要讓出貨卡在這裡。** 現行配置近端已解、遠端當機已解，距離的缺口有明確的
+   技術理由。擋出貨的是 AT / u535 / auto-reconnect 等移植，那條線該繼續走。
 
 ## 附註：一處註解與實際值不符 —— 已修正
 
