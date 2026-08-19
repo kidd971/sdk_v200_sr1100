@@ -479,8 +479,9 @@ void at_cmd_core_notify_standby(void)
 {
     /* The status machine in at_cmd_core_process() is what normally emits this, but every
      * caller powers the MCU down on the next line and never comes back, so the event has to
-     * be sent from here. facade_expansion_uart_write() blocks until the transmission is
-     * complete, so the bytes are on the wire before the module loses power. */
+     * be sent from here -- and has to be flushed, since the write only queues. Without the
+     * flush at the end of this function the host would see the UART fall silent instead of
+     * being told why, which is the exact failure these two lines exist to prevent. */
     s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
     facade_expansion_uart_write("+EVENT: LE_UWB_DISCONNECTED\r\n");
 
@@ -491,6 +492,9 @@ void at_cmd_core_notify_standby(void)
      * up and re-syncs by itself, which is the opposite of what the host should do here:
      * this UART is about to stop answering, and only a reset brings it back. */
     facade_expansion_uart_write("+EVENT: LE_UWB_STANDBY\r\n");
+
+    /* Last thing before the caller powers the module down: put the queue on the wire. */
+    facade_expansion_uart_flush();
 }
 
 void at_cmd_core_register_pair_cb(void (*cb)(void))
@@ -534,9 +538,12 @@ void at_cmd_core_process(void)
         }
     }
 
-    /* Reset MCU deferred — after at_module_process() has sent OK. */
+    /* Reset MCU deferred — after at_module_process() has sent OK. "Sent" now means "queued",
+     * so the OK has to be flushed onto the wire before the reset discards the FIFO along with
+     * the rest of RAM. */
     if (s_reset_requested) {
         s_reset_requested = false;
+        facade_expansion_uart_flush();
         facade_system_reset();
     }
 
@@ -581,6 +588,7 @@ void at_cmd_core_process(void)
         if (s_shutdown_cb != NULL) {
             s_shutdown_cb(); /* app cleanup: stop timers, disconnect SWC */
         }
+        facade_expansion_uart_flush(); /* the OK and any events, before the radio goes */
         facade_uwb_shutdown(); /* assert radio shutdown pin(s) */
     }
 
