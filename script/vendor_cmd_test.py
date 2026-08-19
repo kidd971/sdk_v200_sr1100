@@ -72,8 +72,20 @@ class Reader(threading.Thread):
         buf = b""
         while not self.stop_flag.is_set():
             try:
-                chunk = self.port.read(256)
-            except (OSError, serial.SerialException) as exc:
+                # read(1) blocks until a byte actually arrives, then in_waiting takes the
+                # rest of that burst. A plain read(256) would sit out the whole port timeout
+                # accumulating whatever showed up in it and stamp all of it with one late
+                # timestamp -- which is the fiction this thread exists to avoid, and which
+                # also puts a command's OK and its acknowledgement into a single batch.
+                chunk = self.port.read(1)
+                if chunk and self.port.in_waiting:
+                    chunk += self.port.read(self.port.in_waiting)
+            except (OSError, ValueError, TypeError, serial.SerialException) as exc:
+                # A close racing a blocking read is not a port error. pyserial's win32
+                # backend drops its overlapped structures before the read returns, so what
+                # comes out is a TypeError from ctypes rather than anything serial-shaped.
+                if self.stop_flag.is_set() or not self.port.is_open:
+                    return
                 with self.lock:
                     self.lines.append((time.monotonic(), "<<port error: %s>>" % exc))
                 return
@@ -94,7 +106,10 @@ class Reader(threading.Thread):
         return out
 
     def stop(self):
+        """Stop and wait. The caller closes the port straight after, and the read timeout is
+        short, so joining here is cheap and keeps the close off a read in flight."""
         self.stop_flag.set()
+        self.join(1.0)
 
 
 def send_line(port, text):
@@ -106,11 +121,18 @@ def await_response(reader, timeout=2.0):
     """Collect lines until the AT server's final OK / +CME ERROR for one command."""
     deadline = time.monotonic() + timeout
     collected = []
+    final = None
     while time.monotonic() < deadline:
+        # Drain the WHOLE batch before returning. take() empties the reader, so returning on
+        # the OK would silently discard anything the same batch carried after it -- and what
+        # follows an OK is precisely the +EVENT: VENDOR_CMD_ACK for the command just sent.
+        # That lost roughly half the acknowledgements and reported it as a firmware failure.
         for _, line in reader.take():
             collected.append(line)
-            if line == "OK" or line.startswith("+CME ERROR"):
-                return line, collected
+            if final is None and (line == "OK" or line.startswith("+CME ERROR")):
+                final = line
+        if final is not None:
+            return final, collected
         time.sleep(0.002)
     return None, collected
 
@@ -174,6 +196,10 @@ def main():
                 due = time.monotonic() + period
 
                 send_line(tx, cmd)
+                # Timestamp the write, not the OK. The event can reach the rx port before we
+                # have finished draining the tx port's response, which made latency read
+                # negative for the fastest commands.
+                at_send = time.monotonic()
                 resp, lines = await_response(tx_reader)
 
                 for line in lines:
@@ -194,7 +220,7 @@ def main():
                         continue
                     errors.append((counter, resp))
                 else:
-                    sent[counter] = time.monotonic()
+                    sent[counter] = at_send
 
                 remaining = due - time.monotonic()
                 if remaining > 0:
