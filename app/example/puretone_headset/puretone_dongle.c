@@ -52,6 +52,15 @@
 #define DATA_TX_PERIOD_MS 10
 /* Boot auto-reconnect: max time to wait for the persisted peer before falling back to pairing. */
 #define RECONNECT_TIMEOUT_MS 10000
+
+/* How long without a packet from the node before link_is_up() calls the link down.
+ *
+ * The node sends one every DATA_TX_PERIOD_MS (10 ms), so this is 20 consecutive misses. Well
+ * clear of ordinary loss even at the deepest fallback rung, and far less twitchy than the
+ * Wireless Core's own 20 ms threshold, which exists for the audio pipeline rather than for a
+ * host-facing event. AT_UWB_DISCONNECT_DEBOUNCE_MS (400 ms) sits on top of this in the AT
+ * layer, so the host learns about a node that walked away in roughly 600 ms. */
+#define NODE_RX_TIMEOUT_MS 200
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
 /* Size of the buffer used to print errors. Must hold a full trap line:
@@ -287,6 +296,11 @@ static volatile swc_error_t s_last_send_err;     /* last err from swc_connection
 static volatile uint32_t s_send_err_count;       /* cumulative data-send failures */
 /* Last link margin the node reported over the back channel (fed to the audio fallback). */
 static volatile uint8_t s_node_rx_lm;
+/* When the node's 10 ms data packet last arrived, and whether one ever has since the
+ * connections were built. This is what link_is_up() answers with -- see there. Written from
+ * the wireless RX callback, read from the main loop; a 32-bit store is atomic on this core. */
+static volatile uint32_t s_node_rx_tick;
+static volatile bool     s_node_rx_seen;
 /* Media command queued for the next 10 ms data packet, an at_cmd_code_t. Edge triggered:
  * data_callback() clears it right after packing, so two AT commands issued inside the same
  * 10 ms window mean the first one never reaches the air. Written from AT command context and
@@ -973,6 +987,11 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* Snapshot for link_watch: this is the margin the DG actually uses to pick the
          * fallback mode. Compare against the lm the HS prints to spot a dead back channel. */
         s_node_rx_lm = received_user_data.link_margin;
+
+        /* Peer heartbeat for link_is_up(). Stamped here because reaching this line is the
+         * only direct evidence this side ever gets that the node is alive. */
+        s_node_rx_tick = facade_get_tick_ms();
+        s_node_rx_seen = true;
 
         /* Forward commands from node to SOC via UART. AT_CMD_NONE falls through silently:
          * it is what every packet without a pending command carries. */
@@ -2797,6 +2816,9 @@ static void app_teardown(void)
     tx_data_conn = NULL;
     rx_data_conn = NULL;
 
+    /* The heartbeat belongs to the connections that just went away. */
+    s_node_rx_seen = false;
+
     sac_pipeline_stop(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_stop(back_channel_sac_pipeline, &sac_status);
@@ -2867,18 +2889,34 @@ static bool at_get_link_status(void)
  */
 static bool link_is_up(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
-
-    if ((tx_data_conn != NULL) && swc_connection_get_connect_status(tx_data_conn, &swc_err)) {
-        return true;
+    /* "Have I heard the node recently", measured directly, rather than asking the Wireless
+     * Core for a connection status.
+     *
+     * Two versions of this were wrong before it. The first OR'd tx_data_conn in and returned
+     * true on it -- the wrong question on this side, because the coordinator is the timebase
+     * master and keeps transmitting into its own timeslots whether or not anything is
+     * listening (wps_mac.c even pins a TX connection to CONNECTED outright when it carries no
+     * ACK). The second asked rx_data_conn alone, which is the right connection to ask, and it
+     * STILL reported CONNECTED with the node powered off: on the coordinator link_update_
+     * connect_status() gets synced == true unconditionally, so the status can only fall
+     * through frame outcomes, and that path did not fire here. Rather than keep guessing at
+     * the core's bookkeeping for a host-facing event, measure the thing the event is about.
+     *
+     * The node's data_callback() sends a packet every 10 ms unconditionally, so an arriving
+     * packet is the peer's heartbeat and the RX callback stamps it. No packet for
+     * NODE_RX_TIMEOUT_MS means the node is not there.
+     *
+     * s_node_rx_seen guards the boot case: without it, a tick count still below the timeout
+     * would read as "heard recently" for the first NODE_RX_TIMEOUT_MS after reset -- and
+     * try_boot_reconnect() polls this, so it would have declared success against a node that
+     * was never powered on, which is exactly the failure this replaces.
+     *
+     * Both flags are cleared in app_teardown(), so a rebuilt link starts from "not heard". */
+    if (!s_node_rx_seen) {
+        return false;
     }
 
-    swc_err = SWC_ERR_NONE;
-    if ((rx_data_conn != NULL) && swc_connection_get_connect_status(rx_data_conn, &swc_err)) {
-        return true;
-    }
-
-    return false;
+    return (facade_get_tick_ms() - s_node_rx_tick) < NODE_RX_TIMEOUT_MS;
 }
 
 static int32_t at_get_link_margin(void)
