@@ -68,6 +68,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-slave-rjf-nocodec",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S slave, RJF, no codec (default external I2S port; AT command switches the mux)",
             "cacheVariables": {
@@ -78,6 +79,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-master-rjf-nocodec",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S master, RJF, no codec (default external I2S port; AT command switches the mux)",
             "cacheVariables": {
@@ -88,6 +90,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-slave-rjf-sineinj",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S slave, RJF, sine on both sides: DG injects into pipeline (radio TX), HS self-clocked local tone on SAI TX (external I2S clock drives timing, no internal timer)",
             "cacheVariables": {
@@ -100,7 +103,7 @@
         },
         {
             "name": "puretone-headset-quasar-u5a5-dualradio-slave-rjf",
-            "hidden": false,
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, dual radio (node only; coord excluded), I2S slave, RJF format",
             "cacheVariables": {
@@ -416,6 +419,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-cert-dg-smps",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535-slave-std-nocodec-smps"],
             "description": "CERTIFICATION: DG/coord. Boots straight into cert mode 2 (48k 24-bit) with no USER_2 button (CERTIF_FORCE_MODE=2). SMPS, single radio1. LED_USER_1 blinks ~1 Hz while running. TAKE puretone_dongle.bin from this build.",
             "cacheVariables": {
@@ -424,6 +428,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-cert-hs-radio1-smps",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535-master-std-nocodec-smps-hs"],
             "description": "CERTIFICATION: HS/node on radio1. Boots straight into cert mode 5 (DATA) with no USER_2 button (CERTIF_FORCE_MODE=5). SMPS, single radio1 (default). LED_USER_1 blinks ~1 Hz while running. TAKE puretone_headset.bin from this build.",
             "cacheVariables": {
@@ -432,6 +437,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-cert-hs-radio2-smps",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535-single-radio2-smps"],
             "description": "CERTIFICATION: HS/node on radio2 (SWC_SINGLE_RADIO_ID=2, UWB_L/SPI2/CS=PD5). Boots straight into cert mode 5 (DATA) with no USER_2 button (CERTIF_FORCE_MODE=5). SMPS. LED_USER_1 blinks ~1 Hz while running. TAKE puretone_headset.bin from this build.",
             "cacheVariables": {
@@ -715,6 +721,7 @@
         },
         {
             "name": "puretone-headset-quasar",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -727,6 +734,7 @@
         },
         {
             "name": "puretone-headset-quasar-usb_audio",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
