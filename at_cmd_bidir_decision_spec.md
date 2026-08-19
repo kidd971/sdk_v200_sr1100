@@ -575,12 +575,63 @@ ODM 已經對接了,所以錯的是註解不是行為。
    ODM 若只吃 `+EVENT` 不做輪詢就不需要;要做的話語意要先想清楚——
    「最後收到的」在一個會掉包的通道上是個容易誤用的概念。
 
-5. **實機驗證還沒做。** 目前只有 build 過。最小驗證組:
-   DG 下 `AT+VENDOR_CMD=1,"02"` → HS 應吐**一次**(不是三次)`+EVENT: VENDOR_CMD:1,"02"`;
-   DG 下 `AT+VENDOR_CMD=1,"02","ACK"` → DG 自己應收到 `+EVENT: VENDOR_CMD_ACK:1`;
-   把 HS 關掉再下一次 → DG 應在約 1 秒後收到 `+EVENT: VENDOR_CMD_FAIL:1`;
-   反向同理;DG 下 `AT+PLAY` → HS 吐 `+EVENT: PLAY` **且不會回彈**
-   (盯著 DG 的 AT port 確認沒有反覆出現 `+EVENT: PLAY`,那就是 echo 迴圈)。
+5. ~~實機驗證還沒做。~~ **已在 u535 實機上驗過,全部通過**(2026-08-19,
+   `...-slave-std-nocodec-ldo` 一對板子)。最小驗證組(兩個方向、單發不重複、
+   ACK、關機逾時 FAIL、`AT+PLAY` 不回彈)、`script/vendor_cmd_test.py` 的計數
+   壓測與 soak、保留 id 與 payload 上限的邊界、以及關機/reset 前的 UART flush,
+   都做過。
+
+   **這一輪抓到兩個 bug,都不在 vendor 通道本身,但都是它把問題逼出來的**——
+   記在這裡是因為兩個都會被下一個人重新踩到:
+
+   ### 5a. `+EVENT` 不能在 wireless RX callback 裡用阻塞 UART 寫出去
+
+   症狀是**一秒一條 vendor 指令就足以讓音樂破音**,而且改速率沒有差別、
+   ACK 與 best-effort 也沒有差別。後者其實是線索不是巧合:去重讓兩種模式
+   都剛好吐一個 `+EVENT`,所以付的是同一筆錢——**成本是每事件的,不是負載的**。
+
+   `facade_expansion_uart_write()` 當時是 `quasar_uart_transmit_blocking()`,
+   一行 vendor 事件在 115200 下要 spin 約 **2.3 ms**。而 `conn_rx_data_success_callback()`
+   是由 PendSV 派送的,優先權 **12**(`QUASAR_DEF_PRIO_PENDSV_IRQ`),而 audio
+   process timer 是 **13 / 14**、SWC data timer 是 **15** ——**全部在它下面**。
+
+   改成 IRQ 驅動(`quasar_uart_transmit_string_irq()`,推進 4096 byte 的軟體
+   FIFO 就返回)。代價是「寫了」不再等於「送出去了」,所以三個「印完就不回來」
+   的點必須先 flush:`facade_system_reset()` 前、`facade_uwb_shutdown()` 前、
+   以及 `at_cmd_core_notify_standby()` 結尾——那個函式的註解本來就白紙黑字
+   寫著它依賴阻塞行為。
+
+   **規則:AT 通道的任何輸出都不准在 callback context 裡等待。**
+
+   ### 5b. coordinator 不能用 SWC connect status 判斷「對面在不在」
+
+   拔掉 HS,DG 永遠停在 `2 (CONNECTED)`,不吐 `LE_UWB_DISCONNECTED`;
+   因此 HS 回來時也沒有轉變可報,`LE_UWB_CONNECTED` 一樣不會出現。
+   HS 抓 DG 消失卻完全正常——**失效是單向的**。
+
+   根因在 `update_connect_status_main()`:
+
+   ```c
+   synced = (node_role == NETWORK_NODE) ? link_tdma_sync_is_slave_synced(..) : true;
+   ```
+
+   **coordinator 永遠拿到 `synced == true`。** node 是靠掉 sync 立刻判定斷線的;
+   coordinator 沒有 sync 可以掉,只剩「累積 frame outcome」那條路,而那條路在
+   這個情境下沒有觸發。中途試過只問 `rx_data_conn`(不問 `tx_data_conn`,因為
+   coordinator 是 timebase master,對面在不在它都照發,`wps_mac.c` 甚至會把
+   沒有 ACK 的 TX 連線直接釘成 CONNECTED)——**還是不夠**。
+
+   最後改成**收包看門狗**:HS 的 `data_callback()` 每 10 ms 無條件送一包,
+   所以收到包本身就是心跳。DG 的 RX callback 蓋時間戳,`link_is_up()` 只回答
+   「最近 200 ms 內有沒有聽到」。AT 層的 400 ms 下降緣去抖疊在上面,
+   總共約 600 ms 報出斷線;上升緣不去抖。
+
+   同一個 bug 還有另一半:`try_boot_reconnect()` 用的是同一個 `link_is_up()`,
+   所以 DG 的開機自動回連可以在 **HS 根本沒開機**的情況下宣告成功。看門狗那個
+   「開機後還沒聽到過」的旗標就是為了堵這個。
+
+   **規則:要給 host 的連線事件,量「有沒有聽到對面」,不要問 wireless core
+   的連線狀態——尤其在 coordinator 這一側。**
 
 ## 10. 與 w240 / unidirectional 的關係
 
