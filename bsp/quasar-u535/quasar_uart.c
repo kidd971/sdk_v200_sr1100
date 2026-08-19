@@ -278,6 +278,16 @@ uint8_t quasar_uart_receive_dma(quasar_uart_selection_t uart_selection)
     return received_data;
 }
 
+bool quasar_uart_transmit_is_complete(quasar_uart_selection_t uart_selection)
+{
+    USART_TypeDef *uart_instance = uart_get_instance(uart_selection);
+
+    /* Both halves are needed: an empty FIFO only means the ISR has handed the last byte to
+     * TDR, and TC is what says that byte has actually been shifted out. */
+    return (quasar_fifo_get_count(&quasar_uart_fifo_tx[uart_selection]) == 0) &&
+           ((uart_instance->ISR & USART_ISR_TC) == USART_ISR_TC);
+}
+
 void quasar_uart_transmit_blocking(quasar_uart_selection_t uart_selection, uint8_t *data, uint16_t size,
                                    uint16_t timeout, quasar_bsp_status_t *err)
 {

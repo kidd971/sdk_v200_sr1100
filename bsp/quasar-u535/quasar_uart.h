@@ -208,6 +208,18 @@ uint8_t quasar_uart_receive_dma(quasar_uart_selection_t uart_selection);
 void quasar_uart_transmit_blocking(quasar_uart_selection_t uart_selection, uint8_t *data, uint16_t size,
                                    uint16_t timeout, quasar_bsp_status_t *err);
 
+/** @brief Report whether an interrupt-driven transmission has fully left the peripheral.
+ *
+ *  True when the software TX FIFO is empty AND the transmit shift register has finished, so
+ *  a caller that is about to reset or power the chip down can wait for the last bytes to be
+ *  on the wire. Nothing else should wait on this: the point of the IRQ transmit path is not
+ *  to wait for it.
+ *
+ *  @param[in] uart_selection  Selected UART peripheral.
+ *  @return true if nothing is queued and nothing is in flight.
+ */
+bool quasar_uart_transmit_is_complete(quasar_uart_selection_t uart_selection);
+
 /** @brief Receive over UART using blocking method.
  *
  *  @note This function should be used only if the UART instance has been initialized without
