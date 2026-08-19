@@ -353,11 +353,19 @@ void facade_expansion_uart_init(uint32_t baud_rate)
 
 void facade_expansion_uart_write(char *string)
 {
-    quasar_bsp_status_t err;
+    /* Non-blocking, for the reason given in at_cmd_core_facade.h. */
+    quasar_uart_transmit_string_irq(QUASAR_DEF_UART_SELECTION_EXPANSION, string, strlen(string));
+}
 
-    quasar_uart_transmit_blocking(QUASAR_DEF_UART_SELECTION_EXPANSION,
-                                  (uint8_t *)string, strlen(string),
-                                  EXPANSION_UART_TX_TIMEOUT_MS, &err);
+void facade_expansion_uart_flush(void)
+{
+    uint32_t deadline = facade_get_tick_ms() + EXPANSION_UART_TX_TIMEOUT_MS;
+
+    while (!quasar_uart_transmit_is_complete(QUASAR_DEF_UART_SELECTION_EXPANSION)) {
+        if ((int32_t)(facade_get_tick_ms() - deadline) >= 0) {
+            break;
+        }
+    }
 }
 
 uint8_t facade_expansion_uart_read_byte(void)

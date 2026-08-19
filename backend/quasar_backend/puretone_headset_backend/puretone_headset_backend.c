@@ -466,13 +466,40 @@ void facade_expansion_uart_init(uint32_t baud_rate)
 void facade_expansion_uart_write(char *string)
 {
 #if defined(AT_CONSOLE_UART_SELECTION)
-    quasar_bsp_status_t err;
-
-    quasar_uart_transmit_blocking(AT_CONSOLE_UART_SELECTION,
-                                  (uint8_t *)string, strlen(string),
-                                  EXPANSION_UART_TX_TIMEOUT_MS, &err);
+    /* IRQ-driven, not blocking. This used to be quasar_uart_transmit_blocking(), which spins
+     * until the last byte has left -- about 2.3 ms for a vendor event line at 115200. The
+     * callers that matter are the +EVENT notifiers, and those run in the wireless RX callback
+     * (PendSV, priority 12), which sits ABOVE the audio process timers (13/14) and the SWC
+     * data timer (15). So every event froze the audio pipeline for the length of its line,
+     * and it was audible at ONE vendor command per second -- a per-event cost, not a load
+     * effect, which is why changing the command rate did not change it.
+     *
+     * The push happens under a critical section and the UART interrupt drains the FIFO, so
+     * this costs microseconds here and a byte-sized interrupt per character afterwards. The
+     * FIFO is QUASAR_FIFO_BUFFER_SIZE (4096) deep -- about 350 ms of wire time -- so nothing
+     * this module emits can overrun it; a full FIFO drops bytes rather than blocking, which
+     * is the right trade for a diagnostic channel and the wrong one for audio.
+     *
+     * The cost of the change is that "written" no longer means "sent". Anything that stops
+     * the CPU afterwards must call facade_expansion_uart_flush() first. */
+    quasar_uart_transmit_string_irq(AT_CONSOLE_UART_SELECTION, string, strlen(string));
 #else
     (void)string;  /* Expansion UART not available on this board variant. */
+#endif
+}
+
+void facade_expansion_uart_flush(void)
+{
+#if defined(AT_CONSOLE_UART_SELECTION)
+    uint32_t deadline = facade_get_tick_ms() + EXPANSION_UART_TX_TIMEOUT_MS;
+
+    /* Bounded: this only ever runs on a path that is about to reset or power down, and a
+     * peripheral that never reports completion must not be able to hold that path open. */
+    while (!quasar_uart_transmit_is_complete(AT_CONSOLE_UART_SELECTION)) {
+        if ((int32_t)(facade_get_tick_ms() - deadline) >= 0) {
+            break;
+        }
+    }
 #endif
 }
 

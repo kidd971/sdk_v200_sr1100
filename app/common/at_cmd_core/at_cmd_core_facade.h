@@ -20,11 +20,31 @@ extern "C" {
  */
 void facade_expansion_uart_init(uint32_t baud_rate);
 
-/** @brief Transmit a null-terminated string over the expansion UART (blocking).
+/** @brief Queue a null-terminated string on the expansion UART (NON-BLOCKING).
+ *
+ *  Returns as soon as the bytes are in the driver's TX FIFO; the UART interrupt puts them on
+ *  the wire. This must not block, because +EVENT lines are emitted from the wireless RX
+ *  callback, which runs in PendSV -- above the audio process timers. A blocking transmit
+ *  there stalled the audio pipeline for the length of the line (~2.3 ms at 115200), which was
+ *  audible at one vendor command per second.
+ *
+ *  A whole string is queued atomically with respect to interrupts, so two writers cannot
+ *  interleave mid-line.
  *
  *  @param[in] string  Null-terminated string to transmit.
  */
 void facade_expansion_uart_write(char *string);
+
+/** @brief Wait until everything queued by facade_expansion_uart_write() is on the wire.
+ *
+ *  The ONLY legitimate use is immediately before the module stops running -- system reset,
+ *  radio shutdown, entering standby -- where the queued bytes would otherwise be discarded
+ *  with the rest of the state and the host would see the UART simply fall silent. Bounded by
+ *  an internal timeout so a wedged peripheral cannot hang the shutdown path.
+ *
+ *  Anywhere else this reintroduces exactly the stall the non-blocking write exists to avoid.
+ */
+void facade_expansion_uart_flush(void);
 
 /** @brief Read one byte from the expansion UART RX FIFO (non-blocking).
  *

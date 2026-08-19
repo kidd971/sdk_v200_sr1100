@@ -13,10 +13,11 @@
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
 #include "at_cmd_core.h"
-#include "at_cmd_core_facade.h"  /* facade_system_reset: AT+UWB_CONNECT reboots into boot auto-reconnect */
+#include "at_cmd_core_facade.h"  /* facade_system_reset: AT+LE_UWB_CONNECT reboots into boot auto-reconnect */
 #include "pairing_api.h"
 #include "pairing_cfg.h"
 #include "puretone_headset_facade.h"
+#include "puretone_link_data.h"  /* user_data_t: the wire format shared with puretone_headset.c */
 #include "reconnect_store.h"  /* boot auto-reconnect: persist/restore the pairing address */
 #include "sac_api.h"
 #include "sac_cdc.h"
@@ -45,8 +46,7 @@
 #define SAC_MEM_POOL_SIZE 50000
 /* Total memory needed for the Wireless Core. */
 #define SWC_MEM_POOL_SIZE 10500
-/* The data connection supports up to 16 bytes. */
-#define MAX_DATA_PAYLOAD_SIZE 16
+/* MAX_DATA_PAYLOAD_SIZE comes from puretone_link_data.h, next to the struct it has to hold. */
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 5000
 /* Period for data transmission timer in ms.
@@ -57,6 +57,15 @@
 #define DATA_TX_PERIOD_MS 10
 /* Boot auto-reconnect: max time to wait for the persisted peer before falling back to pairing. */
 #define RECONNECT_TIMEOUT_MS 10000
+
+/* How long without a packet from the node before link_is_up() calls the link down.
+ *
+ * The node sends one every DATA_TX_PERIOD_MS (10 ms), so this is 20 consecutive misses. Well
+ * clear of ordinary loss even at the deepest fallback rung, and far less twitchy than the
+ * Wireless Core's own 20 ms threshold, which exists for the audio pipeline rather than for a
+ * host-facing event. AT_UWB_DISCONNECT_DEBOUNCE_MS (400 ms) sits on top of this in the AT
+ * layer, so the host learns about a node that walked away in roughly 600 ms. */
+#define NODE_RX_TIMEOUT_MS 200
 /* Period for statistics print timer in ms. */
 #define STATS_PRINT_PERIOD_MS 1000
 /* Size of the buffer used to print errors. Must hold a full trap line:
@@ -99,7 +108,7 @@
 
 /* **** Standby test hook (bench only — off in product builds) ****
  * Set to 1 to bind USER_3 to at_start_disconnect(), i.e. the Standby power-down, so the
- * sleep path can be exercised from the board rather than only over AT+UWB_DISCONNECT.
+ * sleep path can be exercised from the board rather than only over AT+LE_UWB_DISCONNECT.
  * Mirrors the HS side. Left at 0 so USER_3 keeps the back-channel volume control. */
 #ifndef STANDBY_TEST_HOOKS
 #define STANDBY_TEST_HOOKS 0
@@ -110,7 +119,7 @@
  * handler, not where the assert tripped. Re-define them for THIS translation unit
  * so they stash __FILE__/__LINE__ into the globals below before trapping; the fatal
  * handler then prints "<TAG> TRAP <file>:<line> code=<n>". Mirrors the HS side.
- * Matters most on the app_init() re-entry path (AT+UWB_CONNECT, boot auto-reconnect):
+ * Matters most on the app_init() re-entry path (AT+LE_UWB_CONNECT, boot auto-reconnect):
  * every step there is asserted, so without this a failed re-init is an anonymous wedge. */
 static volatile const char *s_assert_file = NULL;
 static volatile uint32_t s_assert_line = 0;
@@ -168,16 +177,8 @@ typedef enum connection_priority {
 
 /** @brief Data used for transmitting and receiving link margin and button state.
  */
-typedef struct user_data {
-    /*! A boolean indicating the button's state. */
-    bool button_state;
-    /*! The link margin to monitor link quality. */
-    uint8_t link_margin;
-    /*! Pending command from node: 0=none, 1=next_track, 2=pre_track, 3=play, 4=stop. */
-    uint8_t cmd_type;
-    /*! Battery level of the node (0-100%). */
-    uint8_t battery_pct;
-} user_data_t;
+/* user_data_t now lives in puretone_link_data.h -- see that file for why the two hand-copied
+ * definitions were merged and what the rules are for extending it. */
 
 /** @brief Enumeration representing the fallback states.
  */
@@ -311,6 +312,16 @@ static volatile swc_error_t s_last_send_err;     /* last err from swc_connection
 static volatile uint32_t s_send_err_count;       /* cumulative data-send failures */
 /* Last link margin the node reported over the back channel (fed to the audio fallback). */
 static volatile uint8_t s_node_rx_lm;
+/* When the node's 10 ms data packet last arrived, and whether one ever has since the
+ * connections were built. This is what link_is_up() answers with -- see there. Written from
+ * the wireless RX callback, read from the main loop; a 32-bit store is atomic on this core. */
+static volatile uint32_t s_node_rx_tick;
+static volatile bool     s_node_rx_seen;
+/* Media command queued for the next 10 ms data packet, an at_cmd_code_t. Edge triggered:
+ * data_callback() clears it right after packing, so two AT commands issued inside the same
+ * 10 ms window mean the first one never reaches the air. Written from AT command context and
+ * read from the data timer, hence volatile. */
+static volatile uint8_t s_pending_cmd = AT_CMD_NONE;
 
 /* **** Application Specific **** */
 static facade_certification_mode_t certification_mode;
@@ -414,9 +425,11 @@ static void at_start_connect(void);
 static void at_start_disconnect(void);
 static void app_teardown(void);
 static void at_start_shutdown(void);
+static bool link_is_up(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
 static void at_set_vol(uint8_t vol);
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 int main(void)
@@ -452,7 +465,14 @@ int main(void)
     at_cmd_core_register_shutdown_cb(at_start_shutdown);
     at_cmd_core_register_link_status_cb(at_get_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
+    /* AT+VOL on this side means "my back channel", applied locally -- see at_set_vol() and
+     * at_cmd_core_register_vol_cb(). The media keys are the opposite: they mean "tell the
+     * headset", so they go through the forwarding hook. Registering it is what finally makes
+     * AT+PLAY / STOP / NEXT_TRACK / PRE_TRACK do something here; until now they returned OK
+     * with no callback registered at either end, which is the worst kind of broken because
+     * the host cannot tell it from success. */
     at_cmd_core_register_vol_cb(at_set_vol);
+    at_cmd_core_register_cmd_tx_cb(at_cmd_tx);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
     /* Boot banner, ahead of UWB_READY. The DG has no periodic crash dump and its LINK_WATCH
      * output goes to the ST-Link VCP (UART4), which a customer board does not necessarily
@@ -1046,16 +1066,33 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
          * fallback mode. Compare against the lm the HS prints to spot a dead back channel. */
         s_node_rx_lm = received_user_data.link_margin;
 
-        /* Forward commands from node to SOC via UART. */
-        if (received_user_data.cmd_type == 1) {
+        /* Peer heartbeat for link_is_up(). Stamped here because reaching this line is the
+         * only direct evidence this side ever gets that the node is alive. */
+        s_node_rx_tick = facade_get_tick_ms();
+        s_node_rx_seen = true;
+
+        /* Forward commands from node to SOC via UART. AT_CMD_NONE falls through silently:
+         * it is what every packet without a pending command carries. */
+        switch (received_user_data.cmd_type) {
+        case AT_CMD_NEXT_TRACK:
             at_cmd_core_notify_next_track_received();
-        } else if (received_user_data.cmd_type == 2) {
+            break;
+        case AT_CMD_PRE_TRACK:
             at_cmd_core_notify_pre_track_received();
-        } else if (received_user_data.cmd_type == 3) {
+            break;
+        case AT_CMD_PLAY:
             at_cmd_core_notify_play_received();
-        } else if (received_user_data.cmd_type == 4) {
+            break;
+        case AT_CMD_STOP:
             at_cmd_core_notify_stop_received();
+            break;
+        default:
+            break;
         }
+
+        /* Vendor pass-through: de-duplication and the +EVENT line happen in the AT core, so
+         * this side never needs to know what the command means. */
+        user_data_deliver_vendor(&received_user_data);
 
         /* Cache battery level reported by node. */
         at_cmd_core_set_battery_level(received_user_data.battery_pct);
@@ -2339,7 +2376,23 @@ static void data_callback(void)
     /* Send the button state and the link margin to the Node. */
     transmitted_user_data.link_margin = fallback_info.link_margin;
     transmitted_user_data.button_state = facade_read_button_state();
-    wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);
+
+    /* Edge triggered: clear the slot as soon as it is packed, exactly as the node does.
+     * Nothing checks whether the send below succeeded, so a media command issued while the
+     * link is down is lost rather than retried -- acceptable for a key press a user can
+     * repeat, and the reason at_cmd_bidir_decision_spec.md keeps state-carrying fields off
+     * this mechanism. */
+    transmitted_user_data.cmd_type = s_pending_cmd;
+    s_pending_cmd = AT_CMD_NONE;
+
+    /* Vendor pass-through. Unlike cmd_type this is not a single slot the sender clears: the
+     * AT core hands out the same frame for several consecutive packets and only then moves
+     * on, which is what stands in for an acknowledgement. */
+    user_data_pack_vendor(&transmitted_user_data);
+
+    /* Length, not sizeof: the vendor payload is empty in almost every packet and must not be
+     * put on the air when it is. See user_data_tx_size(). */
+    wireless_send_data(&transmitted_user_data, user_data_tx_size(&transmitted_user_data), &swc_err);
 }
 
 /** @brief Handle pairing button callback.
@@ -2447,7 +2500,7 @@ static void enter_pairing_mode(void)
  *
  *  @return BOOT_RECONNECT_OK   link re-established (paired, streaming);
  *          BOOT_RECONNECT_PAIR no usable record (never paired), or the user
- *                              aborted the attempt to pair (button / AT+UWB_PAIR)
+ *                              aborted the attempt to pair (button / AT+LE_UWB_PAIR)
  *                              -- caller enters pairing;
  *          BOOT_RECONNECT_IDLE a record existed but the node was not up in time --
  *                              the coordinator's core is left running so the node
@@ -2455,7 +2508,6 @@ static void enter_pairing_mode(void)
  */
 static boot_reconnect_result_t try_boot_reconnect(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
     uint32_t start;
     bool connected = false;
 
@@ -2486,17 +2538,20 @@ static boot_reconnect_result_t try_boot_reconnect(void)
     app_init();
     device_pairing_state = DEVICE_PAIRED;
 
-    /* Poll the real SWC link status (the same tx_audio_conn indicator link_watch
-     * uses on the coordinator) until the node is reachable or the timeout
+    /* Poll the real SWC link status until the node is reachable or the timeout
      * elapses. Keep servicing buttons and AT commands meanwhile; those handlers
-     * defer their teardown through s_boot_reconnect_abort. */
+     * defer their teardown through s_boot_reconnect_abort.
+     *
+     * link_is_up(), not tx_audio_conn: this runs before the host has necessarily
+     * started feeding audio, and waiting on the audio connection made a reconnect
+     * to a perfectly reachable node report CONNECT_FAIL and sit in IDLE until
+     * someone pressed play. */
     s_boot_reconnect_abort = false;
     s_boot_reconnect_active = true;
 
     start = facade_get_tick_ms();
     while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
-        swc_err = SWC_ERR_NONE;
-        if (swc_connection_get_connect_status(tx_audio_conn, &swc_err)) {
+        if (link_is_up()) {
             connected = true;
             break;
         }
@@ -2521,7 +2576,7 @@ static boot_reconnect_result_t try_boot_reconnect(void)
         return BOOT_RECONNECT_OK;
     }
 
-    /* The user aborted with the pairing button / AT+UWB_PAIR, or a deferred teardown
+    /* The user aborted with the pairing button / AT+LE_UWB_PAIR, or a deferred teardown
      * already released the core handles: dismantle whatever is left (also resets
      * device_pairing_state to UNPAIRED and stops the pipelines) and let the caller
      * enter pairing. The flash record is intentionally left intact. */
@@ -2665,24 +2720,38 @@ static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_
 {
     uint8_t *payload = NULL;
     uint16_t payload_size = 0;
+    uint16_t copy_size = 0;
 
     /* Read received data. */
     payload_size = swc_connection_receive(rx_data_conn, &payload, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    if (payload_size > size) {
-        return 0;
+    /* Copy only what the caller's struct can hold, and copy it whatever the sizes are.
+     *
+     * This used to "return 0" on an oversized payload WITHOUT calling
+     * swc_connection_receive_complete(), which leaks the RX buffer. That is unreachable while
+     * both ends run the same firmware, but user_data_t grows over releases (face_state, the
+     * vendor pass-through fields), so an old build receiving a newer, larger packet becomes a
+     * real field condition during a rollout. The failure mode was not "the new field is
+     * missing": a leaked buffer every 10 ms fills the RX queue and kills the data connection
+     * permanently -- link margin stops updating and fallback wanders.
+     *
+     * Truncating instead is safe because user_data_t is append-only: the prefix a shorter
+     * struct understands sits at the same offsets in the longer one. The reverse case
+     * (payload shorter than the struct) already worked, because callers zero-initialize and
+     * every field's 0 means "absent". Both directions therefore degrade to "the fields this
+     * build knows about", which is the whole point. */
+    copy_size = (payload_size > size) ? size : payload_size;
+
+    if (received_data != NULL && payload != NULL && copy_size > 0) {
+        memcpy(received_data, payload, copy_size);
     }
 
-    if (received_data != NULL) {
-        memcpy(received_data, payload, payload_size);
-    }
-
-    /* Free the payload memory. */
+    /* Free the payload memory. Must happen on every path that took a payload. */
     swc_connection_receive_complete(rx_data_conn, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    return payload_size;
+    return copy_size;
 }
 
 /** @brief Initialize the application.
@@ -2704,7 +2773,7 @@ static void app_init(void)
     /* Deliberately NOT set to CONNECTED here: swc_connect() only arms the link, it does
      * not mean the node answered. Declaring CONNECTED at this point overwrote the
      * CONNECTING state its callers had just set, so the AT_UWB_CONNECT_TIMEOUT_MS window
-     * and +EVENT: UWB_CONNECT_FAIL could never fire and AT+UWB_CONN_STATUS? reported a
+     * and +EVENT: LE_UWB_CONNECT_FAIL could never fire and AT+LE_UWB_CONN_STATUS? reported a
      * live link even when the node was absent. The status is now driven by the link poll
      * in at_cmd_core_process() via at_get_link_status(). */
 
@@ -2733,7 +2802,7 @@ static void app_init(void)
     facade_data_timer_start();
 }
 
-/** @brief AT+UWB_PAIR -- re-pair: drop the current pairing (if any), then enter pairing.
+/** @brief AT+LE_UWB_PAIR -- re-pair: drop the current pairing (if any), then enter pairing.
  *
  *  Unlike pairing_button_callback(), which is a three-way toggle (press once to unpair,
  *  press again to pair), the AT command is a single action: the host asks for "re-pair"
@@ -2751,7 +2820,7 @@ static void app_init(void)
  *  between them, so with the link down neither can tell the other to re-pair), which makes
  *  a mistimed attempt the normal kind of failure, not an exotic one -- and erasing up front
  *  would turn every one of them into a permanently lost pairing. On PAIR_FAIL the module is
- *  simply back where it started, and AT+UWB_CONNECT resets it into boot auto-reconnect,
+ *  simply back where it started, and AT+LE_UWB_CONNECT resets it into boot auto-reconnect,
  *  which reloads the kept record. Same policy as try_boot_reconnect(): a peer that cannot
  *  be reached is not a reason to forget it.
  */
@@ -2772,7 +2841,7 @@ static void at_start_pairing(void)
     enter_pairing_mode();
 }
 
-/** @brief AT+UWB_CONNECT -- reconnect by resetting the MCU into boot auto-reconnect.
+/** @brief AT+LE_UWB_CONNECT -- reconnect by resetting the MCU into boot auto-reconnect.
  *
  *  This used to re-run app_init() over the stack that at_start_disconnect() had just torn
  *  down. That crashed: swc_init()/sac_init() themselves are re-entrant (both reset their
@@ -2784,7 +2853,7 @@ static void at_start_pairing(void)
  *  So reconnecting in place is not attempted. A reset boots into try_boot_reconnect(),
  *  which restores the link from the persisted pairing address -- the one reconnect path
  *  that is actually validated. The host sees:
- *      AT+UWB_CONNECT -> OK -> +EVENT: UWB_READY -> +EVENT: UWB_CONNECTED
+ *      AT+LE_UWB_CONNECT -> OK -> +EVENT: LE_UWB_READY -> +EVENT: LE_UWB_CONNECTED
  *  The OK is already on the wire when this runs: the AT core defers this callback until
  *  after the response is sent, and the expansion UART writes are blocking.
  */
@@ -2806,7 +2875,7 @@ static void at_start_connect(void)
 /** @brief Tear the wireless core and audio down in place, leaving the device UNPAIRED.
  *
  *  Only used by the boot auto-reconnect timeout, which must dismantle the half-open link
- *  before main() falls through to pairing. It is NOT what AT+UWB_DISCONNECT does: that
+ *  before main() falls through to pairing. It is NOT what AT+LE_UWB_DISCONNECT does: that
  *  powers the module down instead (see at_start_disconnect), precisely because this path
  *  is the unreliable one -- swc_disconnect() can report a timeout and the SAC pipelines
  *  cannot be restarted afterwards.
@@ -2842,6 +2911,9 @@ static void app_teardown(void)
     tx_data_conn = NULL;
     rx_data_conn = NULL;
 
+    /* The heartbeat belongs to the connections that just went away. */
+    s_node_rx_seen = false;
+
     sac_pipeline_stop(main_channel_sac_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_stop(back_channel_sac_pipeline, &sac_status);
@@ -2858,7 +2930,7 @@ static void app_teardown(void)
     at_cmd_core_set_uwb_conn_status(AT_UWB_CONN_STATUS_STANDBY);
 }
 
-/** @brief AT+UWB_DISCONNECT -- power the module down into Standby. Does not return.
+/** @brief AT+LE_UWB_DISCONNECT -- power the module down into Standby. Does not return.
  *
  *  No SDK teardown is attempted, deliberately. Stopping the wireless core and the audio
  *  pipelines in place is the unreliable path: swc_disconnect() can report a timeout (and
@@ -2868,7 +2940,7 @@ static void app_teardown(void)
  *
  *  The module leaves Standby only through a reset, which runs main() from the top and so
  *  goes straight into boot auto-reconnect. On this hardware that is NRST (the SOC line or
- *  the reset button); AT+UWB_CONNECT reaches the same place via facade_system_reset().
+ *  the reset button); AT+LE_UWB_CONNECT reaches the same place via facade_system_reset().
  */
 static void at_start_disconnect(void)
 {
@@ -2884,16 +2956,62 @@ static void at_start_shutdown(void)
 
 static bool at_get_link_status(void)
 {
-    swc_error_t swc_err = SWC_ERR_NONE;
-
     /* device_pairing_state alone only says "the app believes it is paired" — it is set
      * unconditionally right after app_init(), so it reported a link that may never have
-     * come up. Ask the Wireless Core instead. Non-asserting read, like link_watch(), so a
-     * status poll during a drop cannot itself trap. */
-    if (device_pairing_state != DEVICE_PAIRED || tx_audio_conn == NULL) {
+     * come up. Ask the Wireless Core instead, through link_is_up(). */
+    if (device_pairing_state != DEVICE_PAIRED) {
         return false;
     }
-    return swc_connection_get_connect_status(tx_audio_conn, &swc_err);
+    return link_is_up();
+}
+
+/** @brief True while the node is still answering this coordinator.
+ *
+ *  The data connections, not tx_audio_conn. On the coordinator the audio connection's status
+ *  is only a statement about audio: with an idle source there is nothing queued, auto-sync is
+ *  off on every connection, so the audio timeslots go out empty and the frame outcome is
+ *  FRAME_WAIT -- which link_update_connect_status() ignores. The status therefore freezes at
+ *  whatever it was when the music stopped and stays there until playback resumes. Frozen is
+ *  worse than wrong here: OR-ing it in would mask a node that switched off mid-pause.
+ *
+ *  Both data connections are exercised every 10 ms whatever the audio source is doing --
+ *  tx_data_conn by data_callback() (and ACK'd by the node), rx_data_conn by the node's own
+ *  report -- so their status is live evidence that the peer is there. Either one up is
+ *  enough; a node that really goes away takes both down inside the same 20 ms.
+ *
+ *  Non-asserting reads, like link_watch(), so a status poll during a drop cannot itself trap.
+ *  Both handles are NULL-checked: every teardown path releases them.
+ */
+static bool link_is_up(void)
+{
+    /* "Have I heard the node recently", measured directly, rather than asking the Wireless
+     * Core for a connection status.
+     *
+     * Two versions of this were wrong before it. The first OR'd tx_data_conn in and returned
+     * true on it -- the wrong question on this side, because the coordinator is the timebase
+     * master and keeps transmitting into its own timeslots whether or not anything is
+     * listening (wps_mac.c even pins a TX connection to CONNECTED outright when it carries no
+     * ACK). The second asked rx_data_conn alone, which is the right connection to ask, and it
+     * STILL reported CONNECTED with the node powered off: on the coordinator link_update_
+     * connect_status() gets synced == true unconditionally, so the status can only fall
+     * through frame outcomes, and that path did not fire here. Rather than keep guessing at
+     * the core's bookkeeping for a host-facing event, measure the thing the event is about.
+     *
+     * The node's data_callback() sends a packet every 10 ms unconditionally, so an arriving
+     * packet is the peer's heartbeat and the RX callback stamps it. No packet for
+     * NODE_RX_TIMEOUT_MS means the node is not there.
+     *
+     * s_node_rx_seen guards the boot case: without it, a tick count still below the timeout
+     * would read as "heard recently" for the first NODE_RX_TIMEOUT_MS after reset -- and
+     * try_boot_reconnect() polls this, so it would have declared success against a node that
+     * was never powered on, which is exactly the failure this replaces.
+     *
+     * Both flags are cleared in app_teardown(), so a rebuilt link starts from "not heard". */
+    if (!s_node_rx_seen) {
+        return false;
+    }
+
+    return (facade_get_tick_ms() - s_node_rx_tick) < NODE_RX_TIMEOUT_MS;
 }
 
 static int32_t at_get_link_margin(void)
@@ -2924,6 +3042,27 @@ static void at_set_vol(uint8_t vol)
         sac_processing_ctrl(back_channel_volume_processing, back_channel_sac_pipeline,
                             SAC_VOLUME_INCREASE, SAC_NO_ARG, &sac_status);
     }
+}
+
+/** @brief Queue a media command for the node. Registered as at_cmd_core's forwarding hook.
+ *
+ *  Runs in AT command context, so it only sets the pending slot; data_callback() puts it on
+ *  the air on the next 10 ms tick.
+ *
+ *  Volume is filtered out rather than forwarded. AT+VOL here has always adjusted this
+ *  device's own back channel (at_set_vol()), and that is what ODM hosts are integrated
+ *  against; forwarding it as well would make one AT command change two different speakers.
+ *  AT_CMD_VOL therefore stays reserved and never reaches the air.
+ */
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value)
+{
+    (void)value;
+
+    if (cmd_type == AT_CMD_VOL) {
+        return;
+    }
+
+    s_pending_cmd = cmd_type;
 }
 
 /** @brief Emit one self-diagnosing trap line, then halt.
