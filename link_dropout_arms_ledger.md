@@ -62,13 +62,13 @@ buffer 提供「撐過突發遮擋的時間」。三個各補一個獨立的資�
 | 1 | **CCA try count 2 → 14**<br>`MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT` | ❌ 無改善 | `rx_rej` 爬而 `cca_fail` 不動 —— 是解碼失敗不是通道占用。14 次約 66 µs 吃掉 250 µs slot 的四分之一，還不是免費的。已改回 2（commit `28d1a67`） |
 | 2 | **CCA try count（遠端）** | ❌ 不可能有效 | 遠端 `cca_fail` 也是 0，這格在任何距離都是 no-op |
 | 3 | **Fallback level 4 輸出功率 = SPARK demo 值**<br>`FBK4_TX_POWER_REF=1`，width 6/6/6/6 gain 1/1/1/0 | ❌ 掉線距離完全沒動 | 量了**兩次**（一次配 ISI 1、一次配 slim3）。加功率不能把反射「解塗抹」—— 反射跟著等比放大。**雖然無效，仍已改為預設值**：這是整張功率表最後一個沒有對照來源的欄位，對齊參考比留著自創值有價值 |
-| 4 | **Fallback level 4 輸出功率拉到天花板**<br>`FBK4_TX_POWER_REF=2`，width 7/7/7/7 gain 0/0/0/0 | ❌ *(結果待補)* | 刻意跳過「再加一階」直接測上限：三階 width 都沒動到的東西，多一階不會翻盤。`bin/v240-unidir-slim3-l4max` |
-| 5 | **Node ACK 功率拉到天花板**<br>`ACK_TX_POWER_MAX=1`，width 7 gain 0 | ❌ *(結果待補)* | ACK 是全 app 唯一「不隨 ladder 移動」的功率，形狀最符合「鎖 mode 4 與自由跑距離一樣」。`bin/v240-unidir-slim3-allmax` |
+| 4 | **Fallback level 4 輸出功率拉到天花板**<br>`FBK4_TX_POWER_REF=2`，width 7/7/7/7 gain 0/0/0/0 | ❌ **完全無影響** | 刻意跳過「再加一階」直接測上限：三階 width 都沒動到的東西，多一階不會翻盤。實測證實了這個預期。`bin/v240-unidir-slim3-l4max` |
+| 5 | **Node ACK 功率拉到天花板**<br>`ACK_TX_POWER_MAX=1`，width 7 gain 0 | ❌ **完全無影響** | ACK 是全 app 唯一「不隨 ladder 移動」的功率，形狀最符合「鎖 mode 4 與自由跑距離一樣」——形狀對，結果還是沒動。`bin/v240-unidir-slim3-allmax` |
 | 6 | **ISI level 1**（SPARK 出貨值） | ❌ 近端斷音回來 | 對 multipath 不夠 |
 | 7 | **ISI level 3** | ❌ 無遮擋就爆音 | preamble 屬於**連線**不屬於 fallback mode，必須容納 ladder 上**最大**的 payload 進 250 µs slot。注意失效形式是頂階音質壞掉，不是 init 紅燈 |
 | 8 | **底部階 buffer 30 ms** | ❌ 近端斷音回來 | 40 ms 才夠 |
 | 9 | **Ladder 反應速度**（自由跑 vs 鎖 mode 4） | ❌ 兩者掉線距離相同 | 不是降階不夠快。這一條同時排除了整條 ladder 的門檻調整 |
-| 10 | **radio saved calibration**<br>`RADIO_USE_SAVED_CALIB=true`（demo 傳 true，SDK example 傳 false） | ❌ *(結果待補)* | 曾是「消去法剩下的首選」。`bin/v240-unidir-calib-isi1` |
+| 10 | **radio saved calibration**<br>`RADIO_USE_SAVED_CALIB=true`（demo 傳 true，SDK example 傳 false） | ❌ **完全無影響** | 曾是「消去法剩下的首選」，實測沒有差別。`bin/v240-unidir-calib-isi1` |
 
 > **§3.4 / §3.5 / §3.10 的結果請確認後補上。** 三支 binary 都已 staged 並在 MANIFEST 裡寫明
 > 各種結果代表什麼，但沒有一份寫回實測結論。依口述均為「無改善」，此處不代填。
@@ -88,6 +88,16 @@ buffer 提供「撐過突發遮擋的時間」。三個各補一個獨立的資�
 | Antenna diversity | 不適用（雙方都是 single radio） | — |
 
 ---
+
+### 三次功率／校正嘗試一起看：發射端這條路已經走到底
+
+第 3、4、5、10 條全部無影響，而它們涵蓋的是**能從 app 這一側動的每一種「多給一點」**：
+fallback level 4 的 width/gain 加到對齊 demo、再加到天花板、ACK 功率加到天花板、
+以及讓 radio 用存下來的校正開機。四個方向、全部沒有動到掉線點。
+
+這不是四個各自失敗的嘗試，是**同一個結論的四次確認**：這個失效不是能量不足能解的。
+再往「加功率」的方向找下去沒有東西了——§5.5 之所以說參數空間是空的，
+證據就是這一組。
 
 ## 4. 已測無效 —— 前一世代（puretone_headset，2.25 ms 排程）
 
@@ -163,8 +173,11 @@ buffer 提供「撐過突發遮擋的時間」。三個各補一個獨立的資�
 
 1. **排程**（2.25 ms / 7+2 槽 vs 5.25 ms / 20+1 槽）—— 論證上不該影響距離，但未實測
 2. **預編譯 wireless core 的版本差異** —— 兩邊 SDK 版本不同，PHY 與解調實作無法檢視
-3. **量測方法本身** —— 「掉線距離」兩邊是否以相同方式量的（路線、朝向、自由跑 vs 鎖階）
-   尚未書面確認。在把差異歸因於韌體之前值得先確定這點
+3. **量測方法本身** —— 我方的條件已經固定下來並記在這裡：**距離固定 5 公尺、
+   以人體遮擋視線**，每次都一樣，所以我方數據之間是可比的。**尚未確認的是 demo 那一邊
+   用什麼條件量**（路線、朝向、有無人體遮擋、自由跑 vs 鎖階）。在把差異歸因於韌體之前
+   值得先確定這點——特別是「人體遮擋」與「純自由空間距離」是兩種物理，
+   如果兩邊量的不是同一件事，整個比較就不成立
 
 ### 5.6 建議向 SPARK 確認的兩件事
 
@@ -184,12 +197,12 @@ buffer 提供「撐過突發遮擋的時間」。三個各補一個獨立的資�
 
 ## 6. 建議順序
 
-1. **先補 §3 的三個空格**（l4max / allmax / calib）。三支 binary 都在 `bin/` 下，
-   結果沒寫回去，下一個人會重跑。
-2. **確認距離的量測方法**（§5.5 第 3 點）。在把差異歸因於韌體之前，先確定兩邊是
-   同樣的路線、朝向、以及自由跑或鎖階。這比再試一個設定便宜。
+1. ~~先補 §3 的三個空格~~ **已補**（l4max / allmax / calib，三者皆完全無影響）。
+2. **確認 demo 那一邊的量測方法**（§5.5 第 3 點）。我方是固定 5 m + 人體遮擋；
+   demo 那邊用什麼條件還不知道。這比再試一個設定便宜。
 3. **向 SPARK 提 §5.6 的兩個問題**。`chip_repet` 欄位與 fallback `presets` 都是
    本 SDK 構不到、而 demo 的 SDK 有的東西。這是目前唯一還有槓桿的方向。
+   要寄出去的那份寫在 [spark_link_budget_questions.md](spark_link_budget_questions.md)。
 4. **不要讓出貨卡在這裡。** 現行配置近端已解、遠端當機已解，距離的缺口有明確的
    技術理由。擋出貨的是 AT / u535 / auto-reconnect 等移植，那條線該繼續走。
 
