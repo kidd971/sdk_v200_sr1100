@@ -81,7 +81,28 @@ RX callback），`MAX_DATA_PAYLOAD_SIZE` 也已經是 16，跟 headset 一致。
 `AT+LE_UWB_SET_PAIR` / `GET_PAIR?` / `SERIAL?`（spec §5.4）。依賴 §1.1 和 §1.2。
 產線用的，不擋 ODM 整合。
 
-### 1.4 SINE generator —— 獨立，隨時可做
+### 1.4 fallback 掉到 24k 就釘住，不再往上爬 —— 獨立，暫時性
+
+**暫時的做法，要有 define 開關。** 現在階梯是雙向的：條件變好就往上恢復。
+要改成單向 —— 一旦降到 mode 4（24 kHz stereo），就固定在那裡不再回升。
+
+**跟 reconnect、AT 都無關**，ladder 完全活在 coord 裡（`sac_fallback_instance`、
+`change_fallback_state()`），隨時可以做。
+
+實作大概是：在 coord 的週期性檢查裡看目前模式，一旦等於 4 就
+`sac_fallback_set_manual_mode(true)` 把自動移動整個停掉 —— 那比逐一
+deactivate mode 0–3 乾淨，因為 §3.2 的 96k cap 已經在用
+`sac_fallback_mode_set_active_state()`，兩者疊在一起會很難讀。
+
+開關預設**開**（因為這是現在要的行為），但一定要留得掉 —— 它是暫時的，
+名字和註解都要說清楚它為什麼存在、以及什麼條件成立時該拿掉。
+不然三個月後沒有人敢動它。
+
+**要記得的副作用**：釘住之後，鏈路變好也不會回到 48 kHz，
+所以「聽起來一直是 24k」不再是故障徵兆，而是預期行為 ——
+量測和 ODM 的測試說明都要跟著講。
+
+### 1.5 SINE generator —— 獨立，隨時可做
 
 unidir 的 SINE 引用數是 **0**。headset 有：
 
@@ -100,6 +121,7 @@ unidir 的 SINE 引用數是 **0**。headset 有：
 
 注意 `SINE_INJECT_DG` 會**把模式釘在 0（96 kHz）**做純音測試，
 而 unidir 目前 96 kHz 是被 cap 住的（§3.2）—— 搬過來時這兩者互斥，要處理。
+而且 §1.4 若把階梯釘在 mode 4，跟「釘在 mode 0 做純音」也是互斥的，一併考慮。
 
 ---
 
