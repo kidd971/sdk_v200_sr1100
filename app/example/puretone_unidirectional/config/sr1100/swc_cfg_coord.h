@@ -146,43 +146,44 @@
 #define TX_AUDIO_FB_L4_GAIN_B4  0
 #endif
 
-/** @brief Transmit at the widest pulse the field allows, on every band and every fallback level.
+/** @brief Widen level 4 -- the 24 kHz rung -- to the maximum pulse width on all four bands.
  *
- *  Widens ONLY. The gain fields are left exactly as they were -- that is the whole point of
- *  this switch existing separately from FBK4_TX_POWER_REF=2 and ACK_TX_POWER_MAX=1, both of
- *  which take width to 7 AND gain to 0 and are documented here as lab arms rather than
- *  shippable settings.
+ *  Level 4 ONLY. Levels 1 to 3 keep the table they share with SPARK's audio demo, so the
+ *  ladder still steps power up as it degrades; this raises the top of that ramp rather than
+ *  flattening it. That distinction is the point: a good link does not need the energy, and
+ *  energy it does not need goes into near-field reflections, which is the condition the ISI
+ *  mitigation work exists to survive. The bottom rung is where the link is already in
+ *  trouble and near-field multipath is the least of it.
  *
- *  This is a product decision, not a measurement. It should not be read as a fix: the two
- *  arms above put width at 7 with gain at 0 -- strictly louder than this -- and moved the
- *  drop-out distance not at all, over two runs each. Nothing here is expected to change that
- *  number, and if it does, the arms' results need re-examining rather than believing.
+ *  Widens ONLY. The level-4 gains stay exactly as FBK4_TX_POWER_REF left them -- 1/1/1/0 at
+ *  the default -- which is what separates this from FBK4_TX_POWER_REF=2, the lab arm that
+ *  takes width to 7 AND gain to 0 on every band.
  *
- *  What it does change, and what to watch. The shipped table steps power UP as the link
- *  degrades: width 2 at level 1, 6 at level 4. That graduation is deliberate -- a good link
- *  does not need the energy, and energy it does not need goes into near-field reflections.
- *  Flattening the table to 7 transmits at full width when the peer is close and the link is
- *  fine, which is the condition the ISI mitigation work exists to survive. If near-field
- *  obstruction regresses after this, this switch is the first thing to turn off.
+ *  A product decision, not a measurement. FBK4_TX_POWER_REF=2 is strictly louder than this
+ *  and moved the drop-out distance not at all, over two runs, locked to mode 4 and
+ *  free-running. Nothing here is expected to change that number; if it does, that arm's
+ *  result is what needs re-examining.
  *
- *  Emissions compliance has not been assessed for this table.
+ *  Set TX_PULSE_WIDTH_MAX to 0 to restore the widths FBK4_TX_POWER_REF selected.
  */
 #ifndef TX_PULSE_WIDTH_MAX
 #define TX_PULSE_WIDTH_MAX 1
 #endif
 
+#if TX_PULSE_WIDTH_MAX
+#undef TX_AUDIO_FB_L4_WIDTH_B1
+#undef TX_AUDIO_FB_L4_WIDTH_B2
+#undef TX_AUDIO_FB_L4_WIDTH_B3
+#undef TX_AUDIO_FB_L4_WIDTH_B4
+#define TX_AUDIO_FB_L4_WIDTH_B1 7
+#define TX_AUDIO_FB_L4_WIDTH_B2 7
+#define TX_AUDIO_FB_L4_WIDTH_B3 7
+#define TX_AUDIO_FB_L4_WIDTH_B4 7
+#endif
+
 /* Sets the offsets for output power configuration in fallback mode. One entry per SWC fallback
  * level, so each list carries SWC_FALLBACK_MODE_COUNT values. Levels 1 to 3 are identical to
  * SPARK's own audio demo; level 4 comes from the switch above. */
-#if TX_PULSE_WIDTH_MAX
-#define TX_AUDIO_FB_BAND_1_PULSE_WIDTH \
-    {                                  \
-        7,                             \
-        7,                             \
-        7,                             \
-        7,                             \
-    }
-#else
 #define TX_AUDIO_FB_BAND_1_PULSE_WIDTH \
     {                                  \
         2,                             \
@@ -190,7 +191,6 @@
         3,                             \
         TX_AUDIO_FB_L4_WIDTH_B1,\
     }
-#endif
 
 #define TX_AUDIO_FB_BAND_1_PULSE_GAIN \
     {                                  \
@@ -200,15 +200,6 @@
         TX_AUDIO_FB_L4_GAIN_B1,\
     }
 
-#if TX_PULSE_WIDTH_MAX
-#define TX_AUDIO_FB_BAND_2_PULSE_WIDTH \
-    {                                  \
-        7,                             \
-        7,                             \
-        7,                             \
-        7,                             \
-    }
-#else
 #define TX_AUDIO_FB_BAND_2_PULSE_WIDTH \
     {                                  \
         2,                             \
@@ -216,7 +207,6 @@
         3,                             \
         TX_AUDIO_FB_L4_WIDTH_B2,\
     }
-#endif
 
 #define TX_AUDIO_FB_BAND_2_PULSE_GAIN \
     {                                  \
@@ -226,15 +216,6 @@
         TX_AUDIO_FB_L4_GAIN_B2,\
     }
 
-#if TX_PULSE_WIDTH_MAX
-#define TX_AUDIO_FB_BAND_3_PULSE_WIDTH \
-    {                                  \
-        7,                             \
-        7,                             \
-        7,                             \
-        7,                             \
-    }
-#else
 #define TX_AUDIO_FB_BAND_3_PULSE_WIDTH \
     {                                  \
         2,                             \
@@ -242,7 +223,6 @@
         4,                             \
         TX_AUDIO_FB_L4_WIDTH_B3,\
     }
-#endif
 
 #define TX_AUDIO_FB_BAND_3_PULSE_GAIN \
     {                                  \
@@ -252,15 +232,6 @@
         TX_AUDIO_FB_L4_GAIN_B3,\
     }
 
-#if TX_PULSE_WIDTH_MAX
-#define TX_AUDIO_FB_BAND_4_PULSE_WIDTH \
-    {                                  \
-        7,                             \
-        7,                             \
-        7,                             \
-        7,                             \
-    }
-#else
 #define TX_AUDIO_FB_BAND_4_PULSE_WIDTH \
     {                                  \
         2,                             \
@@ -268,7 +239,6 @@
         5,                             \
         TX_AUDIO_FB_L4_WIDTH_B4,\
     }
-#endif
 
 #define TX_AUDIO_FB_BAND_4_PULSE_GAIN \
     {                                  \
