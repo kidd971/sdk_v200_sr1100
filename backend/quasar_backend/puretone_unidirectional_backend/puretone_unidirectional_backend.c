@@ -459,9 +459,16 @@ static void console_port_write(quasar_uart_selection_t selection, GPIO_TypeDef *
  *
  *    - SMPS board -- LPUART1 only. That is the header this variant has.
  *
- *  PA2 is documented as an unreliable pad on both, which is why nothing here reads; PA3
- *  transmits fine. U535_PWR_LDO is the discriminator: CMakeLists.txt only defines it when the
- *  preset selects LDO, so its absence means SMPS.
+ *  Nothing here reads on either board, because this is a one-way diagnostic channel -- not
+ *  because reception is impossible. The receive side differs between the two variants and the
+ *  distinction matters for anything that needs RX, the AT layer above all:
+ *
+ *    - LDO   PA2 is an unreliable pad on the board we have, so LPUART1 cannot be trusted to
+ *            receive. Anything needing RX has to go on UART4 (PC10/PC11) here.
+ *    - SMPS  PA2 and PA3 both work, transmit and receive. LPUART1 is usable as a full console.
+ *
+ *  U535_PWR_LDO is the discriminator: CMakeLists.txt only defines it when the preset selects
+ *  LDO, so its absence means SMPS.
  *
  *  Blocking, deliberately. There is no realtime consumer, and the one caller that must not be
  *  lost is on its way into an infinite loop, so there is nothing for a queue to be kind to.

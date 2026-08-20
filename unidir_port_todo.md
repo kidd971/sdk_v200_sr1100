@@ -62,8 +62,15 @@ RX callback），`MAX_DATA_PAYLOAD_SIZE` 也已經是 16，跟 headset 一致。
   headset 已用共用 header 解掉。建議把 `puretone_link_data.h` 搬到 `app/common/`
   兩邊共用，因為 vendor 通道的線上格式是**要交給 ODM 的契約**，
   兩個產品不該有兩份定義。
-* **u535 的 console 分配**：AT 需要 RX，而 PA2 那隻 RX pad 是壞的，
-  所以 AT console 走 UART4（PC10/PC11），stats/LINK_WATCH 退到 LPUART1（PA3，只發不收）。
+* **u535 的 console 分配 —— 兩塊板不一樣**（見 §3.3）：
+
+  | 板子 | AT console | stats / LINK_WATCH |
+  |---|---|---|
+  | **LDO** | **UART4（PC10/PC11）**，因為手上這塊的 PA2 RX pad 不可靠，LPUART1 收不到 | LPUART1（PA3，只發） |
+  | **SMPS** | **LPUART1（PA3/PA2）**，收送都正常，是它天生的位置 | UART4，或維持 LPUART1 共用 |
+
+  也就是說 AT console 的落點是**板子相依**的，跟現在 console 的分工一樣用
+  `U535_PWR_LDO` 判別。不要寫成一個固定的選擇。
 
 **注意這會改變上空中的格式**（`user_data_t` 2 → 最多 16 bytes，常見 5 bytes），
 兩端必須一起重燒。unidir 目前沒有出貨在外面的版本，所以沒有版本錯配風險——
@@ -152,7 +159,13 @@ unidir 的 SINE 引用數是 **0**。headset 有：
 判別用 `U535_PWR_LDO` —— CMakeLists 只在 preset 選 LDO 時才定義它，
 所以**它不存在就代表是 SMPS**。兩邊都 build 過確認分支正確。
 
-PA2 在兩種板子上都是不可靠的 pad，所以 console 一律**只發不收**；PA3 發送正常。
+console **只發不收**是因為它是單向的診斷通道，不是因為收不到 ——
+而**接收能力兩塊板不一樣**，這對之後要接 AT 很關鍵：
+
+| 板子 | PA2（RX） | 對 AT 的意義 |
+|---|---|---|
+| **LDO** | 手上這塊是**不可靠的 pad** | LPUART1 不能收，**要 RX 的東西得走 UART4（PC10/PC11）** |
+| **SMPS** | **收送都正常** | LPUART1 可以當完整的雙向 console |
 
 ---
 
