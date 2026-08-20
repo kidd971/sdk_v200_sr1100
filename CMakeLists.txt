@@ -74,6 +74,17 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(BOARD_NAME="u5a5")
     endif()
 
+    # Which radio(s) this binary drives, for the boot banner. A board can be built three ways
+    # -- radio 1 only, radio 2 only, or both -- and the three are indistinguishable once
+    # flashed. That matters when they are being compared against each other to find out which
+    # RF chain is healthy: flashing the wrong one does not fail, it quietly answers a different
+    # question than the one being asked.
+    if (MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
+        add_compile_definitions(RADIO_TAG="dual")
+    else()
+        add_compile_definitions(RADIO_TAG="r${SWC_SINGLE_RADIO_ID}")
+    endif()
+
     if (DEFINED I2S_MASTER_MODE)
         add_compile_definitions(I2S_MASTER_MODE=${I2S_MASTER_MODE})
     endif()

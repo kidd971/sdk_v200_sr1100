@@ -275,7 +275,7 @@ int main(void)
     {
         char banner[96];
 
-        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional coordinator " BOARD_NAME " "
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional coordinator " BOARD_NAME " " RADIO_TAG " "
                                          __DATE__ " " __TIME__ "\r\n");
         facade_print_string(banner);
     }
