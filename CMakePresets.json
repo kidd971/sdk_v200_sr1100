@@ -339,6 +339,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-slave-std-nocodec-smps",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535, I2S slave, I2S standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO), no sine",
             "cacheVariables": {
@@ -350,6 +351,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-master-std-nocodec-smps-hs",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), single radio HS, I2S master, standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO), no sine",
             "cacheVariables": {
@@ -384,6 +386,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-dualradio-master-std-nocodec-smps",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "Puretone headset U535 (OneOdio HS/node), dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5), I2S master, standard format, no codec (direct I2S to SOC), SMPS regulator (not LDO)",
             "cacheVariables": {
@@ -396,6 +399,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-single-radio2-smps",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "DIAGNOSTIC: Puretone headset U535, SINGLE radio bound to the physical radio 2 (UWB_L, SPI2, CS=PD5) via SWC_SINGLE_RADIO_ID=2, I2S master, standard format, no codec, SMPS regulator. Exercises the radio-2 line alone under SMPS to isolate a radio-2-line x supply interaction from aggregate dual-radio load.",
             "cacheVariables": {
