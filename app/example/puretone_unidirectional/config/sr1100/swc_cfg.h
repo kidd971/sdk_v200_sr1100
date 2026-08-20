@@ -28,12 +28,37 @@
  * path is gone and what arrives is reflections, packets landing corrupted rather than missing --
  * rx_rej climbing while rx_ok holds is the signature -- and that is what ISI mitigation is for.
  *
- * Level 2 is the value in force, and it is what the near field needs -- level 1 was measured on
- * this ladder and the close-range dropouts came back. It was briefly set to 1 while the crash
- * under sustained long-range obstruction was being chased, on the theory that its longer preamble
- * did not fit beside a mode 3 the wider accumulator had grown to 100 B. That turned out to be the
- * right diagnosis and the wrong lever: taking mode 3 back to 54 B fixed the crash and let level 2
- * stay. This comment described the detour and outlived it.
+ * Level 1 is the value in force here, and the reason is dual radio: level 2 does not work with
+ * two radios at all. Measured on the u5a5 with the headset application, a dual-radio node at
+ * level 2 carries no audio -- only fallback mode 3 comes up, and only sometimes -- while the
+ * same build at level 1 or level 0 runs normally. The pristine vendor tree at v2.4.0-rc2 runs
+ * dual radio fine, and NODE_ISI_MITIG is the single line by which our swc_cfg.h differs from
+ * theirs, so this is ours and not a vendor regression.
+ *
+ * The mechanism is the one described under level 3 below, arriving a level early. ISI
+ * mitigation lengthens the preamble, the preamble belongs to the connection, and a dual-radio
+ * schedule is tighter than a single-radio one -- so on two radios, level 2 behaves the way
+ * level 3 behaves on one. That only mode 3 survives is the tell: it is the rung with the
+ * smallest payload.
+ *
+ * Level 2 was previously in force, and it was the right choice at the time: on a SINGLE radio
+ * it is what the near field needs, and level 1 was measured on this ladder with the
+ * close-range dropouts coming back. What changed is not the measurement but the mechanism
+ * available. Two antennas see different multipath, so dual radio attacks close-range
+ * obstruction a different way than lengthening symbols does, and the pair of them at level 1
+ * was measured to hold the near field -- 24 kHz stereo, dual radio, no dropouts under
+ * obstruction. So the trade-off between near-field performance and dual radio dissolved
+ * rather than having to be decided.
+ *
+ * This is why puretone_headset still defaults to level 2 and this application does not. That
+ * line ships single radio, where level 2 is correct and there is nothing to conflict with.
+ * The two defaults disagreeing is deliberate; do not "fix" it by aligning them.
+ *
+ * Level 2 was also briefly set to 1 once before, for an unrelated reason, while the crash
+ * under sustained long-range obstruction was being chased -- the theory being that its longer
+ * preamble did not fit beside a mode 3 the wider accumulator had grown to 100 B. That was the
+ * right diagnosis and the wrong lever: taking mode 3 back to 54 B fixed the crash and let
+ * level 2 stay at the time. Mentioned so the history is not mistaken for this decision.
  *
  * Level 3 does not work here, and not by a small margin: it crackles with no obstruction at
  * all. The preamble belongs to the connection, not to a fallback mode, so it has to fit the
@@ -46,9 +71,11 @@
  * multipath, the accumulator supplies enough attempts for those odds to cash in.
  *
  * Must be identical on the coordinator and the node: it changes the preamble both ends use to
- * find each other. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) for an A/B arm. */
+ * find each other. A mismatched pair does not link, and that failure looks exactly like the
+ * dual-radio one above, so flash both ends together when changing it. Overridable per build
+ * (-DNODE_ISI_MITIG=SWC_ISI_MITIG_2) for an A/B arm. */
 #ifndef NODE_ISI_MITIG
-#define NODE_ISI_MITIG SWC_ISI_MITIG_2
+#define NODE_ISI_MITIG SWC_ISI_MITIG_1
 #endif
 
 /* Specifies the schedule configuration. */

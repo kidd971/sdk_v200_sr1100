@@ -58,10 +58,26 @@
  * mode 3 back to 2.3x (safe, no retransmission gain) or this level back to 1 (keeps the gain,
  * gives up the near-field improvement). Do not assume the pair is fine because it builds.
  *
+ * DUAL RADIO DOES NOT WORK AT THIS LEVEL. Measured on the u5a5: a dual-radio node at level 2
+ * carries no audio -- only fallback mode 3 comes up, and only sometimes -- while the same
+ * build at level 1 or 0 runs normally. The mechanism is the one described for level 3 above,
+ * arriving a level early: a dual-radio schedule is tighter, so on two radios level 2 behaves
+ * the way level 3 behaves on one, and that only the smallest-payload rung survives is the
+ * tell. It is not a vendor problem -- the pristine v2.4.0-rc2 tree runs dual radio fine, and
+ * this line is the only place our swc_cfg.h differs from theirs.
+ *
+ * So the dual-radio presets in this application are broken at the default and need
+ * -DNODE_ISI_MITIG=SWC_ISI_MITIG_1 to run at all. The default stays at 2 because this line
+ * ships SINGLE radio, where level 2 is what the near field needs. puretone_unidirectional
+ * defaults to 1 for the opposite reason: it is going dual radio, and two antennas see
+ * different multipath, so dual radio at level 1 was measured to hold the near field on its
+ * own. The two applications disagreeing is deliberate -- do not align them.
+ *
  * Must be identical on the dongle and the headset: it changes the preamble both ends use to
- * find each other. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) so an A/B arm can
- * be cut without editing this file -- which is how the level last drifted without anyone
- * meaning it to. */
+ * find each other. A mismatched pair does not link, and that failure is indistinguishable
+ * from the dual-radio one above. Overridable per build (-DNODE_ISI_MITIG=SWC_ISI_MITIG_1) so
+ * an A/B arm can be cut without editing this file -- which is how the level last drifted
+ * without anyone meaning it to. */
 #ifndef NODE_ISI_MITIG
 #define NODE_ISI_MITIG SWC_ISI_MITIG_2
 #endif
