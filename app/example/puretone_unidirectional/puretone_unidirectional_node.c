@@ -33,6 +33,7 @@
 #include "sac_utils.h"
 #include "sac_volume.h"
 #include "swc_api.h"
+#include "reconnect_store.h"
 #include "swc_cfg.h"
 #include "swc_cfg_node.h"
 #include "swc_stats.h"
@@ -52,6 +53,16 @@
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
 #define MAX_DATA_PAYLOAD_SIZE 16
+
+/** @brief How long to wait for the stored peer before giving up on a silent reconnect, ms. */
+#define RECONNECT_TIMEOUT_MS 10000
+
+/** @brief How long without a packet from the coordinator before the link counts as down.
+ *
+ *  The coordinator's data_callback() sends one every DATA_TX_PERIOD_MS unconditionally, so
+ *  this is 20 consecutive misses.
+ */
+#define COORD_RX_TIMEOUT_MS 200
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3000
 /* Period for data transmission timer in ms. */
@@ -208,6 +219,24 @@ static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 
+/* When the coordinator's data packet last arrived, and whether one ever has since the
+ * connections were built. Written from the RX callback, read from the main loop. */
+static volatile uint32_t s_coord_rx_tick;
+static volatile bool s_coord_rx_seen;
+
+/* True while try_boot_reconnect() owns a half-open link and is polling it; the button
+ * handler defers through s_boot_reconnect_abort so the loop unwinds before teardown. */
+static bool s_boot_reconnect_active;
+static bool s_boot_reconnect_abort;
+
+/** @brief Outcome of a boot auto-reconnect attempt. */
+typedef enum {
+    BOOT_RECONNECT_OK,   /* The stored link was re-established. */
+    BOOT_RECONNECT_PAIR, /* No usable record, or the user asked to pair mid-attempt. */
+    BOOT_RECONNECT_IDLE, /* Had a record but the coordinator was not up yet: keep the core
+                            running and let it sync whenever the peer appears. */
+} boot_reconnect_result_t;
+
 /* Fallback latency.
  *
  * uint16_t, not uint8_t: the fifo figure is the queue depth times the bytes per sample, so it
@@ -258,7 +287,9 @@ static void app_audio_core_mute_on_underflow_interface_init(sac_processing_inter
 
 /* **** Button Actions **** */
 static void enter_pairing_mode(void);
-static void unpair_device(void);
+static bool link_is_up(void);
+static boot_reconnect_result_t try_boot_reconnect(void);
+static void unpair_device(bool forget_peer);
 static void abort_pairing_procedure(void);
 
 /* **** Fallback LED and Terminal Display **** */
@@ -339,8 +370,12 @@ int main(void)
 
     device_pairing_state = DEVICE_UNPAIRED;
 
-    /* Pairing occurs automatically when the device boots. */
-    enter_pairing_mode();
+    /* Boot auto-reconnect: if a previous pairing was persisted, re-establish it silently
+     * rather than pairing again. Only pair when there is no usable record -- a factory
+     * device, or one the user unpaired -- or when the user asks for it mid-attempt. */
+    if (try_boot_reconnect() == BOOT_RECONNECT_PAIR) {
+        enter_pairing_mode();
+    }
 
     while (1) {
         facade_button_handling();
@@ -702,6 +737,13 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         } else {
             facade_payload_received_status();
         }
+
+        /* Peer heartbeat for link_is_up(). The data connection rather than the audio one:
+         * the coordinator sends on this every DATA_TX_PERIOD_MS whatever the audio is
+         * doing, so it stays a heartbeat when the ladder is deep and the audio slots are
+         * mostly idle. */
+        s_coord_rx_tick = facade_get_tick_ms();
+        s_coord_rx_seen = true;
     }
 }
 
@@ -1603,9 +1645,16 @@ static void data_callback(void)
  */
 static void pairing_button_callback(void)
 {
+    /* Called from inside the boot-reconnect polling loop: defer, so the connection handles
+     * stay valid until the loop has unwound. */
+    if (s_boot_reconnect_active) {
+        s_boot_reconnect_abort = true;
+        return;
+    }
+
     switch (device_pairing_state) {
     case DEVICE_PAIRED:
-        unpair_device();
+        unpair_device(true);
         break;
     case DEVICE_PAIRING:
         abort_pairing_procedure();
@@ -1657,6 +1706,10 @@ static void enter_pairing_mode(void)
         /* Indicate that the pairing process was successful. */
         facade_notify_pairing_successful();
 
+        /* Persist before connecting, so a power cut between the two does not lose a pairing
+         * the user has already been told succeeded. */
+        (void)reconnect_store_save(&pairing_assigned_address);
+
         app_init();
         device_pairing_state = DEVICE_PAIRED;
 
@@ -1672,9 +1725,102 @@ static void enter_pairing_mode(void)
     }
 }
 
-/** @brief Unpair the device. This will reset its internal state.
+/** @brief Has the coordinator been heard from recently?
+ *
+ *  Measured directly rather than asked of the Wireless Core. A node CAN answer this from
+ *  connection status -- it loses sync when the coordinator goes away, unlike a coordinator,
+ *  which is handed synced == true unconditionally -- but doing it the same way on both roles
+ *  means one mechanism to reason about instead of two that fail differently.
+ *
+ *  @return true if a packet arrived within COORD_RX_TIMEOUT_MS.
  */
-static void unpair_device(void)
+static bool link_is_up(void)
+{
+    if (!s_coord_rx_seen) {
+        return false;
+    }
+
+    return (facade_get_tick_ms() - s_coord_rx_tick) < COORD_RX_TIMEOUT_MS;
+}
+
+/** @brief Re-establish a persisted pairing without running the pairing procedure.
+ *
+ *  @return BOOT_RECONNECT_OK    link re-established;
+ *          BOOT_RECONNECT_PAIR  no usable record, or the user aborted -- caller pairs;
+ *          BOOT_RECONNECT_IDLE  a record existed but the coordinator was not up in time.
+ */
+static boot_reconnect_result_t try_boot_reconnect(void)
+{
+    uint32_t start;
+    bool connected = false;
+
+    if (!reconnect_store_load(&pairing_assigned_address)) {
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    if (pairing_assigned_address.node_address == 0) {
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* No discovery list to rebuild on this role: app_swc_core_init() takes both addresses
+     * straight out of pairing_assigned_address, which reconnect_store_load() has just
+     * filled. The coordinator needs the extra step; this side does not. */
+
+    facade_print_string("[BOOT] reconnecting to stored pair\r\n");
+
+    app_init();
+    device_pairing_state = DEVICE_PAIRED;
+
+    s_boot_reconnect_abort = false;
+    s_boot_reconnect_active = true;
+
+    start = facade_get_tick_ms();
+    while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
+        if (link_is_up()) {
+            connected = true;
+            break;
+        }
+        facade_button_handling();
+
+        if (s_boot_reconnect_abort) {
+            break;
+        }
+    }
+
+    s_boot_reconnect_active = false;
+
+    if (connected) {
+        facade_notify_pairing_successful();
+        facade_print_string("[BOOT] reconnected\r\n");
+        return BOOT_RECONNECT_OK;
+    }
+
+    if (s_boot_reconnect_abort) {
+        unpair_device(false);
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* Timeout with the core still up: the coordinator just is not on yet. Leave the wireless
+     * core running and keep waiting, exactly as the coordinator does.
+     *
+     * This side could instead fall through to pairing, and that would be wrong in a way that
+     * is not obvious: a coordinator that timed out is sitting with its core running and
+     * transmitting a schedule -- it is NOT in pairing mode. A node that answered a timeout by
+     * entering pairing would therefore never meet it. Whichever device is switched on second
+     * has to be able to join the first, and both waiting is what makes that true. Pairing
+     * stays reachable through the button. */
+    facade_print_string("[BOOT] stored pair did not answer; core left running\r\n");
+    return BOOT_RECONNECT_IDLE;
+}
+
+/** @brief Unpair the device. This will reset its internal state.
+ *
+ *  @param[in] forget_peer  true to also erase the persisted pairing address. false tears the
+ *                          link down but KEEPS the record, which is what an aborted
+ *                          reconnect wants: the user asked to pair now, not to forget who
+ *                          they were paired with.
+ */
+static void unpair_device(bool forget_peer)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
@@ -1692,6 +1838,14 @@ static void unpair_device(void)
     rx_audio_conn = NULL;
     rx_data_conn = NULL;
     tx_data_conn = NULL;
+
+    /* The heartbeat belongs to the connections that just went away. */
+    s_coord_rx_seen = false;
+
+    /* Forget the peer only when asked. */
+    if (forget_peer) {
+        (void)reconnect_store_clear();
+    }
 
     /* Stop the audio pipelines. */
     sac_pipeline_stop(main_channel_sac_pipeline, &sac_status);

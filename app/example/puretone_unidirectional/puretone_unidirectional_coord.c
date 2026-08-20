@@ -29,6 +29,7 @@
 #include "sac_src_cmsis.h"
 #include "sac_stats.h"
 #include "swc_api.h"
+#include "reconnect_store.h"
 #include "swc_cfg.h"
 #include "swc_cfg_coord.h"
 #include "swc_error.h"
@@ -49,6 +50,22 @@
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
 #define MAX_DATA_PAYLOAD_SIZE 16
+
+/** @brief How long to wait for the stored peer to answer before giving up on a silent
+ *         reconnect, in ms.
+ *
+ *  Ten seconds. Long enough for a node that is powering up at the same moment, short enough
+ *  that a user who is actually waiting to pair does not conclude the device is dead.
+ */
+#define RECONNECT_TIMEOUT_MS 10000
+
+/** @brief How long without a packet from the node before link_is_up() calls the link down.
+ *
+ *  The node sends one every DATA_TX_PERIOD_MS, so this is 20 consecutive misses -- clear of
+ *  ordinary loss even at the deepest rung, and far less twitchy than the Wireless Core's own
+ *  20 ms threshold, which exists for the audio pipeline rather than for a link decision.
+ */
+#define NODE_RX_TIMEOUT_MS 200
 
 /** @brief Allow the main channel to climb to mode 0 (96 kHz 24-bit).
  *
@@ -209,6 +226,28 @@ static pairing_cfg_t app_pairing_cfg;
 static pairing_assigned_address_t pairing_assigned_address;
 static pairing_discovery_list_t pairing_discovery_list[PAIRING_DISCOVERY_LIST_SIZE];
 
+/* When the node's data packet last arrived, and whether one ever has since the connections
+ * were built. link_is_up() answers with these -- see there for why it does not ask the
+ * Wireless Core. Written from the RX callback, read from the main loop; a 32-bit store is
+ * atomic on this core. */
+static volatile uint32_t s_node_rx_tick;
+static volatile bool s_node_rx_seen;
+
+/* True while try_boot_reconnect() owns a half-open link and is polling it. The button
+ * handler must not tear down connections the reconnect loop is still dereferencing, so it
+ * defers through s_boot_reconnect_abort and the loop unwinds first. */
+static bool s_boot_reconnect_active;
+static bool s_boot_reconnect_abort;
+
+/** @brief Outcome of a boot auto-reconnect attempt. */
+typedef enum {
+    BOOT_RECONNECT_OK,   /* The stored link was re-established; stay paired and stream. */
+    BOOT_RECONNECT_PAIR, /* No usable record, or the user asked to pair mid-attempt. */
+    BOOT_RECONNECT_IDLE, /* Had a record but the node was not up yet: keep the coordinator's
+                            core running -- it is the timebase master -- so the node syncs
+                            whenever it does boot. */
+} boot_reconnect_result_t;
+
 /* Forced fallback state, starts in automatic mode. */
 static fallback_states_t fallback_state;
 
@@ -243,7 +282,9 @@ static void app_audio_core_compression_discard_interface_init(sac_processing_int
 
 /* **** Button actions **** */
 static void enter_pairing_mode(void);
-static void unpair_device(void);
+static bool link_is_up(void);
+static boot_reconnect_result_t try_boot_reconnect(void);
+static void unpair_device(bool forget_peer);
 static void abort_pairing_procedure(void);
 
 /* Fallback LED and terminal display. */
@@ -324,8 +365,17 @@ int main(void)
 
     device_pairing_state = DEVICE_UNPAIRED;
 
-    /* Pairing occurs automatically when the device boots. */
-    enter_pairing_mode();
+    /* Boot auto-reconnect: if a previous pairing was persisted, re-establish it silently
+     * rather than pairing again. Only enter pairing when there is no usable record -- a
+     * factory device, or one the user unpaired -- or when the user asks for it mid-attempt.
+     *
+     * A record that simply could not reach its node in time does NOT re-pair. This side is
+     * the timebase master, so its wireless core is left running and the node syncs whenever
+     * it boots; tearing down and pairing again would throw away a working record because the
+     * peer happened to be switched off. */
+    if (try_boot_reconnect() == BOOT_RECONNECT_PAIR) {
+        enter_pairing_mode();
+    }
 
     while (1) {
         facade_button_handling();
@@ -759,6 +809,11 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* The fallback state is updated. */
         sac_fallback_set_rx_link_margin(&sac_fallback_instance, received_user_data.link_margin, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
+
+        /* Peer heartbeat for link_is_up(). Stamped here because reaching this line is the
+         * only direct evidence this side ever gets that the node is alive. */
+        s_node_rx_tick = facade_get_tick_ms();
+        s_node_rx_seen = true;
     }
 }
 
@@ -1607,9 +1662,17 @@ static void data_callback(void)
  */
 static void pairing_button_callback(void)
 {
+    /* Called from inside the boot-reconnect polling loop: defer, so the connection handles
+     * stay valid until the loop has unwound. The loop tears down and the caller enters
+     * pairing, which is what the press meant anyway. */
+    if (s_boot_reconnect_active) {
+        s_boot_reconnect_abort = true;
+        return;
+    }
+
     switch (device_pairing_state) {
     case DEVICE_PAIRED:
-        unpair_device();
+        unpair_device(true);
         break;
     case DEVICE_PAIRING:
         abort_pairing_procedure();
@@ -1661,6 +1724,11 @@ static void enter_pairing_mode(void)
         /* Indicate that the pairing process was successful. */
         facade_notify_pairing_successful();
 
+        /* Persist before connecting, so a power cut between the two does not lose a pairing
+         * the user has already been told succeeded. A record whose link never came up is
+         * harmless: the next boot simply reconnects to it. */
+        (void)reconnect_store_save(&pairing_assigned_address);
+
         app_init();
         device_pairing_state = DEVICE_PAIRED;
 
@@ -1676,9 +1744,126 @@ static void enter_pairing_mode(void)
     }
 }
 
-/** @brief Unpair the device. This will reset its discovery list.
+/** @brief Has the node been heard from recently?
+ *
+ *  Measured directly rather than asked of the Wireless Core, and the reason is specific to
+ *  this role: link_update_connect_status() hands a COORDINATOR synced == true
+ *  unconditionally, so a coordinator's connection status can only fall through accumulated
+ *  frame outcomes. On the sibling application that path was observed not to fire at all --
+ *  the coordinator went on reporting CONNECTED with the node powered off. Asking a transmit
+ *  connection is worse still: this side is the timebase master and keeps transmitting into
+ *  its own timeslots whether or not anything is listening.
+ *
+ *  The node's data_callback() sends a packet every DATA_TX_PERIOD_MS unconditionally, so an
+ *  arriving packet is the peer's heartbeat and the RX callback stamps it.
+ *
+ *  s_node_rx_seen guards the boot case. Without it a tick count still below the timeout
+ *  reads as "heard recently" for the first NODE_RX_TIMEOUT_MS after reset, and
+ *  try_boot_reconnect() polls this -- so it would declare success against a node that was
+ *  never powered on, which is the failure it exists to avoid.
+ *
+ *  @return true if a packet arrived within NODE_RX_TIMEOUT_MS.
  */
-static void unpair_device(void)
+static bool link_is_up(void)
+{
+    if (!s_node_rx_seen) {
+        return false;
+    }
+
+    return (facade_get_tick_ms() - s_node_rx_tick) < NODE_RX_TIMEOUT_MS;
+}
+
+/** @brief Re-establish a persisted pairing without running the pairing procedure.
+ *
+ *  Restores the discovery list from flash, brings the wireless core up on those addresses,
+ *  and polls for the node for up to RECONNECT_TIMEOUT_MS. Buttons keep being serviced
+ *  throughout; a press defers through s_boot_reconnect_abort so the loop can unwind before
+ *  anything releases the handles it is reading.
+ *
+ *  @return BOOT_RECONNECT_OK    link re-established, paired and streaming;
+ *          BOOT_RECONNECT_PAIR  no usable record, or the user aborted -- caller pairs;
+ *          BOOT_RECONNECT_IDLE  a record existed but the node was not up in time. The core
+ *                               is LEFT RUNNING; do not tear down and do not re-pair.
+ */
+static boot_reconnect_result_t try_boot_reconnect(void)
+{
+    uint32_t start;
+    bool connected = false;
+
+    /* Blank, corrupt or wrong-version flash reads as no record, which is what a factory
+     * device looks like, so it falls through to pairing with no special case. */
+    if (!reconnect_store_load(&pairing_assigned_address)) {
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* A valid record should never carry a zero node address. Guard anyway and treat it as
+     * no record rather than building a core around it. */
+    if (pairing_assigned_address.node_address == 0) {
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* app_swc_core_init() reads both addresses out of the discovery list, so rebuild it from
+     * the persisted pair. */
+    pairing_discovery_list[PAIRING_DEVICE_ROLE_COORDINATOR].node_address =
+        pairing_assigned_address.coordinator_address;
+    pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE].node_address =
+        pairing_assigned_address.node_address;
+
+    facade_print_string("[BOOT] reconnecting to stored pair\r\n");
+
+    app_init();
+    device_pairing_state = DEVICE_PAIRED;
+
+    s_boot_reconnect_abort = false;
+    s_boot_reconnect_active = true;
+
+    start = facade_get_tick_ms();
+    while ((facade_get_tick_ms() - start) < RECONNECT_TIMEOUT_MS) {
+        if (link_is_up()) {
+            connected = true;
+            break;
+        }
+        facade_button_handling();
+
+        if (s_boot_reconnect_abort) {
+            break;
+        }
+    }
+
+    s_boot_reconnect_active = false;
+
+    if (connected) {
+        facade_notify_pairing_successful();
+        facade_print_string("[BOOT] reconnected\r\n");
+        return BOOT_RECONNECT_OK;
+    }
+
+    if (s_boot_reconnect_abort) {
+        /* The user asked to pair while this was running. Dismantle what was built -- that
+         * also returns device_pairing_state to UNPAIRED -- and let the caller pair. The
+         * flash record is deliberately left intact; the user has not said to forget the
+         * peer, only that they want to pair now. */
+        unpair_device(false);
+        return BOOT_RECONNECT_PAIR;
+    }
+
+    /* Plain timeout with the core still up: the node just is not on yet. This side is mains
+     * powered and IS the timebase master, so leave the wireless core running -- it keeps
+     * transmitting the schedule and the node syncs whenever it boots. Do not tear down and
+     * do not re-pair. */
+    facade_print_string("[BOOT] stored pair did not answer; core left running\r\n");
+    return BOOT_RECONNECT_IDLE;
+}
+
+/** @brief Unpair the device. This will reset its discovery list.
+ *
+ *  @param[in] forget_peer  true to also erase the persisted pairing address, so the next boot
+ *                          pairs instead of reconnecting. false tears the link down but KEEPS
+ *                          the record, which is what an aborted reconnect wants: the user
+ *                          asked to pair now, not to forget who they were paired with, and
+ *                          those are different instructions.
+ */
+static void unpair_device(bool forget_peer)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
@@ -1699,6 +1884,15 @@ static void unpair_device(void)
 
     /* Reset the pairing discovery list. */
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
+
+    /* The heartbeat belongs to the connections that just went away. */
+    s_node_rx_seen = false;
+
+    /* Forget the peer only when asked. The press that removes a device should not leave a
+     * record behind; an aborted reconnect should not throw one away. */
+    if (forget_peer) {
+        (void)reconnect_store_clear();
+    }
 
     /* Stop the audio pipeline. */
     sac_pipeline_stop(sac_pipeline, &sac_status);
