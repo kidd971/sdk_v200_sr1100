@@ -200,6 +200,27 @@
  * SRC Audio processing is required if a stream uses a different sample rate.
  */
 #define I2S_SAMPLE_RATE_HZ MAIN_CHANNEL_SAMPLE_RATE_HZ
+
+/** @brief The same rate as an SAI enum, for the master clock generator.
+ *
+ *  Kept next to I2S_SAMPLE_RATE_HZ so the two cannot drift: this one is only read when this
+ *  side drives the I2S clock, so a mismatch would be invisible on a slave and fatal on a
+ *  master. The SAI can only generate the five rates listed in quasar_sai_frequency_t, so
+ *  changing MAIN_CHANNEL_SAMPLE_RATE_HZ to anything else needs a decision here too rather
+ *  than a silent zero. */
+#if I2S_SAMPLE_RATE_HZ == 96000
+#define SAI_FREQUENCY QUASAR_SAI_AUDIO_FREQUENCY_96K
+#elif I2S_SAMPLE_RATE_HZ == 48000
+#define SAI_FREQUENCY QUASAR_SAI_AUDIO_FREQUENCY_48K
+#elif I2S_SAMPLE_RATE_HZ == 32000
+#define SAI_FREQUENCY QUASAR_SAI_AUDIO_FREQUENCY_32K
+#elif I2S_SAMPLE_RATE_HZ == 16000
+#define SAI_FREQUENCY QUASAR_SAI_AUDIO_FREQUENCY_16K
+#elif I2S_SAMPLE_RATE_HZ == 8000
+#define SAI_FREQUENCY QUASAR_SAI_AUDIO_FREQUENCY_8K
+#else
+#error "I2S_SAMPLE_RATE_HZ is not a rate the SAI can generate as master"
+#endif
 /* The I2S bit depth will be shared by all audio streams.
  * Packing Audio processing is required if a stream uses a different bit depth.
  */

@@ -25,6 +25,8 @@ typedef struct sai_cfg {
     uint8_t tx_nb_ch;
     /*! Number of RX channels. */
     uint8_t rx_nb_ch;
+    /*! SAI sample rate. Read ONLY when this side drives the clock -- see configure_sai(). */
+    quasar_sai_frequency_t sai_frequency;
 } sai_cfg_t;
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
@@ -72,6 +74,7 @@ void facade_audio_coord_init(void)
     sai_cfg_t sai_cfg = {
         .bit_depth = I2S_BIT_DEPTH,
         .rx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
+        .sai_frequency = SAI_FREQUENCY,
     };
 
 #if !NO_CODEC
@@ -99,6 +102,7 @@ void facade_audio_node_init(void)
     sai_cfg_t sai_cfg = {
         .bit_depth = I2S_BIT_DEPTH,
         .tx_nb_ch = MAIN_CHANNEL_CHANNEL_COUNT,
+        .sai_frequency = SAI_FREQUENCY,
     };
 
 #if !NO_CODEC
@@ -250,6 +254,17 @@ static void configure_sai(sai_cfg_t sai_cfg)
     quasar_sai_config_t sai_config = {
         .sai_mode = s_sai_mode,
         .sai_protocol = s_sai_protocol,
+        /* Read only on the branch that drives the clock. quasar_audio_init_sai() validates it
+         * against the five rates a master can generate and returns
+         * QUASAR_ERR_AUDIO_INVALID_FREQUENCY otherwise; the slave branch ignores it entirely
+         * and uses SAI_AUDIO_FREQUENCY_MCKDIV with Mckdiv = 0.
+         *
+         * That asymmetry is why this field was missing here for so long without anyone
+         * noticing: every unidirectional build so far ran its SAI as a slave, so a
+         * zero-initialised frequency was never read. The u535 node is the first to be an I2S
+         * master, and it stopped dead in audio init with code -12 while the coordinator on
+         * the same firmware was fine. */
+        .sai_audio_frequency = sai_cfg.sai_frequency,
     };
 
     /* Configure SAI bit depth. */
