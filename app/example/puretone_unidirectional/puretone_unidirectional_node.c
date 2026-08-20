@@ -61,6 +61,28 @@
 /* Interval to print statistics in ms. */
 /* Bring the receiver up on the calibration saved in the radio's NVM as well as the fresh one.
  * SPARK's audio demo does; the SDK example this app came from does not. */
+/** @brief DIAGNOSTIC: pin multi-radio selection instead of letting the algorithm choose.
+ *
+ *  0 = leave it alone (SWC_MULTI_RADIO_SELECT_MODE_ALGO, the default), 1 = always radio 1,
+ *  2 = always radio 2. Only has any effect on a dual-radio build; the call is not even
+ *  compiled otherwise, so the default costs nothing and changes nothing.
+ *
+ *  It exists to cut one question in half. A dual-radio node receives almost nothing on this
+ *  board while either radio ALONE works, and both radios are demonstrably alive -- the
+ *  liveness counters run within 1% of each other. That leaves two candidates: the dual-radio
+ *  schedule and initialisation, or the algorithm that picks which radio to believe. Pinning
+ *  the selection keeps everything about the dual build except the choosing:
+ *
+ *    pinned and it works   -> the schedule and init are fine, the selection algorithm is not
+ *    pinned and it fails   -> the fault is earlier than selection
+ *
+ *  Neither answer is available from a single-radio build, because that one also drops the
+ *  second radio's initialisation, its timeslot behaviour and the multi-radio timer.
+ */
+#ifndef MULTI_RADIO_FORCE
+#define MULTI_RADIO_FORCE 0
+#endif
+
 #ifndef RADIO_USE_SAVED_CALIB
 #define RADIO_USE_SAVED_CALIB false
 #endif
@@ -411,6 +433,16 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
     /* Initialize the radio. */
     swc_radio_module_init(radio_handle_2, RADIO_USE_SAVED_CALIB, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
+
+#if (MULTI_RADIO_FORCE != 0)
+    /* Diagnostic only -- see MULTI_RADIO_FORCE. Deliberately after both radios are
+     * initialised, so that everything about the dual build is still in place and the only
+     * thing removed is the choosing. */
+    swc_set_multi_radio_select_mode((MULTI_RADIO_FORCE == 1) ? SWC_MULTI_RADIO_SELECT_MODE_RADIO1
+                                                             : SWC_MULTI_RADIO_SELECT_MODE_RADIO2,
+                                    swc_err);
+    ASSERT_SWC_STATUS(*swc_err);
+#endif
 #endif
 
     /* **** RX Connections **** */

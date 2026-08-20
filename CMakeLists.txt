@@ -80,7 +80,11 @@ if (NOT BUILD_TESTS)
     # RF chain is healthy: flashing the wrong one does not fail, it quietly answers a different
     # question than the one being asked.
     if (MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
-        add_compile_definitions(RADIO_TAG="dual")
+        if (MULTI_RADIO_FORCE)
+            add_compile_definitions(RADIO_TAG="dual-f${MULTI_RADIO_FORCE}")
+        else()
+            add_compile_definitions(RADIO_TAG="dual")
+        endif()
     else()
         add_compile_definitions(RADIO_TAG="r${SWC_SINGLE_RADIO_ID}")
     endif()
@@ -124,6 +128,10 @@ if (NOT BUILD_TESTS)
 
     if (DEFINED MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT)
         add_compile_definitions(MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT=${MAIN_CHANNEL_SWC_CCA_AUDIO_TRY_COUNT})
+    endif()
+
+    if (DEFINED MULTI_RADIO_FORCE)
+        add_compile_definitions(MULTI_RADIO_FORCE=${MULTI_RADIO_FORCE})
     endif()
 
     if (DEFINED STATS_VERBOSE)
