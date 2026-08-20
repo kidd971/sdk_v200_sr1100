@@ -2,6 +2,16 @@
 
 > 狀態：**已知、未修、刻意不修**。2026-08-19 又觀測到一次，這份記錄的目的是把
 > 這次新得到的資訊固定下來，以免下次從頭查。
+>
+> **2026-08-20 更正**：這裡記的 `Tim4: arr=0xFFFD` 不是未解之謎 ——
+> 它是已知的 **96 kHz dual-radio park**，`d531b16` 的 commit message 逐字描述過，
+> 而且早就有 workaround（把主通道 cap 在 48 kHz）。當時還推測這個 park 就是
+> 「dual radio 不出聲」的原因，**那是錯的**：dual radio 不出聲是 `SWC_ISI_MITIG_2`
+> 造成的，換 level 1 就好了。
+>
+> 但 96 kHz 本身確實是壞的 —— 2026-08-20 在 ISI 1 + dual radio 下實測，
+> **96 kHz 還是會斷**。所以 cap 留著，而這個 park 仍然是一個沒修的真問題。
+> 兩件事互相獨立。
 > 相關：`dualradio_resync_HQ_report.md`（含 `_brief`）、`dualradio_HQ_update_digest.md`、
 > `dualradio_fb0_park_HQ_followup.md` —— 現象本身已報給 SPARK HQ。
 
