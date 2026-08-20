@@ -12,6 +12,7 @@
 #include "quasar.h"
 #include "quasar_it.h" /* dual-radio HW counters + HardFault snapshot (u535 & u5a5) */
 #include "sac_cfg.h"
+#include <string.h>
 
 /* CONSTANTS ******************************************************************/
 #define IRQ_PRIORITY_TIMER_AUDIO_PROCESS QUASAR_IRQ_PRIORITY_14
@@ -377,3 +378,75 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
         }
     }
 }
+
+#if defined(QUASAR_U535)
+/** @brief Timeout for one console line, in ms. Generous: this is a diagnostic path. */
+#define CONSOLE_UART_TX_TIMEOUT_MS 1000
+
+/** @brief Send a string to the console. u535 only -- everything else keeps the USB CDC default.
+ *
+ *  Overrides the weak facade_print_string() in common_backend, which writes to the USB CDC
+ *  port. That is the right default on the u5a5 EVK and useless on this board: the u535's own
+ *  UART header is not reliably populated, and USB CDC is not necessarily up either, so every
+ *  stats line, every LINK_WATCH line and -- worst -- the "Quasar Error! Code: %d" that
+ *  quasar_bsp_error_handler() prints before it starts blinking blue forever, all went nowhere.
+ *  A fatal error that leaves no trace but a blinking LED costs an afternoon to diagnose.
+ *
+ *  UART4 on PC10 (TX) / PC11 (RX) is the ST-Link VCP and is reliably wired. This mirrors what
+ *  facade_stats_write() already does in the puretone_headset backend, which is where the
+ *  configuration below was proven -- AF8, and no RX interrupt because nothing is read here.
+ *
+ *  Lazily initialised on first use: debug_enabled is false so quasar_debug_init() never
+ *  claimed UART4, and initialising only these two pins avoids the extra DEBUG_IO (PA4) GPIO
+ *  configuration that quasar_debug_init() would also do.
+ *
+ *  Blocking, deliberately. This is a diagnostic channel with no realtime consumer, and the one
+ *  caller that must not be lost -- the fatal error handler -- is on its way to an infinite
+ *  loop anyway, so there is nothing left for a queue to be kind to.
+ */
+void facade_print_string(char *string)
+{
+    static bool console_uart_ready;
+    quasar_bsp_status_t err = QUASAR_OK;
+
+    if (string == NULL) {
+        return;
+    }
+
+    if (!console_uart_ready) {
+        quasar_gpio_config_t gpio_tx = {
+            .port      = QUASAR_DEF_STLINK_UART_TX_PORT,
+            .pin       = QUASAR_DEF_STLINK_UART_TX_PIN,
+            .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+            .type      = QUASAR_GPIO_TYPE_PP,
+            .pull      = QUASAR_GPIO_PULL_UP,
+            .speed     = QUASAR_GPIO_SPEED_LOW,
+            .alternate = QUASAR_GPIO_ALTERNATE_AF8, /* UART4 on PC10/PC11 */
+        };
+        quasar_gpio_config_t gpio_rx = {
+            .port      = QUASAR_DEF_STLINK_UART_RX_PORT,
+            .pin       = QUASAR_DEF_STLINK_UART_RX_PIN,
+            .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+            .type      = QUASAR_GPIO_TYPE_OD,
+            .pull      = QUASAR_GPIO_PULL_UP,
+            .speed     = QUASAR_GPIO_SPEED_LOW,
+            .alternate = QUASAR_GPIO_ALTERNATE_AF8,
+        };
+        quasar_uart_config_t uart_cfg = {
+            .uart_selection = QUASAR_DEF_UART_SELECTION_DEBUG, /* UART4 (ST-Link VCP) */
+            .baud_rate      = QUASAR_UART_BAUD_RATE_115200,
+            .parity         = QUASAR_UART_PARITY_NONE,
+            .stop           = QUASAR_UART_STOP_BITS_1B,
+            .irq_priority   = QUASAR_IRQ_PRIORITY_NONE, /* TX only, nothing is read back */
+            .gpio_config_tx = gpio_tx,
+            .gpio_config_rx = gpio_rx,
+        };
+
+        quasar_uart_init(uart_cfg);
+        console_uart_ready = true;
+    }
+
+    quasar_uart_transmit_blocking(QUASAR_DEF_UART_SELECTION_DEBUG, (uint8_t *)string,
+                                  strlen(string), CONSOLE_UART_TX_TIMEOUT_MS, &err);
+}
+#endif /* QUASAR_U535 */
