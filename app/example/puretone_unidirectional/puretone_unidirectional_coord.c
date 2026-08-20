@@ -49,6 +49,16 @@
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
 #define MAX_DATA_PAYLOAD_SIZE 16
+
+/** @brief Allow the main channel to climb to mode 0 (96 kHz 24-bit).
+ *
+ *  Off by default: 96 kHz parks a dual-radio link on u535 and the cause is still open. See
+ *  the long note at the ceiling itself in app_audio_core_init(). Set to 1 only to test
+ *  whether the park has been fixed.
+ */
+#ifndef MAIN_CHANNEL_ALLOW_96K
+#define MAIN_CHANNEL_ALLOW_96K 0
+#endif
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3000
 /* Period for data transmission timer in ms.
@@ -1164,13 +1174,43 @@ static void app_audio_core_init(void)
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-    /** Start fallback in best quality.
+    /** Start fallback at the highest ACTIVE mode.
      *
-     *  sac_fallback_add_mode sets current_mode to the last added mode, so an explicit
-     *  set to mode 0 is required to ensure we start at the highest quality.
+     *  sac_fallback_add_mode sets current_mode to the last added mode, so an explicit set is
+     *  required either way.
      */
+#if MAIN_CHANNEL_ALLOW_96K
     sac_fallback_set_current_mode(&sac_fallback_instance, 0, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+#else
+    /* Ceiling capped at mode 1 (48 kHz 24-bit): deactivate mode 0 while leaving automatic
+     * fallback enabled. Downward degradation still works -- trigger_next_mode() drops to mode
+     * 2/3/4 on a bad link -- and recover_to_previous_mode() skips the inactive mode 0, so the
+     * ladder degrades and recovers up to 48 kHz and never climbs to 96 kHz.
+     *
+     * Only the coordinator needs this. The node's main channel is RX and follows the
+     * transmitted header, so capping this side caps the whole main-channel path.
+     *
+     * Ported from puretone_dongle.c, where the same cap has been the shipping configuration
+     * since d531b16 -- the one handed to the ODM as puretone_gen2_231_rc04. Its history is
+     * worth knowing before anyone removes this again: the cap was added, removed on the
+     * expectation that the SDK v2.3.1 TDMA re-sync fix had cured the dual-radio park, and
+     * then re-applied when hardware showed it had not. The vendor fix addresses unsynced RX
+     * overrun, which is a different failure.
+     *
+     * The failure this prevents is specific and recognisable: at mode 0 on a dual-radio
+     * build, TIM4's ARR wedges at 0xFFFD, the radio IRQ and DMA counters freeze, swc goes to
+     * STOP, and stall_auto_recover() cannot revive it -- see radio_stall_wedge_open_issue.md,
+     * which recorded that signature before it was connected to this cap. A unidirectional
+     * node is affected more directly than the headset ever was, because this ladder STARTS at
+     * mode 0: a dual-radio node boots straight into the parking condition.
+     *
+     * Re-enable with -DMAIN_CHANNEL_ALLOW_96K=1 once the park is fixed, and only then. */
+    sac_fallback_mode_set_active_state(&sac_fallback_instance, 0, false, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_set_current_mode(&sac_fallback_instance, 1, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
 }
 
 /** @brief Initialize the audio fallback processing stage interface.
