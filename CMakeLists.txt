@@ -62,6 +62,18 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(USB_AUDIO_ENABLED=0)
     endif()
 
+    # Board name as a string, for anything that identifies itself to a human -- boot banners,
+    # log prefixes. QUASAR_U535 exists but is a PUBLIC define on the hardware target, and the
+    # chain from there to the application targets is broken by a PRIVATE link somewhere, so an
+    # application asking #if defined(QUASAR_U535) silently gets the wrong answer. That is worse
+    # than having nothing: a banner naming the wrong board is read as proof of what was
+    # flashed, and the u5a5-coordinator / u535-node pairing is a normal bench setup.
+    if (MCU_VARIANT STREQUAL U535)
+        add_compile_definitions(BOARD_NAME="u535")
+    else()
+        add_compile_definitions(BOARD_NAME="u5a5")
+    endif()
+
     if (DEFINED I2S_MASTER_MODE)
         add_compile_definitions(I2S_MASTER_MODE=${I2S_MASTER_MODE})
     endif()

@@ -12,6 +12,7 @@
 
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
+
 #include "pairing_api.h"
 #include "pairing_cfg.h"
 #include "puretone_unidirectional_facade.h"
@@ -276,7 +277,7 @@ int main(void)
     {
         char banner[96];
 
-        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional node u535 "
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional node " BOARD_NAME " "
                                          __DATE__ " " __TIME__ "\r\n");
         facade_print_string(banner);
     }

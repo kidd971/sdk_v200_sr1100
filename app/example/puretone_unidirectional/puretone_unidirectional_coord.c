@@ -12,6 +12,7 @@
 
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
+
 #include "pairing_api.h"
 #include "pairing_cfg.h"
 #include "puretone_unidirectional_facade.h"
@@ -274,7 +275,7 @@ int main(void)
     {
         char banner[96];
 
-        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional coordinator u535 "
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional coordinator " BOARD_NAME " "
                                          __DATE__ " " __TIME__ "\r\n");
         facade_print_string(banner);
     }
@@ -1458,17 +1459,28 @@ static const char *fallback_mode_name(uint8_t mode)
  */
 static void print_stats_compact(void)
 {
-    static uint32_t prev_cca_fail, prev_tx_drop, prev_tick;
+    static uint32_t prev_cca_fail, prev_tx_drop, prev_tx, prev_idle, prev_tick;
     static bool prev_valid;
 
-    char line[128];
+    char line[160];
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
     uint32_t now = facade_get_tick_ms();
     swc_fallback_info_t info = swc_connection_get_fallback_info(tx_audio_conn, &swc_err);
+    swc_statistics_t *tx = swc_connection_update_stats(tx_audio_conn, &swc_err);
     uint8_t fb_mode = sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status);
+    /* Everything that actually went on the air, whether or not this connection uses acks --
+     * summing both is what makes the number independent of that setting. */
+    uint32_t tx_sent = (tx != NULL) ? (tx->packet_sent_and_acked_count + tx->packet_sent_and_not_acked_count) : 0;
+    /* Scheduled transmit slots that carried nothing, because there was nothing to send. This
+     * is the coordinator's mirror of the node's miss/s, and the pair of them is what tells
+     * "the air was empty because nothing was produced" apart from "packets were sent and did
+     * not arrive". Those two look identical from either end alone. */
+    uint32_t tx_idle = (tx != NULL) ? tx->no_packet_tranmission_count : 0;
     uint32_t cca_rate = 0;
     uint32_t drop_rate = 0;
+    uint32_t tx_rate = 0;
+    uint32_t idle_rate = 0;
 
     if (prev_valid) {
         uint32_t dms = now - prev_tick;
@@ -1476,15 +1488,21 @@ static void print_stats_compact(void)
         if (dms > 0) {
             cca_rate = (uint32_t)(((uint64_t)(info.cca_fail_count - prev_cca_fail) * 1000U) / dms);
             drop_rate = (uint32_t)(((uint64_t)(info.tx_pkt_dropped - prev_tx_drop) * 1000U) / dms);
+            tx_rate = (uint32_t)(((uint64_t)(tx_sent - prev_tx) * 1000U) / dms);
+            idle_rate = (uint32_t)(((uint64_t)(tx_idle - prev_idle) * 1000U) / dms);
         }
     }
     prev_cca_fail = info.cca_fail_count;
     prev_tx_drop = info.tx_pkt_dropped;
+    prev_tx = tx_sent;
+    prev_idle = tx_idle;
     prev_tick = now;
     prev_valid = true;
 
-    snprintf(line, sizeof(line), "[DG t=%lu] fb=%u %-13s cca_fail=%lu/s tx_drop=%lu/s\r\n", (unsigned long)now,
-             (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)cca_rate, (unsigned long)drop_rate);
+    snprintf(line, sizeof(line),
+             "[DG t=%lu] fb=%u %-13s tx=%lu/s idle=%lu/s cca_fail=%lu/s tx_drop=%lu/s\r\n", (unsigned long)now,
+             (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)tx_rate, (unsigned long)idle_rate,
+             (unsigned long)cca_rate, (unsigned long)drop_rate);
     facade_print_string(line);
 }
 #endif /* !STATS_VERBOSE */
