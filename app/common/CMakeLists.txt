@@ -1,1 +1,2 @@
 add_subdirectory(at_cmd_core)
+add_subdirectory(reconnect_store)

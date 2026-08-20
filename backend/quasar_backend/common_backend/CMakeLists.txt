@@ -7,4 +7,7 @@ else()
     target_link_libraries(common_backend PRIVATE hardware module_tinyusb_baremetal)
 endif()
 
-target_sources(common_backend PRIVATE common_backend.c)
+target_sources(common_backend PRIVATE common_backend.c quasar_nv_backend.c)
+
+# reconnect_store_facade.h only -- quasar_nv_backend.c implements that contract.
+target_link_libraries(common_backend PRIVATE reconnect_store)

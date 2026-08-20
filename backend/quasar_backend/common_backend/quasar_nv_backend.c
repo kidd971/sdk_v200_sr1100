@@ -1,4 +1,4 @@
-/** @file  puretone_headset_nv_backend.c
+/** @file  quasar_nv_backend.c
  *  @brief Reserved-page flash access for boot auto-reconnect (facade_nv_*).
  *
  *  Wraps the quasar_memory flash driver and hides the board-specific reserved
@@ -15,7 +15,7 @@
  */
 
 /* INCLUDES *******************************************************************/
-#include "puretone_headset_facade.h"
+#include "reconnect_store_facade.h"
 #include "quasar_memory.h"
 #include "stm32u5xx_hal.h"
 
