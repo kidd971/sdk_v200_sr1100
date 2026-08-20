@@ -1504,9 +1504,28 @@ static void print_stats_compact(void)
     prev_tick = now;
     prev_valid = true;
 
-    snprintf(line, sizeof(line), "[HS t=%lu] fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s lm=%u\r\n", (unsigned long)now,
+    uint32_t slots = rx_rate + miss_rate;
+    uint32_t fill_pct = (slots > 0) ? (uint32_t)(((uint64_t)rx_rate * 100U) / slots) : 0;
+
+    /* Fraction of this connection's scheduled receive slots that carried a packet.
+     *
+     * rx + miss is the number of slots the schedule gave this connection, and it was measured
+     * equal to the coordinator's transmitted packet count -- 834 + 1964 against tx=2798,
+     * exact -- so at a rung where the coordinator fills every slot this IS the arrival rate,
+     * and it is available here without correlating two consoles.
+     *
+     * It is NOT the arrival rate at a rung where the coordinator has slots with nothing to
+     * send. Those idle slots are counted as misses here, so the figure reads low: at mode 4
+     * the coordinator idles around 1200 slots a second, which turns a real 34% into 19%. Read
+     * it at a rung where the DG reports idle=0 -- modes 0 to 2 measured exactly 0 -- or read
+     * it only as a relative number between two distances.
+     *
+     * Integer percent on purpose: this gets compared between distances by eye, and a decimal
+     * would imply a precision a one-second window does not have.
+     */
+    snprintf(line, sizeof(line), "[HS t=%lu] fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s fill=%lu%% lm=%u\r\n", (unsigned long)now,
              (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)rx_rate, (unsigned long)rej_rate,
-             (unsigned long)miss_rate, (unsigned)info.link_margin);
+             (unsigned long)miss_rate, (unsigned long)fill_pct, (unsigned)info.link_margin);
     facade_print_string(line);
 }
 #endif /* !STATS_VERBOSE */
