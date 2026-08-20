@@ -42,9 +42,20 @@ _Min_Heap_Size = 0x200; /* required amount of heap */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
 /* Memories definition */
-/* Last 8 KB page (0x081FE000-0x081FFFFF) reserved for boot auto-reconnect
+/* Last 8 KB page (0x083FE000-0x083FFFFF) reserved for boot auto-reconnect
  * user data (see boot_auto_reconnect_design.md). FLASH shortened 4096K -> 4088K
- * so the linker never places code there; the app reaches it via _user_data_base. */
+ * so the linker never places code there; the app reaches it via _user_data_base.
+ *
+ * The base was 0x081FE000 until 2026-08-20 and that did not match this shortening.
+ * 4088K ends at 0x083FE000, so the eight kilobytes actually withheld from the linker
+ * are 0x083FE000-0x083FFFFF -- while 0x081FE000 is the last page of BANK 1, sitting
+ * in the middle of the declared FLASH region where the linker is free to place code.
+ * Erasing the record would then have erased whatever landed there. Nothing did,
+ * because the images are around 340 KB against a 2 MB bank, so it was size that kept
+ * it safe rather than the reservation.
+ *
+ * Bank 2 is also the better home on this part: the core stalls while flash in the
+ * bank it is executing from is programmed, and the code is in bank 1. */
 MEMORY
 {
   RAM   (xrw) : ORIGIN = 0x20000000, LENGTH = 2496K
@@ -53,7 +64,7 @@ MEMORY
 }
 
 /* Base of the reserved user-data page (last 8 KB of the 4 MB flash). */
-_user_data_base = 0x081FE000;
+_user_data_base = 0x083FE000;
 
 /* Sections */
 SECTIONS
