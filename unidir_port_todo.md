@@ -140,10 +140,19 @@ unidir 的 SINE 引用數是 **0**。headset 有：
 把 TIM4 park 記成未解之謎是錯的（它有 workaround），但把 96k 當成一個真正的
 問題**是對的**。
 
-### 3.3 console 同時送兩個 UART
+### 3.3 console 走哪個 UART —— 依板子變體而定（2026-08-20 定案）
 
-UART4（PC10）和 LPUART1（PA3）都送。這是 bring-up 的權宜做法，
-知道哪個 header 通了之後應該砍掉一個——送兩次每行多花約 2 ms。
+不再是「暫時都送、之後砍一個」，是**刻意的分工**：
+
+| 板子 | console |
+|---|---|
+| **LDO** | **UART4（PC10）+ LPUART1（PA3）都送**。兩個 header 都有焊、bench 上兩個都會用到，**會用很久**，所以都留。代價是每行多一次阻塞傳送、約 2 ms，這是接受的 |
+| **SMPS** | **只有 LPUART1（PA3）**，那是這個變體有的 header |
+
+判別用 `U535_PWR_LDO` —— CMakeLists 只在 preset 選 LDO 時才定義它，
+所以**它不存在就代表是 SMPS**。兩邊都 build 過確認分支正確。
+
+PA2 在兩種板子上都是不可靠的 pad，所以 console 一律**只發不收**；PA3 發送正常。
 
 ---
 

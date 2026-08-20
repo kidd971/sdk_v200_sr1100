@@ -449,32 +449,40 @@ static void console_port_write(quasar_uart_selection_t selection, GPIO_TypeDef *
  *  quasar_bsp_error_handler() prints before it starts blinking blue forever, all went
  *  nowhere. A fatal error that leaves no trace but a blinking LED costs an afternoon.
  *
- *  Written to BOTH serial ports this board can reach:
+ *  Which port depends on the board variant, and the two u535 builds differ:
  *
- *    - UART4  on PC10 (TX) / PC11 (RX) -- the ST-Link VCP header.
- *    - LPUART1 on PA3 (TX) / PA2 (RX)  -- the expansion UART header. PA2 is documented as an
- *      unreliable pad, which is why nothing here reads; PA3 transmits.
+ *    - LDO board  -- BOTH. UART4 on PC10 (TX) / PC11 (RX), the ST-Link VCP header, AND
+ *      LPUART1 on PA3 (TX) / PA2 (RX), the expansion header. Both headers are populated and
+ *      both get used on the bench, so both stay. This costs one extra blocking transmit per
+ *      line, roughly 2 ms for a short one, and that is accepted deliberately rather than
+ *      being a leftover from bring-up.
  *
- *  Sending to both is a bring-up measure, not a design: which of the two headers is actually
- *  populated varies by board, and a diagnostic channel that might not be connected is worth
- *  very little. It costs one extra blocking transmit per line -- about 2 ms for a short one --
- *  and once it is known which port this board answers on, drop the other.
+ *    - SMPS board -- LPUART1 only. That is the header this variant has.
+ *
+ *  PA2 is documented as an unreliable pad on both, which is why nothing here reads; PA3
+ *  transmits fine. U535_PWR_LDO is the discriminator: CMakeLists.txt only defines it when the
+ *  preset selects LDO, so its absence means SMPS.
  *
  *  Blocking, deliberately. There is no realtime consumer, and the one caller that must not be
  *  lost is on its way into an infinite loop, so there is nothing for a queue to be kind to.
  */
 void facade_print_string(char *string)
 {
+#if defined(U535_PWR_LDO)
     static bool stlink_ready;
+#endif
     static bool expansion_ready;
 
     if (string == NULL) {
         return;
     }
 
+#if defined(U535_PWR_LDO)
+    /* LDO board only: this variant has the ST-Link VCP header populated as well. */
     console_port_write(QUASAR_DEF_UART_SELECTION_DEBUG, QUASAR_DEF_STLINK_UART_TX_PORT,
                        QUASAR_DEF_STLINK_UART_TX_PIN, QUASAR_DEF_STLINK_UART_RX_PORT,
                        QUASAR_DEF_STLINK_UART_RX_PIN, &stlink_ready, string);
+#endif
 
     console_port_write(QUASAR_DEF_UART_SELECTION_EXPANSION, QUASAR_DEF_EXPANSION_UART_TX_PORT,
                        QUASAR_DEF_EXPANSION_UART_TX_PIN, QUASAR_DEF_EXPANSION_UART_RX_PORT,
