@@ -92,6 +92,31 @@
  *
  * Not a shippable setting. Maximum width at maximum amplitude on all four bands is a lab arm for
  * bounding an answer; emissions compliance has not been considered here. */
+/** @brief Transmit at the widest pulse the field allows, on every band and every fallback level.
+ *
+ *  Widens ONLY. The gain fields are left exactly as they were -- that is the whole point of
+ *  this switch existing separately from FBK4_TX_POWER_REF=2 and ACK_TX_POWER_MAX=1, both of
+ *  which take width to 7 AND gain to 0 and are documented here as lab arms rather than
+ *  shippable settings.
+ *
+ *  This is a product decision, not a measurement. It should not be read as a fix: the two
+ *  arms above put width at 7 with gain at 0 -- strictly louder than this -- and moved the
+ *  drop-out distance not at all, over two runs each. Nothing here is expected to change that
+ *  number, and if it does, the arms' results need re-examining rather than believing.
+ *
+ *  What it does change, and what to watch. The shipped table steps power UP as the link
+ *  degrades: width 2 at level 1, 6 at level 4. That graduation is deliberate -- a good link
+ *  does not need the energy, and energy it does not need goes into near-field reflections.
+ *  Flattening the table to 7 transmits at full width when the peer is close and the link is
+ *  fine, which is the condition the ISI mitigation work exists to survive. If near-field
+ *  obstruction regresses after this, this switch is the first thing to turn off.
+ *
+ *  Emissions compliance has not been assessed for this table.
+ */
+#ifndef TX_PULSE_WIDTH_MAX
+#define TX_PULSE_WIDTH_MAX 1
+#endif
+
 #ifndef ACK_TX_POWER_MAX
 #define ACK_TX_POWER_MAX 0
 #endif
@@ -113,6 +138,15 @@
         0,                \
     }
 #else
+#if TX_PULSE_WIDTH_MAX
+#define TX_ACK_PULSE_WIDTH \
+    {                      \
+        7,                 \
+        7,                 \
+        7,                 \
+        7,                 \
+    }
+#else
 #define TX_ACK_PULSE_WIDTH \
     {                      \
         5,                 \
@@ -120,6 +154,7 @@
         5,                 \
         5,                 \
     }
+#endif
 
 #define TX_ACK_PULSE_GAIN \
     {                     \
