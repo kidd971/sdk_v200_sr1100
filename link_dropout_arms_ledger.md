@@ -41,17 +41,56 @@
 
 ---
 
-## 2. 有效的（現行配置，tag `v240-unidir-fbk5-ok` / `slim3`）
+## 2. 有效的（現行配置）
+
+> **2026-08-20 重大變更：unidir 的 ISI 已降為 level 1，近端改由雙天線分集守。**
+> 這一節以下的三項（accumulator / buffer / mode 3 縮身）不受影響，仍然有效。
+> 詳見 §2.1。
 
 | 項目 | 值 | 為什麼有效 |
 |---|---|---|
-| **ISI mitigation** | `SWC_ISI_MITIG_2`（兩端必須一致） | 唯一直接對付 multipath 塗抹的旋鈕。Level 1（SPARK 出貨值）不夠，Level 3 無遮擋就爆音 |
+| **ISI mitigation** | **unidir：`SWC_ISI_MITIG_1`**<br>headset：`SWC_ISI_MITIG_2`<br>（兩端必須一致） | 見 §2.1 —— level 2 與雙 radio 不相容 |
 | **Accumulator（重傳餘裕）** | mode 3 = 23/10（3.7 次）<br>mode 4 = 40/10（6.4 次） | Accumulator 在 resampler **之前**，是唯一決定「一包能被送幾次」的旋鈕。slot 是按**包**花的不是按 byte |
 | **底部兩階 buffer** | 40 ms（30 ms 不夠，近端斷音會回來） | 遮擋持續數百 ms；queue 排空之後重送再多次也沒用，封包已經過了播放時限 |
 | **mode 3 縮回 54 B** | acc 4.6× → 2.3× | 100 B 的 mode 3 + ISI 2 的長 preamble 塞不進 250 µs slot → 長距離持續遮擋會當機。重傳餘裕改由 mode 4 扛 |
 
 **這四項缺一不可**：ISI 提高「單次送達的機率」，accumulator 提供「足夠的次數讓機率兌現」，
 buffer 提供「撐過突發遮擋的時間」。三個各補一個獨立的資源，任何一個單獨上都無效。
+
+### 2.1 ISI 2 → 1：因為 level 2 與雙 radio 不相容（2026-08-20）
+
+**量到的事實：雙 radio 的 node 在 `SWC_ISI_MITIG_2` 下完全不出聲** —— 只有 fallback mode 3
+偶爾起得來 —— 而同一份 build 換成 level 1 或 level 0 就正常。coord 一律是單 radio。
+在 u5a5 上用 headset app 量到，換到 u535 與 unidir 上行為一致。
+
+**不是 SDK 的問題。** 乾淨的 vendor 樹（v2.4.0-rc2）雙 radio 跑得好好的，而把我們的
+`swc_cfg.h` 跟它逐行比對，**唯一的差異就是 `NODE_ISI_MITIG` 這一行** —— vendor 根本沒設
+`isi_mitig`，等於 level 0。
+
+**機制就是 §3 第 7 條講 level 3 的那個，早了一級發生。** ISI mitigation 把 preamble 拉長，
+而 preamble 屬於**連線**不屬於 fallback mode，必須容納 ladder 上最大的 payload 進 250 µs
+slot；雙 radio 的排程更緊，所以**在兩顆 radio 上，level 2 的行為就是 level 1 顆 radio 上
+level 3 的行為**。只有 mode 3 活下來是決定性的旁證 —— 它是 payload 最小的那一階。
+
+**但這不是犧牲，取捨消失了。** 當初選 level 2 是因為 level 1 擋不住近端多重路徑 ——
+**那是在單 radio 上量的**。雙天線看到的多重路徑不同，所以雙 radio 是用**分集**去對付
+同一個問題，跟拉長符號是兩條不同的路。實測：**u5a5、雙 radio、ISI 1、24 kHz stereo，
+近端遮擋不斷音**。
+
+| | 近端遮擋 | 雙 radio |
+|---|---|---|
+| 單 radio + ISI 2（舊） | ✅ | ❌ 完全不通 |
+| **雙 radio + ISI 1（現行）** | ✅ | ✅ |
+
+而且分集對距離也有幫助，那是 ISI 給不了的（§5.3：ISI 不增加能量）。
+
+**headset 維持 level 2**，因為那條線出貨走單 radio，沒有東西跟它衝突。
+兩個 app 的預設不一樣是刻意的，兩邊的註解都寫了不要把它們對齊。
+但要注意：**headset 自己的 dual radio preset 在預設值下是壞的**，要跑得加
+`-DNODE_ISI_MITIG=SWC_ISI_MITIG_1`。
+
+**還沒驗的兩件（交給 ODM）**：u535 的近端遮擋（這裡沒有條件測），
+以及 level 4 輸出脈寬拉到 7 的影響（2026-08-20 才改，見 §3 第 4 條下方）。
 
 ---
 
