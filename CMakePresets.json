@@ -412,6 +412,7 @@
         },
         {
             "name": "puretone-headset-quasar-u535-single-radio2-ldo",
+            "hidden": true,
             "inherits": ["puretone-headset-quasar-u535"],
             "description": "DIAGNOSTIC control for -single-radio2-smps: same SINGLE radio-2-only build (SWC_SINGLE_RADIO_ID=2) but LDO regulator, for an A/B against SMPS.",
             "cacheVariables": {
