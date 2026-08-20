@@ -261,6 +261,26 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
+    /* First thing on the console, before anything can fail. Without it "nothing came out of
+     * the serial port" has two meanings that cannot be told apart: the console is broken, or
+     * the console is fine and the application died before printing anything. On a board whose
+     * only failure indication is a blinking LED, establishing that distinction costs a whole
+     * test cycle, every time.
+     *
+     * __DATE__ / __TIME__ expand HERE, in the application translation unit, so an incremental
+     * build that recompiles only this file still reports its own timestamp -- which is the
+     * point of printing them. Naming the role matters too: the two binaries come from
+     * different presets with opposite I2S clock roles, and flashing the wrong one fails as
+     * silence, which looks like something else entirely.
+     */
+    {
+        char banner[96];
+
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional node u535 "
+                                         __DATE__ " " __TIME__ "\r\n");
+        facade_print_string(banner);
+    }
+
     /* Initialize wireless core context switch handler before pairing is available. */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
