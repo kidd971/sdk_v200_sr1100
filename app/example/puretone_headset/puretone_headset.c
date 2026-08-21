@@ -536,12 +536,18 @@ int main(void)
     /* Version on the debug console, once. It used to prefix every statistics line at 2 Hz,
      * which is a great deal of repetition to answer a question -- "which binary produced
      * this log?" -- that needs answering once per boot, and that the timestamp printed
-     * beside it answers more precisely anyway. */
+     * beside it answers more precisely anyway.
+     *
+     * facade_stats_write, not facade_print_string: the two are different channels here.
+     * print_string is the weak USB CDC implementation on this application, while the
+     * statistics go out over the ST-Link UART on u535 and only fall back to CDC on u5a5.
+     * A banner whose entire job is to label a log has to arrive on the same channel as
+     * the log, or it labels nothing. */
     {
         char banner[80];
 
         snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_headset " FW_VERSION_STRING " " __DATE__ " " __TIME__ "\r\n");
-        facade_print_string(banner);
+        facade_stats_write(banner);
     }
 
     /* Boot banner, ahead of UWB_READY. Same timestamp as the crash-dump build line (both
