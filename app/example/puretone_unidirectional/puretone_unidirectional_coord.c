@@ -1809,6 +1809,11 @@ static boot_reconnect_result_t try_boot_reconnect(void)
     pairing_discovery_list[PAIRING_DEVICE_ROLE_NODE].node_address =
         pairing_assigned_address.node_address;
 
+    /* Say so on the LED as well as the console. The console is the bench's instrument; the
+     * LED is what someone standing in front of the product can read, and on a board with no
+     * display it is the only thing separating "restoring your pairing" from "pairing now".
+     */
+    facade_notify_reconnecting();
     facade_print_string("[BOOT] reconnecting to stored pair\r\n");
 
     app_init();

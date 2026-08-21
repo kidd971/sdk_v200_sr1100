@@ -275,13 +275,6 @@ void facade_certification_led_toggle(void);
  */
 void facade_enter_standby(void);
 
-/** @brief Reconnecting notification LED pattern (boot auto-reconnect).
- *
- *  Fast blink x5 (~100 ms) on the board status color: blue on the u535 headset,
- *  green elsewhere. Distinguishable from enter-pairing (slow 250 ms x2). Blocking,
- *  fired only at the boot reconnect transition, never in the audio loop.
- */
-void facade_notify_reconnecting(void);
 
 /** @brief Boot auto-reconnect timeout notification LED pattern.
  *

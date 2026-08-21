@@ -110,6 +110,21 @@ void facade_print_error_string(char *string);
  */
 void facade_notify_enter_pairing(void);
 
+/** @brief Reconnecting notification LED pattern (boot auto-reconnect).
+ *
+ *  Fast blink x5 at 100 ms on the board status colour: blue on u535, green elsewhere.
+ *
+ *  The pattern has to be told apart from enter-pairing, which is a SLOW 250 ms x2 on the
+ *  same LED in the same colour. That is the whole point of it: the two are the only things
+ *  that happen at boot, they look similar from across a bench, and confusing them means
+ *  believing a device is pairing when it is silently restoring a link it already had.
+ *  Fast-and-five against slow-and-two is legible without counting.
+ *
+ *  Blocking, and deliberately so -- one second at the boot reconnect transition, never in
+ *  the audio loop.
+ */
+void facade_notify_reconnecting(void);
+
 /** @brief Not paired notification LED pattern.
  */
 void facade_notify_not_paired(void);

@@ -128,6 +128,28 @@ __attribute__((weak)) void facade_notify_enter_pairing(void)
     }
 }
 
+__attribute__((weak)) void facade_notify_reconnecting(void)
+{
+    /* Fast blink x5 (~100 ms) against enter-pairing's slow 250 ms x2 -- see the header for
+     * why the two must not look alike. */
+    const uint16_t delay_ms = 100;
+    const uint8_t repeat = 5;
+
+    quasar_rgb_clear();
+#ifdef QUASAR_U535
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+#else
+    quasar_rgb_configure_color(QUASAR_RGB_COLOR_GREEN);
+#endif
+
+    for (uint8_t i = 0; i < repeat; i++) {
+        quasar_rgb_set();
+        quasar_timer_delay_ms(delay_ms);
+        quasar_rgb_clear();
+        quasar_timer_delay_ms(delay_ms);
+    }
+}
+
 __attribute__((weak)) void facade_notify_not_paired(void)
 {
     quasar_rgb_clear();
