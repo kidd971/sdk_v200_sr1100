@@ -67,15 +67,6 @@
  */
 #define NODE_RX_TIMEOUT_MS 200
 
-/** @brief Allow the main channel to climb to mode 0 (96 kHz 24-bit).
- *
- *  Off by default: 96 kHz parks a dual-radio link on u535 and the cause is still open. See
- *  the long note at the ceiling itself in app_audio_core_init(). Set to 1 only to test
- *  whether the park has been fixed.
- */
-#ifndef MAIN_CHANNEL_ALLOW_96K
-#define MAIN_CHANNEL_ALLOW_96K 0
-#endif
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3000
 /* Period for data transmission timer in ms.

@@ -1222,9 +1222,27 @@ static void app_audio_core_init(void)
                                      &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 
-    /** Start fallback in best quality. */
+    /** Start fallback at the highest ACTIVE mode. */
+#if MAIN_CHANNEL_ALLOW_96K
     sac_fallback_set_current_mode(&main_channel_fallback_instance, 0, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+#else
+    /* Mirror the coordinator's ceiling -- see MAIN_CHANNEL_ALLOW_96K in sac_cfg.h.
+     *
+     * This side receives and follows the mode in the transmitted header, so capping the
+     * coordinator does cap what actually crosses the air. What it does not cap is where this
+     * side STARTS: the node keeps its own fallback instance, with its own trigger and
+     * recover counters, and it began at mode 0 regardless. That showed as fb=0 96kHz on the
+     * console from boot until the first packet arrived, which is both misleading and simply
+     * untrue -- the coordinator was never going to send that mode.
+     *
+     * Deactivating it here also stops this instance's own recovery from ever selecting a
+     * mode the other end has switched off. */
+    sac_fallback_mode_set_active_state(&main_channel_fallback_instance, 0, false, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_set_current_mode(&main_channel_fallback_instance, 1, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
 
     /* Second pipeline stage: Accumulator -> Audio output. */
     dummy_audio_producer = sac_endpoint_init(NULL, "ACC EP (Producer)", dummy_iface, dummy_consumer_cfg, &sac_status);

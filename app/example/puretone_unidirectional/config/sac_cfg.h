@@ -201,6 +201,23 @@
  */
 #define I2S_SAMPLE_RATE_HZ MAIN_CHANNEL_SAMPLE_RATE_HZ
 
+/** @brief Allow the main channel to climb to mode 0 (96 kHz 24-bit).
+ *
+ *  Off. 96 kHz drops on this line -- measured again on 2026-08-20 with dual radio at ISI 1,
+ *  after the earlier explanation for it turned out to be something else -- and the cause is
+ *  still open. See the ceiling itself in the coordinator's app_audio_core_init(). Set to 1
+ *  only to test whether that has been fixed.
+ *
+ *  Defined here, in the config both roles include, rather than in one of them. Both ends
+ *  have to agree about it: the coordinator decides what goes on the air, but the node holds
+ *  its own fallback instance and its own starting mode, and a node that begins at 96 kHz
+ *  while the coordinator will never send it is wrong from the first instant -- visibly so,
+ *  since that is the mode its console reports until the first packet arrives.
+ */
+#ifndef MAIN_CHANNEL_ALLOW_96K
+#define MAIN_CHANNEL_ALLOW_96K 0
+#endif
+
 /** @brief The same rate as an SAI enum, for the master clock generator.
  *
  *  Kept next to I2S_SAMPLE_RATE_HZ so the two cannot drift: this one is only read when this

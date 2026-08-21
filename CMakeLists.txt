@@ -134,6 +134,19 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(MULTI_RADIO_FORCE=${MULTI_RADIO_FORCE})
     endif()
 
+    # Both of these have #ifndef defaults in headers, so the shipped value works whether or
+    # not they are forwarded -- which is exactly why the omission was invisible. Only the -D
+    # override was broken, and both are documented as the way to answer a specific question:
+    # ALLOW_96K=1 to retest the 96 kHz drop, PULSE_WIDTH_MAX=0 to back out the level-4 width
+    # if near-field regresses. An escape hatch that silently does nothing is worse than none.
+    if (DEFINED MAIN_CHANNEL_ALLOW_96K)
+        add_compile_definitions(MAIN_CHANNEL_ALLOW_96K=${MAIN_CHANNEL_ALLOW_96K})
+    endif()
+
+    if (DEFINED TX_PULSE_WIDTH_MAX)
+        add_compile_definitions(TX_PULSE_WIDTH_MAX=${TX_PULSE_WIDTH_MAX})
+    endif()
+
     if (DEFINED STATS_VERBOSE)
         add_compile_definitions(STATS_VERBOSE=${STATS_VERBOSE})
     endif()
