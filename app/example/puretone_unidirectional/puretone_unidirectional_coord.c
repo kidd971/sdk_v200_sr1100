@@ -2165,24 +2165,42 @@ static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_
 {
     uint8_t *payload = NULL;
     uint16_t payload_size = 0;
+    uint16_t copy_size = 0;
 
     /* Read received data. */
     payload_size = swc_connection_receive(rx_data_conn, &payload, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    if (payload_size > size) {
-        return 0;
+    /* Copy only what the caller's struct can hold, and copy it whatever the sizes are.
+     *
+     * This used to return 0 on an oversized payload WITHOUT calling
+     * swc_connection_receive_complete(), which leaks the receive buffer. Unreachable while
+     * both ends run identical firmware, which is why it survived: user_data_t was two bytes
+     * on both sides and nothing could ever arrive longer.
+     *
+     * That stops being true the moment the struct grows -- the AT vendor pass-through takes
+     * it to five bytes in the common case -- because then an older build receives a longer
+     * packet, which is an ordinary condition during a rollout rather than an error. And the
+     * failure is not the mild one it looks like. A leaked buffer every 10 ms fills the
+     * receive queue and kills the data connection for good: link margin stops updating and
+     * the fallback ladder, which reads queue depth, wanders on stale information.
+     *
+     * Truncating is safe because user_data_t is append-only, so the prefix a shorter struct
+     * understands sits at the same offsets in the longer one. The opposite case -- a payload
+     * shorter than the struct -- already worked, because callers zero-initialize and every
+     * field's zero means "absent". Both directions therefore degrade to "the fields this
+     * build knows about", which is the whole intent of the layout. */
+    copy_size = (payload_size > size) ? size : payload_size;
+
+    if ((received_data != NULL) && (payload != NULL) && (copy_size > 0)) {
+        memcpy(received_data, payload, copy_size);
     }
 
-    if (received_data != NULL) {
-        memcpy(received_data, payload, payload_size);
-    }
-
-    /* Free the payload memory. */
+    /* Free the payload memory. Must happen on every path that took a payload. */
     swc_connection_receive_complete(rx_data_conn, swc_err);
     ASSERT_SWC_STATUS(*swc_err);
 
-    return payload_size;
+    return copy_size;
 }
 
 /** @brief Get the accumulator size based on the current fallback mode.
