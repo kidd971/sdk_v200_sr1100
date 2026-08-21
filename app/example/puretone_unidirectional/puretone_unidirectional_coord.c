@@ -30,6 +30,7 @@
 #include "sac_stats.h"
 #include "swc_api.h"
 #include "fw_version.h"
+#include "puretone_link_data.h"  /* user_data_t: the wire format, shared with the node */
 #include "reconnect_store.h"
 #include "swc_cfg.h"
 #include "swc_cfg_coord.h"
@@ -50,7 +51,7 @@
 /* Total memory needed for the Wireless Core. */
 #define SWC_MEM_POOL_SIZE 10500
 /* The data connection supports up to 16 bytes. */
-#define MAX_DATA_PAYLOAD_SIZE 16
+/* MAX_DATA_PAYLOAD_SIZE comes from puretone_link_data.h, next to the struct it has to hold. */
 
 /** @brief How long to wait for the stored peer to answer before giving up on a silent
  *         reconnect, in ms.
@@ -164,14 +165,10 @@ typedef enum fallback_states {
     FALLBACK_STATE_COUNT,
 } fallback_states_t;
 
-/** @brief Data used for transmitting and receiving link margin and button state.
- */
-typedef struct user_data {
-    /*! A boolean indicating the button's state. */
-    bool button_state;
-    /*! The link margin to monitor link quality. */
-    uint8_t link_margin;
-} user_data_t;
+/* user_data_t now lives in puretone_link_data.h, shared with the other role and with the
+ * puretone_headset line. Both ends of a link must agree byte for byte, and this file and
+ * its peer each used to carry their own copy of the definition -- editing one and not the
+ * other compiles and links cleanly, then misreads every field past the divergence. */
 
 /* PRIVATE GLOBALS ************************************************************/
 /* **** Audio Core **** */
@@ -1829,7 +1826,11 @@ static void data_callback(void)
 
     /* Send the state of the button to the Node (The Link margin is not used). */
     transmitted_user_data.button_state = facade_read_button_state();
-    wireless_send_data(&transmitted_user_data, sizeof(transmitted_user_data), &swc_err);
+
+    /* user_data_tx_size(), not sizeof(). The struct now reserves room for the vendor block,
+     * which is empty in almost every packet; sending the whole thing would put that reserved
+     * space on the air a hundred times a second to carry nothing. See the header. */
+    wireless_send_data(&transmitted_user_data, user_data_tx_size(&transmitted_user_data), &swc_err);
 }
 
 /** @brief Handle pairing button callback.
