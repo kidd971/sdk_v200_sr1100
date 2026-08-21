@@ -27,18 +27,23 @@ extern "C" {
 #define FW_VERSION_RELEASE  "rc01"
 #endif
 
-/** @brief What every version print and version query answers: "v2.4.0 rc01".
+/** @brief What every version print and version query answers: "v2.4.0_rc01".
  *
  *  One string, deliberately, because the alternative has already happened here: the two
  *  halves lived in separate macros with separate rules about when to bump them, and the
  *  console ended up reporting the SDK tag while the package was on a different number
  *  entirely. A log pasted into a bug report then names a version nobody cut.
  *
+ *  Underscore rather than a space so the whole thing is one token: it shares a line with
+ *  data in the boot banner and with the AT responses, and anything that splits on whitespace
+ *  -- a log grep, a host parser, a person copying a field -- would otherwise take half of it.
+ *  The git tag and the bin/<tag>/ directory use the same spelling.
+ *
  *  It is a convenience label and can still go stale. The __DATE__/__TIME__ printed beside it
  *  is what actually identifies a binary, and the MANIFEST's git commit is what actually
  *  identifies the source.
  */
-#define FW_VERSION_STRING  FW_VERSION_SDK " " FW_VERSION_RELEASE
+#define FW_VERSION_STRING  FW_VERSION_SDK "_" FW_VERSION_RELEASE
 
 /** @brief The SDK line without its dots, for places where the version shares a line with data.
  *
