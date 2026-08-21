@@ -1769,7 +1769,7 @@ static void print_stats_compact(void)
     prev_valid = true;
 
     snprintf(line, sizeof(line),
-             "[DG t=%lu] fb=%u %-13s tx=%lu/s idle=%lu/s cca_fail=%lu/s tx_drop=%lu/s\r\n", (unsigned long)now,
+             "[DG] " FW_VERSION_COMPACT " %lu fb=%u %-13s tx=%lu/s idle=%lu/s cca_fail=%lu/s tx_drop=%lu/s\r\n", (unsigned long)now,
              (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)tx_rate, (unsigned long)idle_rate,
              (unsigned long)cca_rate, (unsigned long)drop_rate);
     facade_print_string(line);

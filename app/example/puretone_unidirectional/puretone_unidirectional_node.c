@@ -1536,7 +1536,8 @@ static void print_stats_compact(void)
     static uint32_t prev_rx_ok, prev_rej, prev_miss, prev_tick;
     static bool prev_valid;
 
-    char line[144];
+    char line[224];
+    int len;
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
     uint32_t now = facade_get_tick_ms();
@@ -1584,10 +1585,33 @@ static void print_stats_compact(void)
      * Integer percent on purpose: this gets compared between distances by eye, and a decimal
      * would imply a precision a one-second window does not have.
      */
-    snprintf(line, sizeof(line), "[HS t=%lu] fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s fill=%lu%% lm=%u\r\n", (unsigned long)now,
-             (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)rx_rate, (unsigned long)rej_rate,
-             (unsigned long)miss_rate, (unsigned long)fill_pct, (unsigned)info.link_margin);
+    len = snprintf(line, sizeof(line), "[HS] " FW_VERSION_COMPACT " %lu fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s fill=%lu%% lm=%u",
+                   (unsigned long)now, (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)rx_rate,
+                   (unsigned long)rej_rate, (unsigned long)miss_rate, (unsigned long)fill_pct,
+                   (unsigned)info.link_margin);
+
+    /* Scheduler-timer state on the SAME line, not a second one. It is only ever read next to
+     * the packet counters -- the wedge shows as those counters going quiet WHILE the timer
+     * still says it is running -- and on two lines a terminal can scroll them apart, or a
+     * paste can carry one without the other. Omitted entirely when it reads the all-zero that
+     * a single-radio board always gives, so single-radio logs are unchanged.
+     *
+     * Truncation is guarded rather than assumed: snprintf returns what it WOULD have written,
+     * so len can already exceed the buffer, and using it as an offset would be undefined. */
+    if ((len > 0) && ((size_t)len < sizeof(line))) {
+        uint32_t t_cr1 = 0, t_arr = 0, t_cnt = 0, t_dier = 0;
+
+        if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier) &&
+            ((t_cr1 | t_arr | t_cnt | t_dier) != 0)) {
+            snprintf(line + len, sizeof(line) - (size_t)len,
+                     " tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX)",
+                     (unsigned long)(t_cr1 & 0x1u), (unsigned long)t_arr, (unsigned long)t_cnt,
+                     (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier);
+        }
+    }
+
     facade_print_string(line);
+    facade_print_string("\r\n");
 }
 #endif /* !STATS_VERBOSE */
 
@@ -1629,18 +1653,6 @@ static void print_diagnostics(void)
         facade_print_string(line);
     }
 
-    /* Raw scheduler-timer state, only when it is not the all-zero a single-radio board always
-     * reads: cen=0 means stopped, cen=1 with arr=0 means the period was programmed to zero and
-     * the timer stalled, a sane arr with a moving cnt means the timer is not the problem. */
-    uint32_t t_cr1 = 0, t_arr = 0, t_cnt = 0, t_dier = 0;
-
-    if (facade_get_multi_radio_timer_regs(&t_cr1, &t_arr, &t_cnt, &t_dier) &&
-        ((t_cr1 | t_arr | t_cnt | t_dier) != 0)) {
-        snprintf(line, sizeof(line), "Tim4: cen=%lu arr=%lu cnt=%lu uie=%lu (cr1=0x%lX dier=0x%lX)\r\n",
-                 (unsigned long)(t_cr1 & 0x1u), (unsigned long)t_arr, (unsigned long)t_cnt,
-                 (unsigned long)(t_dier & 0x1u), (unsigned long)t_cr1, (unsigned long)t_dier);
-        facade_print_string(line);
-    }
 }
 
 /** @brief Callback sends the button state and link margin at the DATA_TX_PERIOD_MS interval.

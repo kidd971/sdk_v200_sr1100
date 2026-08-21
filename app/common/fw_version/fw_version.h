@@ -40,6 +40,22 @@ extern "C" {
  */
 #define FW_VERSION_STRING  FW_VERSION_SDK " " FW_VERSION_RELEASE
 
+/** @brief The SDK line without its dots, for places where the version shares a line with data.
+ *
+ *  Kept beside FW_VERSION_SDK rather than derived from it -- the preprocessor cannot strip the
+ *  dots -- so the two forms of the same number sit together and cannot be changed one without
+ *  seeing the other.
+ */
+#define FW_VERSION_SDK_COMPACT  "v240"
+
+/** @brief One whitespace-free token: "v240_rc01".
+ *
+ *  For the statistics lines, which are read by eye in a terminal and split on whitespace by
+ *  everything else. The release half is the same FW_VERSION_RELEASE the long form uses, so
+ *  cutting a package still touches one place.
+ */
+#define FW_VERSION_COMPACT  FW_VERSION_SDK_COMPACT "_" FW_VERSION_RELEASE
+
 #ifdef __cplusplus
 }
 #endif
