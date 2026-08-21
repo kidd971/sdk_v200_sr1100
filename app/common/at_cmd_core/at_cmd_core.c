@@ -658,7 +658,7 @@ void at_cmd_core_process(void)
 static bool handler_ver(const char *args, char *resp, uint16_t resp_size)
 {
     (void)args;
-    snprintf(resp, resp_size, "+VER: SPARK SDK SR1100 " AT_CMD_CORE_SDK_VERSION);
+    snprintf(resp, resp_size, "+VER: SPARK SDK SR1100 " FW_VERSION_STRING);
     return true;
 }
 
@@ -666,7 +666,7 @@ static bool handler_ver(const char *args, char *resp, uint16_t resp_size)
 static bool handler_fw_version(const char *args, char *resp, uint16_t resp_size)
 {
     (void)args;
-    snprintf(resp, resp_size, "+FW_VERSION: " AT_CMD_CORE_SDK_VERSION);
+    snprintf(resp, resp_size, "+FW_VERSION: " FW_VERSION_STRING);
     return true;
 }
 

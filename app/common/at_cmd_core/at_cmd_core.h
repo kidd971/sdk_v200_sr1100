@@ -25,6 +25,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "fw_version.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,35 +33,6 @@ extern "C" {
 
 /** @brief Baud rate used for the expansion UART AT channel. */
 #define AT_CMD_CORE_BAUD_RATE  115200
-
-/** @brief SPARK SDK version this firmware is built from.
- *
- *  Single source of truth for AT+VER, AT+FW_VERSION, the crash-dump build line and the
- *  LINK_WATCH line prefix. Bump this when the underlying SDK is updated (v2.3.0 -> v2.3.1
- *  dual-radio re-sync fix -> v2.4.0-rc2).
- *
- *  Kept short because LINK_WATCH now prints it on every line at 2 Hz: it is the field that
- *  tells you which binary produced a log someone pasted at you, which only works if it is
- *  cheap enough to leave on.
- */
-#define AT_CMD_CORE_SDK_VERSION  "v2.4.0-rc2"
-
-/** @brief Release / package tag for this binary, e.g. the ODM release candidate it belongs to.
- *
- *  Separate from AT_CMD_CORE_SDK_VERSION on purpose: that one names the SPARK SDK the
- *  firmware is built from and is what AT+VER and AT+FW_VERSION answer, so an ODM package
- *  label does not belong in it. This appears only in the BUILD banner and the crash-dump
- *  build line -- the two places whose job is "which binary am I looking at".
- *
- *  Bump when cutting a package, and keep it equal to the bin/<tag>/ directory name so the
- *  banner, the MANIFEST and the folder all agree. It is a convenience label and can go
- *  stale: the __DATE__/__TIME__ next to it is what actually identifies a binary, and the
- *  MANIFEST's git commit is what actually identifies the source. Overridable per build
- *  (-DAT_CMD_CORE_RELEASE_TAG=\"rc08\") so a preset can stamp it without editing this file.
- */
-#ifndef AT_CMD_CORE_RELEASE_TAG
-#define AT_CMD_CORE_RELEASE_TAG  "rc07"
-#endif
 
 /** @brief Version + compile timestamp identifying the exact binary.
  *
@@ -71,7 +43,7 @@ extern "C" {
  *  stale, which defeats the whole point of printing it. Expanding at the call site also keeps
  *  it identical to the HS crash-dump build line, which uses the same two macros.
  */
-#define AT_CMD_CORE_BUILD_ID  AT_CMD_CORE_SDK_VERSION " " AT_CMD_CORE_RELEASE_TAG " " __DATE__ " " __TIME__
+#define AT_CMD_CORE_BUILD_ID  FW_VERSION_STRING " " __DATE__ " " __TIME__
 
 /** @brief UWB connection status codes reported by AT+LE_UWB_CONN_STATUS?. */
 typedef enum {

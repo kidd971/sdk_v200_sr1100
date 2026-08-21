@@ -13,6 +13,7 @@
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
 #include "at_cmd_core.h"
+#include "fw_version.h"
 #include "at_cmd_core_facade.h"  /* facade_system_reset: AT+LE_UWB_CONNECT reboots into boot auto-reconnect */
 #include "pairing_api.h"
 #include "pairing_cfg.h"
@@ -474,6 +475,17 @@ int main(void)
     at_cmd_core_register_vol_cb(at_set_vol);
     at_cmd_core_register_cmd_tx_cb(at_cmd_tx);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
+    /* Version on the debug console, once. It used to prefix every statistics line at 2 Hz,
+     * which is a great deal of repetition to answer a question -- "which binary produced
+     * this log?" -- that needs answering once per boot, and that the timestamp printed
+     * beside it answers more precisely anyway. */
+    {
+        char banner[80];
+
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_dongle " FW_VERSION_STRING " " __DATE__ " " __TIME__ "\r\n");
+        facade_print_string(banner);
+    }
+
     /* Boot banner, ahead of UWB_READY. The DG has no periodic crash dump and its LINK_WATCH
      * output goes to the ST-Link VCP (UART4), which a customer board does not necessarily
      * wire out -- so on the AT port this pair of lines is the only evidence of a boot. A
@@ -2137,7 +2149,7 @@ static bool should_print_stats(void)
  *         elsewhere). Non-asserting reads, so it keeps running through a link drop.
  *
  *  Line format:
- *    [DG <ver> t=<ms>] <Connected|Disconnected> fb=<mode> node_lm=<n> prod=<n>/s send=<n>/s
+ *    [DG t=<ms>] <Connected|Disconnected> fb=<mode> node_lm=<n> prod=<n>/s send=<n>/s
  *        bk=<ok>/<miss> tx_drop=<n>
  *  followed, only when they say something, by swc=STOP and send_err=<e>(<n>).
  *
@@ -2225,14 +2237,14 @@ static void link_watch(void)
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[DG " AT_CMD_CORE_SDK_VERSION " t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[DG t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
     }
 
     int n = snprintf(line, sizeof(line),
-                     "[DG " AT_CMD_CORE_SDK_VERSION " t=%lu] %s fb=%u node_lm=%u "
+                     "[DG t=%lu] %s fb=%u node_lm=%u "
                      "prod=%lu/s send=%lu/s bk=%lu/%lu tx_drop=%lu",
                      (unsigned long)now, connected ? "Connected   " : "Disconnected",
                      (unsigned)fb_mode, (unsigned)s_node_rx_lm,

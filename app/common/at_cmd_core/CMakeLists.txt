@@ -10,4 +10,4 @@ target_sources(at_cmd_core
 
 target_include_directories(at_cmd_core PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
-target_link_libraries(at_cmd_core PUBLIC at_module swc)
+target_link_libraries(at_cmd_core PUBLIC at_module fw_version swc)

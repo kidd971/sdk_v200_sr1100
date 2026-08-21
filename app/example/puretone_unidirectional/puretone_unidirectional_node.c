@@ -33,6 +33,7 @@
 #include "sac_utils.h"
 #include "sac_volume.h"
 #include "swc_api.h"
+#include "fw_version.h"
 #include "reconnect_store.h"
 #include "swc_cfg.h"
 #include "swc_cfg_node.h"
@@ -328,9 +329,9 @@ int main(void)
      * silence, which looks like something else entirely.
      */
     {
-        char banner[96];
+        char banner[112];
 
-        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional node " BOARD_NAME " " RADIO_TAG " "
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_unidirectional node " BOARD_NAME " " RADIO_TAG " " FW_VERSION_STRING " "
                                          __DATE__ " " __TIME__ "\r\n");
         facade_print_string(banner);
     }

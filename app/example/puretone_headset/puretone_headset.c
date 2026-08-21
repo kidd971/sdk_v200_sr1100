@@ -13,6 +13,7 @@
 /* INCLUDES ******************************************************************/
 #include <stdio.h>
 #include "at_cmd_core.h"
+#include "fw_version.h"
 #include "at_cmd_core_facade.h"  /* facade_get_tick_ms, facade_system_reset */
 #include "pairing_api.h"
 #include "pairing_cfg.h"
@@ -532,6 +533,17 @@ int main(void)
     at_cmd_core_register_vol_cb(at_set_vol);
     at_cmd_core_register_battery_cb(facade_read_battery_level_pct);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
+    /* Version on the debug console, once. It used to prefix every statistics line at 2 Hz,
+     * which is a great deal of repetition to answer a question -- "which binary produced
+     * this log?" -- that needs answering once per boot, and that the timestamp printed
+     * beside it answers more precisely anyway. */
+    {
+        char banner[80];
+
+        snprintf(banner, sizeof(banner), "\r\n[BOOT] puretone_headset " FW_VERSION_STRING " " __DATE__ " " __TIME__ "\r\n");
+        facade_print_string(banner);
+    }
+
     /* Boot banner, ahead of UWB_READY. Same timestamp as the crash-dump build line (both
      * expand AT_CMD_CORE_BUILD_ID / __DATE__ from this translation unit). It matters more
      * here than on the DG: a reconnect timeout puts the HS into Standby, so the host sees a
@@ -2175,7 +2187,7 @@ static bool should_print_stats(void)
  *  running through a link drop instead of trapping.
  *
  *  Line format:
- *    [HS <ver> t=<ms>] <Connected|Disconnected> lm=<link_margin> fb=<mode> swc=<RUN|STOP> cca_fail=<n>
+ *    [HS t=<ms>] <Connected|Disconnected> lm=<link_margin> fb=<mode> swc=<RUN|STOP> cca_fail=<n>
  *        tx_drop=<n> rx_ok=<n> rx_miss=<n> miss/s=<n> rx_rej=<n> err=<connErr>/<statErr>
  *        send_err=<lastErr>(<count>)
  *
@@ -2255,14 +2267,14 @@ static void link_watch(void)
         prev_connected = connected;
         initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(line, sizeof(line), "\r\n[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] link %s\r\n",
+        snprintf(line, sizeof(line), "\r\n[HS t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(line);
         prev_connected = connected;
     }
 
     int n = snprintf(line, sizeof(line),
-             "[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
+             "[HS t=%lu] %s lm=%u fb=%u swc=%s cca_fail=%lu tx_drop=%lu "
              "rx_ok=%lu rx_miss=%lu miss/s=%lu rx_rej=%lu err=%d/%d send_err=%d(%lu)",
              (unsigned long)now, connected ? "Connected   " : "Disconnected",
              (unsigned)info.link_margin, (unsigned)fb_mode,
@@ -3114,7 +3126,7 @@ static int32_t at_get_link_margin(void)
  *         the "hangs during sync, before pairing" case as long as the CPU is still running.
  *
  *  One line when nothing is wrong, the mirror image of the DG's:
- *    [HS <ver> t=<ms>] <Connected|Disconnected|Unpaired> fb=<n> coord_lm=<n>
+ *    [HS t=<ms>] <Connected|Disconnected|Unpaired> fb=<n> coord_lm=<n>
  *        rx=<n>/s miss=<n>/s rej=<n>/s
  *
  *  followed, only when they say something, by swc=STOP, cca_fail, tx_drop, err and
@@ -3270,7 +3282,7 @@ static void emit_hs_status(void)
         prev_connected = connected;
         edge_initialized = true;
     } else if (connected != prev_connected) {
-        snprintf(buf, sizeof(buf), "[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] link %s\r\n",
+        snprintf(buf, sizeof(buf), "[HS t=%lu] link %s\r\n",
                  (unsigned long)now, connected ? "RECOVERED" : "DROPPED");
         facade_stats_write(buf);
         prev_connected = connected;
@@ -3288,7 +3300,7 @@ static void emit_hs_status(void)
     (void)facade_get_sched_liveness(&mrt, &frt_unused, &irq1, &irq2);
 
     int n = snprintf(buf, sizeof(buf),
-                     "[HS " AT_CMD_CORE_SDK_VERSION " t=%lu] %s fb=%u coord_lm=%u "
+                     "[HS t=%lu] %s fb=%u coord_lm=%u "
                      "rx=%lu/s miss=%lu/s rej=%lu/s",
                      (unsigned long)now,
                      (device_pairing_state != DEVICE_PAIRED) ? "Unpaired    "
