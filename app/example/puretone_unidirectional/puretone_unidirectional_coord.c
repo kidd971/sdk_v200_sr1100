@@ -67,6 +67,20 @@
  */
 #define NODE_RX_TIMEOUT_MS 200
 
+/** @brief Silence long enough to mean the peer restarted rather than was momentarily blocked.
+ *
+ *  Three seconds. The two cases are indistinguishable at any single instant -- both are
+ *  "nothing is arriving" -- but they are an order of magnitude apart in duration: a reboot
+ *  takes seconds, an obstruction lasts hundreds of milliseconds. link_dropout_arms_ledger.md
+ *  measures obstruction in the hundreds of ms, which is what sets the floor here.
+ *
+ *  Used only to decide whether a ladder pin survives. A pin says "this link, as it stands,
+ *  cannot hold a higher rung"; a peer that has since restarted is not that link any more, so
+ *  the pin has nothing to say about it and is dropped. An obstruction is the same link and
+ *  the pin stands.
+ */
+#define NODE_RESTART_SILENCE_MS 3000
+
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3000
 /* Period for data transmission timer in ms.
@@ -234,7 +248,12 @@ static bool s_boot_reconnect_abort;
  * separately on purpose: both are implemented with the same sac_fallback_set_manual_mode()
  * flag, so a single boolean would let releasing one silently release the other. */
 static bool s_ladder_frozen; /* peer is absent -- descending would be meaningless */
-static bool s_ladder_pinned; /* reached the bottom with the peer present -- stay there */
+static bool s_ladder_pinned; /* stepped down into the bottom rung -- stay there */
+
+/* Last mode seen by fallback_hold_handler(), so it can tell a step DOWN into the bottom rung
+ * from merely being parked there. Initialised on the first pass. */
+static uint8_t s_ladder_prev_mode;
+static bool s_ladder_prev_valid;
 
 /** @brief Outcome of a boot auto-reconnect attempt. */
 typedef enum {
@@ -1353,42 +1372,48 @@ static void app_audio_core_compression_discard_interface_init(sac_processing_int
 
 /** @brief Update the fallback LED indicator.
  */
-/** @brief Freeze the ladder while the peer is away, and pin it once it genuinely bottoms out.
- *
- *  Two rules that only make sense together.
+/** @brief Freeze the ladder while the peer is away, and pin it when it steps down to the floor.
  *
  *  FREEZE. The ladder's trigger is queue depth -- is_link_bad() is queue-size-high OR
- *  cca-bad -- so a peer that is simply not there backs the transmit queue up and reads as a
- *  bad link. It then steps down, the queue stays just as full, and it steps down again until
- *  it hits the bottom. Every one of those steps is a decision about a link with nobody on the
- *  other end, and degrading to 24 kHz does not help an absent peer. So while link_is_up()
- *  says the peer is gone, hold the ladder where it is.
+ *  cca-bad -- so a peer that is not there backs the transmit queue up and reads as a bad
+ *  link. It steps down, the queue stays exactly as full, and it steps again until it reaches
+ *  the bottom. Every one of those steps is a judgement about a link with nobody on the other
+ *  end. While link_is_up() says the peer is gone, the ladder holds where it is.
  *
- *  PIN. Once the ladder is at the bottom rung WITH the peer present, keep it there rather
- *  than letting it recover and fail again. Temporary; see FALLBACK_PIN_AT_BOTTOM.
+ *  PIN, and this is the part that has to be exact. Pinning happens on the TRANSITION -- a
+ *  step DOWN into the bottom rung -- not on being at the bottom rung. Those are different
+ *  conditions and the difference is the whole behaviour:
  *
- *  The two are inseparable, and pinning without freezing would be actively harmful: a peer
- *  reboot would drive the ladder to the bottom through a backed-up queue and then lock it
- *  there for good, leaving the product at 24 kHz with a perfect link until someone
- *  power-cycles it. Requiring the peer to be present before pinning is what makes "we
- *  reached the bottom" mean "the link is bad" rather than "the other end was switched off".
+ *    - "at the bottom" pins the moment a freeze thaws with the ladder already down there,
+ *      which is precisely the peer-reboot path this is supposed to survive. That was the
+ *      first version, and it locked at 24 kHz constantly.
+ *    - "stepped down into the bottom" only fires when the ladder was somewhere higher and
+ *      the link pushed it the rest of the way, which is the situation worth latching.
  *
- *  A manual selection from the button wins over both. fallback_state leaves FALLBACK_AUTO
- *  only when a person has chosen a rung, and quietly overriding that would make the button
+ *  A step down is prev < bottom && current == bottom rather than prev == bottom - 1, so a
+ *  descent that crosses two rungs between two polls still counts. Missing it would leave the
+ *  ladder unpinned, which is the safe direction to be wrong in.
+ *
+ *  The previous mode is recorded on every pass INCLUDING frozen ones. That is what makes a
+ *  thaw not look like a step: if the ladder reached the bottom while the peer was away, prev
+ *  is already the bottom by the time it comes back.
+ *
+ *  A pin does not survive the peer restarting. It is a statement about one link -- that it
+ *  could not hold a higher rung -- and a peer that has been silent for
+ *  NODE_RESTART_SILENCE_MS is not that link any more. An obstruction, an order of magnitude
+ *  shorter, is the same link and keeps its pin.
+ *
+ *  A manual selection from the button beats all of it. fallback_state leaves FALLBACK_AUTO
+ *  only when a person has chosen a rung, and overriding that would make the button
  *  unreliable in exactly the situation someone reaches for it.
- *
- *  Residual worth knowing: link_is_up() needs NODE_RX_TIMEOUT_MS of silence before it reports
- *  the peer gone, so the ladder can still take a step or two inside that window. It cannot
- *  reach the bottom in that time, which is the part that matters, because reaching the bottom
- *  is what pinning keys on.
  */
 static void fallback_hold_handler(void)
 {
     sac_status_t sac_status = SAC_OK;
     /* Five modes are added to this instance and the last index is the bottom rung. Derived
-     * from the state enum rather than written as 4, so adding a rung does not leave this
-     * behind. */
+     * from the state enum so that adding a rung does not leave this behind. */
     const uint8_t bottom_mode = (uint8_t)(FALLBACK_STATE_COUNT - 2);
+    uint8_t mode;
     bool peer_present;
 
     /* A person has taken the ladder; leave it alone. */
@@ -1396,11 +1421,8 @@ static void fallback_hold_handler(void)
         return;
     }
 
-    /* Pinning is terminal for the life of this link -- cleared when one is built or torn
-     * down, not by conditions improving. That is the point of it. */
-    if (s_ladder_pinned) {
-        return;
-    }
+    mode = sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
 
     peer_present = link_is_up();
 
@@ -1410,27 +1432,43 @@ static void fallback_hold_handler(void)
             ASSERT_SAC_STATUS(sac_status);
             s_ladder_frozen = true;
         }
+
+        /* Gone long enough to be a restart rather than something in the way: drop the pin,
+         * so whatever comes back is judged on its own link. */
+        if (s_ladder_pinned && s_node_rx_seen &&
+            ((facade_get_tick_ms() - s_node_rx_tick) >= NODE_RESTART_SILENCE_MS)) {
+            s_ladder_pinned = false;
+            facade_print_string("[FB] peer restarted; pin released\r\n");
+        }
+
+        /* Still tracked while frozen -- see the note about thaws above. */
+        s_ladder_prev_mode = mode;
+        s_ladder_prev_valid = true;
         return;
     }
 
     if (s_ladder_frozen) {
-        sac_fallback_set_manual_mode(&sac_fallback_instance, false, &sac_status);
+        /* Thaw. If the pin was released while away, the ladder is free again; if it was not,
+         * the block below leaves it held. */
+        sac_fallback_set_manual_mode(&sac_fallback_instance, s_ladder_pinned, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
         s_ladder_frozen = false;
     }
 
 #if FALLBACK_PIN_AT_BOTTOM
-    if (sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status) >= bottom_mode) {
-        ASSERT_SAC_STATUS(sac_status);
+    if (!s_ladder_pinned && s_ladder_prev_valid && (s_ladder_prev_mode < bottom_mode) &&
+        (mode >= bottom_mode)) {
         sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
         s_ladder_pinned = true;
-        facade_print_string("[FB] pinned at the bottom rung\r\n");
+        facade_print_string("[FB] stepped down to the bottom rung; pinned\r\n");
     }
-    ASSERT_SAC_STATUS(sac_status);
 #else
     (void)bottom_mode;
 #endif
+
+    s_ladder_prev_mode = mode;
+    s_ladder_prev_valid = true;
 }
 
 static void fallback_led_handler(void)
@@ -1974,6 +2012,7 @@ static void unpair_device(bool forget_peer)
     s_node_rx_seen = false;
     s_ladder_frozen = false;
     s_ladder_pinned = false;
+    s_ladder_prev_valid = false;
 
     /* Forget the peer only when asked. The press that removes a device should not leave a
      * record behind; an aborted reconnect should not throw one away. */
