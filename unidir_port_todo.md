@@ -255,6 +255,37 @@ gain 兩者都**沒動**，維持原值。
 **§1.1 已完成，這個限制消失了。** 現在鏈路斷掉會自己接回來，
 可以搬著板子掃距離。做的時候照下面三點。
 
+### 3.4 u5a5 完全沒有 console 輸出 —— minor，之後處理
+
+unidir 的 `facade_print_string` 只在 `#if defined(QUASAR_U535)` 裡被覆寫成 UART。
+u5a5 落到 `common_backend.c` 的 weak 版本：
+
+```c
+if (tud_cdc_connected()) { tud_cdc_write_str(string); ... }
+```
+
+而**整個 tree 裡沒有任何地方呼叫 `tusb_init()` / `tud_init()` / `tud_task()`**
+（只有 `dev_board_io_test_backend` 有 `tud_task`），unidir 又是 `USB_AUDIO_ENABLED=0`。
+所以 `tud_cdc_connected()` 永遠是 false，**u5a5 上一個字都不會印** ——
+不只開機橫幅，是全部。
+
+影響：u5a5 只能靠聽聲音和看 LED 測。已寫進 `unidir_audio_test_readme.md` §6。
+
+修法大概是給 u5a5 一個 UART console（跟 u535 一樣走 facade 覆寫），
+或是把 USB CDC 真的初始化起來。前者簡單得多。
+
+### 3.5 開機橫幅接電幾毫秒就送出，terminal 開得晚會錯過
+
+在 `main()` 最前面印，這是刻意的 —— 沒有它的話，「serial port 什麼都沒出來」
+有兩個分不開的意思：console 壞了，或 console 好好的但程式在印任何東西之前就死了。
+
+代價是先上電、後開 terminal 的人看不到它。統計行每行都帶 `v240_rc01`，
+所以版本不會丟，丟的是 **build 時間和板子／radio 標籤** ——
+而那正是分辨「同一個 commit 編給不同板子的兩包」的欄位。
+
+改法（已寫好但沒套用）：把橫幅抽成 `print_banner()`，
+在第一行統計之前再印一次。兩次不重複，因為它們**在相反的情況下失效**。
+
 ### 3.2 96 kHz 仍然會斷 —— cap 留著（2026-08-20 實測）
 
 `MAIN_CHANNEL_ALLOW_96K=0`，**維持**。

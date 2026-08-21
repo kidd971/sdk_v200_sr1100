@@ -1,0 +1,140 @@
+# puretone_unidirectional v2.4.0 rc01 —— audio 測試說明
+
+單向音訊：**DG（coordinator）送，HS（node）收**。24 kHz stereo、5 階 fallback、ISI 1。
+
+---
+
+## 1. 燒哪一包
+
+| 角色 | 板子 | preset |
+|---|---|---|
+| **DG** 送端 | u535 LDO | `puretone-unidirectional-quasar-u535-coord-slave-std-ldo` |
+| **DG** 送端 | u535 SMPS | `puretone-unidirectional-quasar-u535-coord-slave-std-smps` |
+| **DG** 送端 | u5a5 | `puretone-unidirectional-quasar-u5a5-slave-rjf` |
+| **HS** 收端 | u535 LDO 單 radio | `puretone-unidirectional-quasar-u535-node-master-std-ldo` |
+| **HS** 收端 | u535 LDO 雙 radio | `puretone-unidirectional-quasar-u535-node-master-std-ldo-dualradio` |
+| **HS** 收端 | u5a5 雙 radio | `puretone-unidirectional-quasar-u5a5-node-slave-rjf-dualradio` |
+
+DG 的 preset 會同時產出 coordinator 和 node 兩個 elf —— **燒名字對的那一個**。
+雙 radio 的 preset 只有 node，因為 DG 不支援雙 radio。
+
+**燒錯角色的症狀是「完全沒聲音」**，跟其他故障長得一樣。開機那行會告訴你燒的是哪一包，
+先看那行再懷疑別的。
+
+---
+
+## 2. Console
+
+**115200 8N1**，只送不收。
+
+| 板子 | 腳位 |
+|---|---|
+| u535 **LDO** | UART4（**PC10**）和 LPUART1（**PA3**）**兩個都會送**，接哪個都可以 |
+| u535 **SMPS** | 只有 LPUART1（**PA3**） |
+| u5a5 | **目前沒有 console 輸出**，見 §6 |
+
+開機第一行：
+
+```
+[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.0 rc01 Aug 21 2026 11:46:35
+```
+
+**這行是接電之後幾毫秒就送出的**，terminal 開得晚就會錯過。想看它就先開 terminal 再上電。
+
+---
+
+## 3. 配對與回連
+
+| 情況 | LED |
+|---|---|
+| 進入配對 | 慢閃 ×2（250 ms） |
+| 配對成功 | 恆亮（u535 藍、其他綠） |
+| 開機回連中 | **快閃 ×5**（100 ms） |
+| 回連逾時 | 單次慢閃（300 ms） |
+
+**第一次要手動配對**：兩邊都按配對鍵。之後**開機會自動回連**，不需要再配對 ——
+配對結果存在 flash 裡。
+
+**要重新配對**時按配對鍵解除，下次開機才會回到配對模式。
+
+回連逾時**不會**自動重新配對。DG 是時間基準，它的無線核心會繼續跑，
+HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG 把已經好的配對丟掉。
+
+---
+
+## 4. 一行 log 怎麼讀
+
+```
+[HS] v240_rc01 55493 fb=4 24kHz ADPCM   rx=600/s rej=0/s miss=3106/s fill=16% lm=170
+[DG] v240_rc01 55493 fb=4 24kHz ADPCM   tx=600/s idle=1187/s cca_fail=0/s tx_drop=0/s
+```
+
+`55493` 是開機毫秒數。`fb=` 是目前階數：
+
+| fb | 模式 |
+|---|---|
+| 0 | 96 kHz 24-bit **（已關閉，見 §6）** |
+| 1 | 48 kHz 24-bit ← **開機從這裡開始** |
+| 2 | 48 kHz 16-bit |
+| 3 | 48 kHz ADPCM |
+| 4 | 24 kHz ADPCM stereo ← 最底階 |
+
+要看的欄位：**HS 的 `rx=`** 和 **DG 的 `tx=`**。兩個接近就是鏈路正常。
+
+`miss=` 在 fb=3 或 4 會偏高，因為 DG 有很多空的 timeslot 也被算成 miss
+（DG 的 `idle=` 就是那些）。**只在 `idle=0` 的階數（fb 0～2）拿 miss 來算到達率**，
+其他階只能拿來比較相對值。
+
+---
+
+## 5. 測 audio 時最需要注意的三件事
+
+### 5.1 停在 24 kHz 是預期行為，不是故障
+
+階梯一旦**真的因為鏈路變差**從 fb=3 掉到 fb=4，就會**釘在那裡不再往上爬**。
+會印：
+
+```
+[FB] stepped down to the bottom rung; pinned
+```
+
+這是刻意的：已經掉到底的鏈路通常會爬上去、失敗、再掉下來，
+而那個來回震盪比一直待在 24 kHz 更難聽。
+
+**所以「聽起來一直是 24 kHz」不要當成 bug 回報**，除非它是在鏈路明明很好的時候發生的。
+
+### 5.2 重開機不會把階梯拖下去
+
+**任一邊單獨重開機，另一邊的階數應該不動。**
+如果看到「HS 重開之後 DG 就掉到 fb=4」，那是 bug，請回報。
+
+（原理：階梯的降階依據是傳送佇列深度，對面不在時佇列一樣會積起來。
+所以對面不在時階梯會凍住，回來之後還會再等 2 秒才恢復判斷。）
+
+### 5.3 遮擋測試要看的是「有沒有斷音」
+
+不是看 fb 掉到幾階 —— **掉階正是它該做的事**。
+掉階但聲音連續 = 正常運作；聲音斷掉才是問題。
+
+回報時請一起附上**斷音當下前後幾行 log**，`fb=`、`rx=`/`tx=`、`lm=` 都要。
+
+---
+
+## 6. 已知限制
+
+| 項目 | 狀況 |
+|---|---|
+| **96 kHz（fb=0）** | **關閉**。這條線上 96 kHz 會斷音，原因未明。不要嘗試打開 |
+| **u5a5 console** | **沒有輸出**。u5a5 的 console 走 USB CDC，而這個 app 沒有初始化 USB。u5a5 只能用聽的和看 LED |
+| **u535 SMPS** | **從沒上過機**。LDO 版本已驗過，但兩者差在電源架構，不能互相代表 |
+| **u535 近端遮擋** | 這裡沒有條件測，需要 ODM 驗 |
+
+---
+
+## 7. 回報什麼
+
+1. 板子（u535 LDO / u535 SMPS / u5a5）和**開機那行**
+2. 單 radio 還是雙 radio
+3. 症狀：**斷音** / 沒聲音 / 配對不上 / 回連不上
+4. 斷音前後幾行 log
+5. 距離、有沒有遮擋（人體、金屬）
