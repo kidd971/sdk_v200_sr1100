@@ -1,12 +1,18 @@
 /** @file  puretone_link_data.h
  *  @brief Wire format of the 10 ms user-data packet exchanged over the UWB data connection.
  *
- *  Shared by puretone_headset.c (node) and puretone_dongle.c (coordinator). It exists
- *  because those two files used to carry two hand-copied definitions of this struct, kept in
- *  step by hand. Editing one and not the other compiles cleanly, links cleanly, and then
- *  misreads every field after the divergence point -- the symptom is parameters arriving as
- *  garbage, with each side looking correct in isolation. Both ends must agree byte for byte,
- *  so there is exactly one definition.
+ *  Shared by every application that speaks this link: puretone_headset.c and
+ *  puretone_dongle.c, and puretone_unidirectional's coordinator and node. It exists because
+ *  those files used to carry hand-copied definitions of this struct, kept in step by hand.
+ *  Editing one and not the other compiles cleanly, links cleanly, and then misreads every
+ *  field after the divergence point -- the symptom is parameters arriving as garbage, with
+ *  each side looking correct in isolation. Both ends must agree byte for byte, so there is
+ *  exactly one definition.
+ *
+ *  It sits in app/common rather than beside one application for the same reason it exists at
+ *  all. The vendor block is a contract with the ODM's SOC; two products carrying two copies
+ *  of that contract would drift the same way the two files did, only across a boundary where
+ *  the disagreement is someone else's to debug.
  *
  *  Rules for changing this struct:
  *

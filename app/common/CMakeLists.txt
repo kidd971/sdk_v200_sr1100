@@ -1,3 +1,4 @@
 add_subdirectory(fw_version)
 add_subdirectory(at_cmd_core)
+add_subdirectory(link_data)
 add_subdirectory(reconnect_store)
