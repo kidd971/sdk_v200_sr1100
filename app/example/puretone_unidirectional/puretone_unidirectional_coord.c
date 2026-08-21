@@ -230,6 +230,12 @@ static volatile bool s_node_rx_seen;
 static bool s_boot_reconnect_active;
 static bool s_boot_reconnect_abort;
 
+/* Why the fallback ladder is currently held in manual mode. Two separate reasons, tracked
+ * separately on purpose: both are implemented with the same sac_fallback_set_manual_mode()
+ * flag, so a single boolean would let releasing one silently release the other. */
+static bool s_ladder_frozen; /* peer is absent -- descending would be meaningless */
+static bool s_ladder_pinned; /* reached the bottom with the peer present -- stay there */
+
 /** @brief Outcome of a boot auto-reconnect attempt. */
 typedef enum {
     BOOT_RECONNECT_OK,   /* The stored link was re-established; stay paired and stream. */
@@ -280,6 +286,7 @@ static void abort_pairing_procedure(void);
 
 /* Fallback LED and terminal display. */
 static void fallback_led_handler(void);
+static void fallback_hold_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
 static void print_diagnostics(void);
@@ -372,6 +379,7 @@ int main(void)
         facade_button_handling();
 
         if (device_pairing_state == DEVICE_PAIRED) {
+            fallback_hold_handler();
             fallback_led_handler();
         }
 
@@ -1345,6 +1353,86 @@ static void app_audio_core_compression_discard_interface_init(sac_processing_int
 
 /** @brief Update the fallback LED indicator.
  */
+/** @brief Freeze the ladder while the peer is away, and pin it once it genuinely bottoms out.
+ *
+ *  Two rules that only make sense together.
+ *
+ *  FREEZE. The ladder's trigger is queue depth -- is_link_bad() is queue-size-high OR
+ *  cca-bad -- so a peer that is simply not there backs the transmit queue up and reads as a
+ *  bad link. It then steps down, the queue stays just as full, and it steps down again until
+ *  it hits the bottom. Every one of those steps is a decision about a link with nobody on the
+ *  other end, and degrading to 24 kHz does not help an absent peer. So while link_is_up()
+ *  says the peer is gone, hold the ladder where it is.
+ *
+ *  PIN. Once the ladder is at the bottom rung WITH the peer present, keep it there rather
+ *  than letting it recover and fail again. Temporary; see FALLBACK_PIN_AT_BOTTOM.
+ *
+ *  The two are inseparable, and pinning without freezing would be actively harmful: a peer
+ *  reboot would drive the ladder to the bottom through a backed-up queue and then lock it
+ *  there for good, leaving the product at 24 kHz with a perfect link until someone
+ *  power-cycles it. Requiring the peer to be present before pinning is what makes "we
+ *  reached the bottom" mean "the link is bad" rather than "the other end was switched off".
+ *
+ *  A manual selection from the button wins over both. fallback_state leaves FALLBACK_AUTO
+ *  only when a person has chosen a rung, and quietly overriding that would make the button
+ *  unreliable in exactly the situation someone reaches for it.
+ *
+ *  Residual worth knowing: link_is_up() needs NODE_RX_TIMEOUT_MS of silence before it reports
+ *  the peer gone, so the ladder can still take a step or two inside that window. It cannot
+ *  reach the bottom in that time, which is the part that matters, because reaching the bottom
+ *  is what pinning keys on.
+ */
+static void fallback_hold_handler(void)
+{
+    sac_status_t sac_status = SAC_OK;
+    /* Five modes are added to this instance and the last index is the bottom rung. Derived
+     * from the state enum rather than written as 4, so adding a rung does not leave this
+     * behind. */
+    const uint8_t bottom_mode = (uint8_t)(FALLBACK_STATE_COUNT - 2);
+    bool peer_present;
+
+    /* A person has taken the ladder; leave it alone. */
+    if (fallback_state != FALLBACK_AUTO) {
+        return;
+    }
+
+    /* Pinning is terminal for the life of this link -- cleared when one is built or torn
+     * down, not by conditions improving. That is the point of it. */
+    if (s_ladder_pinned) {
+        return;
+    }
+
+    peer_present = link_is_up();
+
+    if (!peer_present) {
+        if (!s_ladder_frozen) {
+            sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
+            ASSERT_SAC_STATUS(sac_status);
+            s_ladder_frozen = true;
+        }
+        return;
+    }
+
+    if (s_ladder_frozen) {
+        sac_fallback_set_manual_mode(&sac_fallback_instance, false, &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+        s_ladder_frozen = false;
+    }
+
+#if FALLBACK_PIN_AT_BOTTOM
+    if (sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status) >= bottom_mode) {
+        ASSERT_SAC_STATUS(sac_status);
+        sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
+        ASSERT_SAC_STATUS(sac_status);
+        s_ladder_pinned = true;
+        facade_print_string("[FB] pinned at the bottom rung\r\n");
+    }
+    ASSERT_SAC_STATUS(sac_status);
+#else
+    (void)bottom_mode;
+#endif
+}
+
 static void fallback_led_handler(void)
 {
     sac_status_t sac_status = SAC_OK;
@@ -1881,8 +1969,11 @@ static void unpair_device(bool forget_peer)
     /* Reset the pairing discovery list. */
     memset(pairing_discovery_list, 0, sizeof(pairing_discovery_list));
 
-    /* The heartbeat belongs to the connections that just went away. */
+    /* The heartbeat belongs to the connections that just went away, and so do both ladder
+     * holds -- a pin earned by one link says nothing about the next one. */
     s_node_rx_seen = false;
+    s_ladder_frozen = false;
+    s_ladder_pinned = false;
 
     /* Forget the peer only when asked. The press that removes a device should not leave a
      * record behind; an aborted reconnect should not throw one away. */

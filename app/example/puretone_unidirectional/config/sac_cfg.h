@@ -214,6 +214,26 @@
  *  while the coordinator will never send it is wrong from the first instant -- visibly so,
  *  since that is the mode its console reports until the first packet arrives.
  */
+/** @brief Stay on the bottom rung once the ladder reaches it, instead of recovering upward.
+ *
+ *  TEMPORARY. Wanted now because a link that has already fallen to 24 kHz tends to climb,
+ *  fail and fall again, and the oscillation is worse to listen to than the bottom rung is.
+ *
+ *  Remove this when the reason for the climbing-and-failing is fixed rather than when it
+ *  stops being noticed -- that is the condition, and it is written here so the switch has an
+ *  exit and not just a birthday. On the u535 the underlying reason is most likely the arrival
+ *  deficit in u535_ldo_rx_deficit.md; on a board without that deficit this switch may never
+ *  do anything at all.
+ *
+ *  Only the coordinator reads it. The node follows the mode in the received header and has no
+ *  say -- see the RX branch of sac_fallback.c.
+ *
+ *  Pinning is deliberately conditional on the peer being present; see fallback_hold_handler().
+ */
+#ifndef FALLBACK_PIN_AT_BOTTOM
+#define FALLBACK_PIN_AT_BOTTOM 1
+#endif
+
 #ifndef MAIN_CHANNEL_ALLOW_96K
 #define MAIN_CHANNEL_ALLOW_96K 0
 #endif

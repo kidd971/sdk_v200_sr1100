@@ -147,6 +147,10 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(TX_PULSE_WIDTH_MAX=${TX_PULSE_WIDTH_MAX})
     endif()
 
+    if (DEFINED FALLBACK_PIN_AT_BOTTOM)
+        add_compile_definitions(FALLBACK_PIN_AT_BOTTOM=${FALLBACK_PIN_AT_BOTTOM})
+    endif()
+
     if (DEFINED STATS_VERBOSE)
         add_compile_definitions(STATS_VERBOSE=${STATS_VERBOSE})
     endif()
