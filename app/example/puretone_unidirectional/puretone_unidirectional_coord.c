@@ -30,6 +30,9 @@
 #include "sac_stats.h"
 #include "swc_api.h"
 #include "fw_version.h"
+#include "at_cmd_core.h"
+#include "at_cmd_core_facade.h"
+#include "at_cmd_core.h"
 #include "puretone_link_data.h"  /* user_data_t: the wire format, shared with the node */
 #include "reconnect_store.h"
 #include "swc_cfg.h"
@@ -267,6 +270,28 @@ static bool s_ladder_pinned; /* stepped down into the bottom rung -- stay there 
 static uint8_t s_ladder_prev_mode;
 static bool s_ladder_prev_valid;
 
+/* Link margin as last reported BY THE NODE. This side transmits the audio, so it has no
+ * receive connection to ask -- the only measurement of how well the audio is arriving is
+ * taken at the far end and sent back in the data packet. Stored here so AT+CONN_LM can
+ * answer without waiting for the next one. */
+static uint8_t s_peer_link_margin;
+
+/* Media key waiting to be sent to the node, an at_cmd_code_t. Edge triggered: set when the
+ * command arrives over AT, cleared as it is packed. See the note on cmd_type in
+ * puretone_link_data.h for why that is acceptable here and would not be for an alarm. */
+static uint8_t s_pending_cmd;
+
+/* Link margin as last reported BY THE NODE. This side transmits the audio, so it has no
+ * receive connection to ask -- the only measurement of how well the audio is arriving is
+ * taken at the far end and sent back in the data packet. Stored here so AT+CONN_LM can
+ * answer without waiting for the next one. */
+static uint8_t s_peer_link_margin;
+
+/* Media key waiting to be sent to the node, an at_cmd_code_t. Edge triggered: set when the
+ * command arrives over AT, cleared as it is packed. See the note on cmd_type in
+ * puretone_link_data.h for why that is acceptable here and would not be for an alarm. */
+static uint8_t s_pending_cmd;
+
 /* When the peer most recently became reachable, and whether the ladder has been let go since.
  * See LADDER_SETTLE_MS. */
 static uint32_t s_link_up_tick;
@@ -332,6 +357,26 @@ static void print_stats_compact(void);
 static const char *fallback_mode_name(uint8_t mode);
 #endif
 
+
+/* **** AT command core callbacks **** */
+static void at_start_pairing(void);
+static void at_start_connect(void);
+static void at_start_disconnect(void);
+static void at_start_shutdown(void);
+static bool at_get_link_status(void);
+static int32_t at_get_link_margin(void);
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
+
+
+/* **** AT command core callbacks **** */
+static void at_start_pairing(void);
+static void at_start_connect(void);
+static void at_start_disconnect(void);
+static void at_start_shutdown(void);
+static bool at_get_link_status(void);
+static int32_t at_get_link_margin(void);
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
+
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
 static uint32_t get_accumulator_size(sac_pipeline_t *pipeline);
@@ -375,6 +420,20 @@ int main(void)
     };
     facade_set_button_callbacks(button_callbacks);
 
+    /* AT command channel. Initialised before anything can report through it, and before the
+     * audio timers start, so that a failure during audio setup is still reportable. */
+    at_cmd_core_init();
+    at_cmd_core_set_device_role(AT_DEVICE_ROLE_COORDINATOR);
+    at_cmd_core_register_pair_cb(at_start_pairing);
+    at_cmd_core_register_connect_cb(at_start_connect);
+    at_cmd_core_register_disconnect_cb(at_start_disconnect);
+    at_cmd_core_register_shutdown_cb(at_start_shutdown);
+    at_cmd_core_register_link_status_cb(at_get_link_status);
+    at_cmd_core_register_link_margin_cb(at_get_link_margin);
+    at_cmd_core_register_cmd_tx_cb(at_cmd_tx);
+    at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
+    at_cmd_core_notify_uwb_ready();
+
     /* Audio process timer initialization. */
     facade_audio_process_timer_init(audio_process_callback);
 
@@ -414,6 +473,7 @@ int main(void)
 
     while (1) {
         facade_button_handling();
+        at_cmd_core_process();
 
         if (device_pairing_state == DEVICE_PAIRED) {
             fallback_hold_handler();
@@ -845,6 +905,12 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* The fallback state is updated. */
         sac_fallback_set_rx_link_margin(&sac_fallback_instance, received_user_data.link_margin, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
+        s_peer_link_margin = received_user_data.link_margin;
+
+        /* Vendor pass-through, unconditionally: a packet carrying no command still carries
+         * the node's acknowledgement of ours. De-duplication and the +EVENT line happen in
+         * the AT core. */
+        user_data_deliver_vendor(&received_user_data);
 
         /* Peer heartbeat for link_is_up(). Stamped here because reaching this line is the
          * only direct evidence this side ever gets that the node is alive. */
@@ -1827,6 +1893,13 @@ static void data_callback(void)
     /* Send the state of the button to the Node (The Link margin is not used). */
     transmitted_user_data.button_state = facade_read_button_state();
 
+    /* Media key, if one is waiting. Cleared as it is packed: it is an edge, and the sender
+     * has no way to learn whether this packet arrived. */
+    transmitted_user_data.cmd_type = s_pending_cmd;
+    s_pending_cmd = 0;
+
+    user_data_pack_vendor(&transmitted_user_data);
+
     /* user_data_tx_size(), not sizeof(). The struct now reserves room for the vendor block,
      * which is empty in almost every packet; sending the whole thing would put that reserved
      * space on the air a hundred times a second to carry nothing. See the header. */
@@ -2135,6 +2208,145 @@ static void change_fallback_state(void)
  *  @param[in]  size              Size of the data to be sent over the air.
  *  @param[out] swc_err           Wireless Core error code.
  */
+/** @brief AT+LE_UWB_PAIR -- start pairing.
+ *
+ *  Mirrors the pairing button rather than adding a second way to reach the same state
+ *  machine, including the deferral while boot reconnect is polling: the connection handles
+ *  have to stay valid until that loop unwinds.
+ *
+ *  Unpairs WITHOUT forgetting the stored peer. A pairing attempt that is started and then
+ *  abandoned would otherwise cost the device the record it already had, leaving it unable to
+ *  reconnect to a peer it was perfectly able to reach a moment earlier. The record is
+ *  replaced when a new pairing succeeds, which is the only point at which the old one is
+ *  genuinely obsolete.
+ */
+static void at_start_pairing(void)
+{
+    if (s_boot_reconnect_active) {
+        s_boot_reconnect_abort = true;
+        return;
+    }
+
+    if (device_pairing_state == DEVICE_PAIRING) {
+        return;
+    }
+
+    if (device_pairing_state == DEVICE_PAIRED) {
+        unpair_device(false);
+    }
+
+    enter_pairing_mode();
+}
+
+/** @brief AT+LE_UWB_CONNECT -- re-establish the stored link.
+ *
+ *  A reset, not a connect. Re-establishing a link means rebuilding the wireless core from the
+ *  stored record, and main() already does exactly that on the way up, through
+ *  try_boot_reconnect(). Doing it again in place would mean a second implementation of the
+ *  same sequence, kept in step with the first by hand.
+ *
+ *  Does nothing when already paired, and nothing while boot reconnect is still running --
+ *  resetting a device that is a second away from connecting by itself would restart the wait
+ *  rather than shorten it.
+ */
+static void at_start_connect(void)
+{
+    if (device_pairing_state == DEVICE_PAIRED) {
+        return;
+    }
+
+    if (s_boot_reconnect_active) {
+        return;
+    }
+
+    facade_expansion_uart_flush();
+    facade_system_reset();
+}
+
+/** @brief AT+LE_UWB_DISCONNECT -- take the link down, keep the pairing.
+ *
+ *  Tears the connections down and stays idle. The peer record survives, so AT+LE_UWB_CONNECT
+ *  or a power cycle brings the link back without pairing again -- "disconnect" means the link,
+ *  not the relationship.
+ *
+ *  The headset line answers this command by entering Standby instead, which is a deeper
+ *  power-down. This application has no standby facade, and inventing one here to match a
+ *  command name would be a power-management decision taken by accident. If the ODM needs the
+ *  radios down as well, that is AT+LE_UWB_SHUTDOWN below, which says so.
+ */
+static void at_start_disconnect(void)
+{
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return;
+    }
+
+    unpair_device(false);
+}
+
+/** @brief AT+LE_UWB_SHUTDOWN -- take the link down and power the radios off.
+ *
+ *  The SR1100 sits on its own supply, so tearing down the connections leaves it drawing
+ *  current. This is the command that stops that, and the only difference from disconnect.
+ *
+ *  Not a reset: the MCU keeps running and keeps answering AT, which is what makes the state
+ *  reportable afterwards. Coming back needs AT+LE_UWB_CONNECT, which resets.
+ */
+static void at_start_shutdown(void)
+{
+    at_start_disconnect();
+    facade_uwb_shutdown();
+}
+
+/** @brief AT+LE_UWB_CONN_STATUS? -- is there a link right now.
+ *
+ *  Paired is not connected. The pairing state says a peer is known; link_is_up() says packets
+ *  are arriving from it. Reporting the first as the second would tell a host the link is fine
+ *  while the other end is switched off.
+ */
+static bool at_get_link_status(void)
+{
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return false;
+    }
+
+    return link_is_up();
+}
+
+/** @brief AT+CONN_LM? -- the link margin, as measured at the node.
+ *
+ *  Zero when unpaired, which is also the value a node that has not reported yet leaves here.
+ *  Both mean "no measurement", which is the honest answer; a stale reading would look like a
+ *  live one.
+ */
+static int32_t at_get_link_margin(void)
+{
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return 0;
+    }
+
+    return (int32_t)s_peer_link_margin;
+}
+
+/** @brief AT+PLAY / STOP / NEXT_TRACK / PRE_TRACK -- forward a media key to the node.
+ *
+ *  Queued, not sent: the data packet goes out on its own 10 ms timer, and sending here would
+ *  mean a second transmit path with its own failure modes.
+ *
+ *  AT_CMD_VOL is dropped rather than queued. Volume on this link is the node's own output
+ *  level and is applied there by its local handler; forwarding it from this side would give
+ *  one setting two owners.
+ */
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value)
+{
+    (void)value;
+
+    if (cmd_type == AT_CMD_VOL) {
+        return;
+    }
+
+    s_pending_cmd = cmd_type;
+}
+
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err)
 {
     uint8_t *buffer = NULL;

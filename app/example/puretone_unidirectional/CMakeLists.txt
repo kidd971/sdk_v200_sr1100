@@ -19,6 +19,7 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
     target_link_libraries(puretone_unidirectional_coordinator.elf
         PRIVATE
             fw_version
+            at_cmd_core
             link_data
             reconnect_store
             audio_core
@@ -37,6 +38,7 @@ target_sources(puretone_unidirectional_node.elf PRIVATE puretone_unidirectional_
 target_link_libraries(puretone_unidirectional_node.elf
     PRIVATE
         fw_version
+        at_cmd_core
         link_data
         reconnect_store
         audio_core
