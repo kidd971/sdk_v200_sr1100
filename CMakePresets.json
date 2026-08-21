@@ -793,8 +793,23 @@
             }
         },
         {
+            "name": "puretone-unidirectional-quasar-u5a5-node-slave-rjf-dualradio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone unidirectional, u5a5 dual-radio node: I2S slave, right-justified, MAX98091 codec. Node only -- the coordinator does not support multi-radio, so flash its half from puretone-unidirectional-quasar-u5a5-slave-rjf.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
             "name": "puretone-unidirectional-quasar-u535-coord-slave-std-smps",
-            "hidden": true,
+            "hidden": false,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -827,7 +842,7 @@
         },
         {
             "name": "puretone-unidirectional-quasar-u535-node-master-std-smps",
-            "hidden": true,
+            "hidden": false,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -860,7 +875,7 @@
         },
         {
             "name": "puretone-unidirectional-quasar-u535-node-master-std-smps-dualradio",
-            "hidden": true,
+            "hidden": false,
             "inherits": [
                 "base",
                 "quasar-u535"
