@@ -81,6 +81,20 @@
  */
 #define NODE_RESTART_SILENCE_MS 3000
 
+/** @brief How long a link must hold before the ladder is allowed to judge it.
+ *
+ *  Two seconds. For the first moments of a link the transmit queue says nothing about radio
+ *  quality: the audio producer is already filling while the connection is still coming up, so
+ *  the queue is deep for reasons that have nothing to do with the air. is_link_bad() is
+ *  queue-size-high OR cca-bad, so it reads that warm-up as a bad link and walks the ladder
+ *  down -- 1 to 4 in one go, every time either end restarts.
+ *
+ *  Two seconds is two hundred node reports at DATA_TX_PERIOD_MS, which is far more than the
+ *  queue average needs to converge, and it is short enough that a link which really is bad
+ *  spends only that long at the top before the ladder starts working normally.
+ */
+#define LADDER_SETTLE_MS 2000
+
 /* Length of the statistics array used for terminal display. */
 #define STATS_ARRAY_LENGTH 3000
 /* Period for data transmission timer in ms.
@@ -254,6 +268,12 @@ static bool s_ladder_pinned; /* stepped down into the bottom rung -- stay there 
  * from merely being parked there. Initialised on the first pass. */
 static uint8_t s_ladder_prev_mode;
 static bool s_ladder_prev_valid;
+
+/* When the peer most recently became reachable, and whether the ladder has been let go since.
+ * See LADDER_SETTLE_MS. */
+static uint32_t s_link_up_tick;
+static bool s_link_up_valid;
+static bool s_link_settled;
 
 /** @brief Outcome of a boot auto-reconnect attempt. */
 typedef enum {
@@ -1380,6 +1400,13 @@ static void app_audio_core_compression_discard_interface_init(sac_processing_int
  *  the bottom. Every one of those steps is a judgement about a link with nobody on the other
  *  end. While link_is_up() says the peer is gone, the ladder holds where it is.
  *
+ *  SETTLE. The same queue argument applies for a while after the peer comes BACK, and that
+ *  is not obvious: the peer is reachable, so the freeze has lifted, but the transmit queue is
+ *  still full of warm-up rather than evidence. Left alone the ladder reads that as a bad link
+ *  and walks 1 to 4 in one go -- which is what a coordinator restart did, with the node
+ *  present throughout, so nothing about it looked like an absent peer. The ladder stays held
+ *  until the link has run for LADDER_SETTLE_MS.
+ *
  *  PIN, and this is the part that has to be exact. Pinning happens on the TRANSITION -- a
  *  step DOWN into the bottom rung -- not on being at the bottom rung. Those are different
  *  conditions and the difference is the whole behaviour:
@@ -1427,6 +1454,10 @@ static void fallback_hold_handler(void)
     peer_present = link_is_up();
 
     if (!peer_present) {
+        /* Whatever comes back has to earn the ladder again from scratch. */
+        s_link_up_valid = false;
+        s_link_settled = false;
+
         if (!s_ladder_frozen) {
             sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
             ASSERT_SAC_STATUS(sac_status);
@@ -1447,9 +1478,34 @@ static void fallback_hold_handler(void)
         return;
     }
 
+    /* Peer is reachable, but a link that has only just come up has a transmit queue full of
+     * warm-up rather than evidence. Keep holding until it has run long enough to mean
+     * something -- and keep recording the mode while holding, so a descent that happened
+     * during the hold is the baseline afterwards rather than a step down to be latched. */
+    if (!s_link_settled) {
+        if (!s_link_up_valid) {
+            s_link_up_tick = facade_get_tick_ms();
+            s_link_up_valid = true;
+        }
+
+        if ((facade_get_tick_ms() - s_link_up_tick) < LADDER_SETTLE_MS) {
+            if (!s_ladder_frozen) {
+                sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
+                ASSERT_SAC_STATUS(sac_status);
+                s_ladder_frozen = true;
+            }
+
+            s_ladder_prev_mode = mode;
+            s_ladder_prev_valid = true;
+            return;
+        }
+
+        s_link_settled = true;
+    }
+
     if (s_ladder_frozen) {
-        /* Thaw. If the pin was released while away, the ladder is free again; if it was not,
-         * the block below leaves it held. */
+        /* Release. If the pin was dropped while the peer was away, the ladder is free again;
+         * if it was not, this leaves it held. */
         sac_fallback_set_manual_mode(&sac_fallback_instance, s_ladder_pinned, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
         s_ladder_frozen = false;
@@ -2013,6 +2069,8 @@ static void unpair_device(bool forget_peer)
     s_ladder_frozen = false;
     s_ladder_pinned = false;
     s_ladder_prev_valid = false;
+    s_link_up_valid = false;
+    s_link_settled = false;
 
     /* Forget the peer only when asked. The press that removes a device should not leave a
      * record behind; an aborted reconnect should not throw one away. */
