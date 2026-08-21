@@ -8,6 +8,7 @@
  */
 
 /* INCLUDES *******************************************************************/
+#include "at_cmd_core_facade.h"
 #include "puretone_unidirectional_facade.h"
 #include "quasar.h"
 #include "quasar_it.h" /* dual-radio HW counters + HardFault snapshot (u535 & u5a5) */
@@ -397,6 +398,70 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
  *  @param[in,out] ready      Per-port "already initialised" flag.
  *  @param[in]     string     Null-terminated text to send.
  */
+/* AT COMMAND CONSOLE *********************************************************/
+/** @brief Which UART carries the AT command channel.
+ *
+ *  Board dependent, and it has to be: the two u535 variants do not have the same working
+ *  pins, and AT is the first thing in this application that needs to RECEIVE. The console
+ *  above only ever transmits, which is why it could ignore the difference.
+ *
+ *    LDO   PA2 is an unreliable pad on the boards here, so LPUART1 cannot be trusted to
+ *          receive. AT therefore takes UART4 (PC10/PC11) through the ST-Link VCP, which is
+ *          wired through the on-board debugger and always usable. Statistics keep LPUART1,
+ *          so nothing is lost -- the two channels simply separate.
+ *
+ *    SMPS  PA2 and PA3 both work in both directions and this variant has no UART4 header,
+ *          so AT takes LPUART1 and the statistics share it. See facade_print_string().
+ *
+ *  U535_PWR_LDO is the discriminator, as it is for the console: CMakeLists.txt defines it
+ *  only when the preset selects LDO, so its absence means SMPS. Override per build with
+ *  -DAT_CONSOLE_ON_STLINK=0/1 rather than editing this file.
+ */
+#ifndef AT_CONSOLE_ON_STLINK
+#if defined(U535_PWR_LDO)
+#define AT_CONSOLE_ON_STLINK 1
+#else
+#define AT_CONSOLE_ON_STLINK 0
+#endif
+#endif
+
+/** @brief How long facade_expansion_uart_flush() waits for the transmitter to drain. */
+#define EXPANSION_UART_TX_TIMEOUT_MS 1000
+
+#if AT_CONSOLE_ON_STLINK && defined(QUASAR_DEF_STLINK_UART_TX_PORT)
+#define AT_CONSOLE_UART_SELECTION QUASAR_DEF_UART_SELECTION_DEBUG
+#define AT_CONSOLE_UART_TX_PORT   QUASAR_DEF_STLINK_UART_TX_PORT
+#define AT_CONSOLE_UART_TX_PIN    QUASAR_DEF_STLINK_UART_TX_PIN
+#define AT_CONSOLE_UART_RX_PORT   QUASAR_DEF_STLINK_UART_RX_PORT
+#define AT_CONSOLE_UART_RX_PIN    QUASAR_DEF_STLINK_UART_RX_PIN
+#define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF8  /* UART4 on PC10/PC11 */
+#elif defined(QUASAR_DEF_UART_SELECTION_EXPANSION)
+#define AT_CONSOLE_UART_SELECTION QUASAR_DEF_UART_SELECTION_EXPANSION
+#define AT_CONSOLE_UART_TX_PORT   QUASAR_DEF_EXPANSION_UART_TX_PORT
+#define AT_CONSOLE_UART_TX_PIN    QUASAR_DEF_EXPANSION_UART_TX_PIN
+#define AT_CONSOLE_UART_RX_PORT   QUASAR_DEF_EXPANSION_UART_RX_PORT
+#define AT_CONSOLE_UART_RX_PIN    QUASAR_DEF_EXPANSION_UART_RX_PIN
+#define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF8  /* LPUART1 on PA3/PA2 */
+#endif
+
+/* Set once facade_expansion_uart_init() has configured the console. Every function that
+ * touches that UART checks it, because the AT core initialises well after main() starts and
+ * facade_print_string() can reach this file before then. */
+static bool at_console_ready;
+
+/** @brief Whether any statistics output still goes straight to a UART of its own.
+ *
+ *  False only on the SMPS variant, where AT takes the single available port and the
+ *  statistics are handed to its queue instead. Named rather than repeated because the helper
+ *  below and both of its call sites have to agree; when they did not, the helper was compiled
+ *  in with no callers and the build warned. */
+#if AT_CONSOLE_ON_STLINK || defined(U535_PWR_LDO)
+#define CONSOLE_HAS_OWN_UART 1
+#else
+#define CONSOLE_HAS_OWN_UART 0
+#endif
+
+#if CONSOLE_HAS_OWN_UART
 static void console_port_write(quasar_uart_selection_t selection, GPIO_TypeDef *tx_port,
                                quasar_gpio_pin_t tx_pin, GPIO_TypeDef *rx_port,
                                quasar_gpio_pin_t rx_pin, bool *ready, char *string)
@@ -473,26 +538,161 @@ static void console_port_write(quasar_uart_selection_t selection, GPIO_TypeDef *
  *  Blocking, deliberately. There is no realtime consumer, and the one caller that must not be
  *  lost is on its way into an infinite loop, so there is nothing for a queue to be kind to.
  */
+#endif /* CONSOLE_HAS_OWN_UART */
+
 void facade_print_string(char *string)
 {
-#if defined(U535_PWR_LDO)
+#if CONSOLE_HAS_OWN_UART && !AT_CONSOLE_ON_STLINK
     static bool stlink_ready;
 #endif
+#if AT_CONSOLE_ON_STLINK
     static bool expansion_ready;
+#endif
 
     if (string == NULL) {
         return;
     }
 
-#if defined(U535_PWR_LDO)
-    /* LDO board only: this variant has the ST-Link VCP header populated as well. */
+#if CONSOLE_HAS_OWN_UART && !AT_CONSOLE_ON_STLINK
+    /* LDO board only, and only while AT is not using it: this variant has the ST-Link VCP
+     * header populated as well. */
     console_port_write(QUASAR_DEF_UART_SELECTION_DEBUG, QUASAR_DEF_STLINK_UART_TX_PORT,
                        QUASAR_DEF_STLINK_UART_TX_PIN, QUASAR_DEF_STLINK_UART_RX_PORT,
                        QUASAR_DEF_STLINK_UART_RX_PIN, &stlink_ready, string);
 #endif
 
+#if AT_CONSOLE_ON_STLINK
     console_port_write(QUASAR_DEF_UART_SELECTION_EXPANSION, QUASAR_DEF_EXPANSION_UART_TX_PORT,
                        QUASAR_DEF_EXPANSION_UART_TX_PIN, QUASAR_DEF_EXPANSION_UART_RX_PORT,
                        QUASAR_DEF_EXPANSION_UART_RX_PIN, &expansion_ready, string);
+#else
+    /* AT owns LPUART1 on this variant, and it is the only port there is. Rather than silence
+     * the statistics -- which would leave the board that goes to the ODM with no diagnostic
+     * output at all -- they go out through the SAME queue as the AT replies.
+     *
+     * Sharing the queue is what makes sharing the wire safe. Two writers on one UART, one
+     * blocking and one interrupt driven, interleave mid-character; one FIFO fed by both
+     * interleaves between whole strings, so a host sees complete "[HS] ..." lines beside
+     * complete "+EVENT: ..." lines and can ignore what it does not recognise.
+     *
+     * Before the AT console is initialised this drops the string rather than blocking, which
+     * costs the boot banner on this variant. Recorded rather than worked around: the banner
+     * is printed before any UART exists, and giving it one would mean configuring the same
+     * pins twice with different settings. */
+    facade_expansion_uart_write(string);
+#endif
 }
 #endif /* QUASAR_U535 */
+
+void facade_expansion_uart_init(uint32_t baud_rate)
+{
+#if defined(AT_CONSOLE_UART_SELECTION)
+    quasar_gpio_config_t gpio_tx = {
+        .port      = AT_CONSOLE_UART_TX_PORT,
+        .pin       = AT_CONSOLE_UART_TX_PIN,
+        .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+        .type      = QUASAR_GPIO_TYPE_PP,
+        .pull      = QUASAR_GPIO_PULL_UP,
+        .speed     = QUASAR_GPIO_SPEED_LOW,
+        .alternate = AT_CONSOLE_UART_GPIO_AF,
+    };
+    quasar_gpio_config_t gpio_rx = {
+        .port      = AT_CONSOLE_UART_RX_PORT,
+        .pin       = AT_CONSOLE_UART_RX_PIN,
+        .mode      = QUASAR_GPIO_MODE_ALTERNATE,
+        .type      = QUASAR_GPIO_TYPE_OD,
+        .pull      = QUASAR_GPIO_PULL_UP,
+        .speed     = QUASAR_GPIO_SPEED_LOW,
+        .alternate = AT_CONSOLE_UART_GPIO_AF,
+    };
+    quasar_uart_config_t uart_cfg = {
+        .uart_selection = AT_CONSOLE_UART_SELECTION,
+        .baud_rate      = baud_rate,
+        .parity         = QUASAR_UART_PARITY_NONE,
+        .stop           = QUASAR_UART_STOP_BITS_1B,
+        /* Priority 12: above the audio process timer (13) and the SWC data timer (15), below
+         * the radio. The handler is a few register reads into a software FIFO, so it cannot
+         * starve them; sitting UNDER them would, because their callbacks run long enough to
+         * exhaust the 8-byte hardware FIFO and the tail of a pasted command goes missing. */
+        .irq_priority   = QUASAR_IRQ_PRIORITY_12,
+        .gpio_config_tx = gpio_tx,
+        .gpio_config_rx = gpio_rx,
+    };
+    quasar_uart_init(uart_cfg);
+    at_console_ready = true;
+#else
+    (void)baud_rate;  /* No usable console UART on this board variant. */
+#endif
+}
+
+void facade_expansion_uart_write(char *string)
+{
+#if defined(AT_CONSOLE_UART_SELECTION)
+    if ((string == NULL) || !at_console_ready) {
+        return;
+    }
+
+    /* IRQ-driven, not blocking. A blocking write spins until the last byte has left -- about
+     * 2.3 ms for an event line at 115200 -- and the callers that matter are the +EVENT
+     * notifiers, which run in the wireless RX callback at PendSV priority 12, ABOVE the audio
+     * process timer (13) and the SWC data timer (15). Every event would freeze the audio
+     * pipeline for the length of its line. On the headset line that was audible at one vendor
+     * command per second: a per-event cost, not a load effect, which is why changing the
+     * command rate did not change it.
+     *
+     * The cost is that "written" no longer means "sent", so anything that stops the CPU
+     * afterwards has to call facade_expansion_uart_flush() first. */
+    quasar_uart_transmit_string_irq(AT_CONSOLE_UART_SELECTION, string, strlen(string));
+#else
+    (void)string;
+#endif
+}
+
+void facade_expansion_uart_flush(void)
+{
+#if defined(AT_CONSOLE_UART_SELECTION)
+    uint32_t deadline;
+
+    if (!at_console_ready) {
+        return;
+    }
+
+    deadline = facade_get_tick_ms() + EXPANSION_UART_TX_TIMEOUT_MS;
+
+    /* Bounded: this only runs on a path that is about to reset or power down, and a
+     * peripheral that never reports completion must not be able to hold that path open. */
+    while (!quasar_uart_transmit_is_complete(AT_CONSOLE_UART_SELECTION)) {
+        if ((int32_t)(facade_get_tick_ms() - deadline) >= 0) {
+            break;
+        }
+    }
+#endif
+}
+
+uint8_t facade_expansion_uart_read_byte(void)
+{
+#if defined(AT_CONSOLE_UART_SELECTION)
+    if (!at_console_ready) {
+        return 0;
+    }
+
+    return quasar_uart_receive_irq(AT_CONSOLE_UART_SELECTION);
+#else
+    return 0;
+#endif
+}
+
+void facade_system_reset(void)
+{
+    quasar_system_reset();
+}
+
+void facade_uwb_shutdown(void)
+{
+    /* Both radios unconditionally. Not gated on SWC_RADIO_COUNT: a single-radio build can be
+     * bound to the second physical radio through SWC_SINGLE_RADIO_ID, so counting radios
+     * would leave the live one powered. Asserting the shutdown pin of a radio this build does
+     * not use is harmless. */
+    quasar_radio_1_set_shutdown_pin();
+    quasar_radio_2_set_shutdown_pin();
+}
