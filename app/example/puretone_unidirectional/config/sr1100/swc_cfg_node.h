@@ -114,7 +114,7 @@
  *  Emissions compliance has not been assessed for this table.
  */
 #ifndef TX_PULSE_WIDTH_MAX
-#define TX_PULSE_WIDTH_MAX 1
+#define TX_PULSE_WIDTH_MAX 0
 #endif
 
 #ifndef ACK_TX_POWER_MAX

@@ -167,7 +167,7 @@
  *  Set TX_PULSE_WIDTH_MAX to 0 to restore the widths FBK4_TX_POWER_REF selected.
  */
 #ifndef TX_PULSE_WIDTH_MAX
-#define TX_PULSE_WIDTH_MAX 1
+#define TX_PULSE_WIDTH_MAX 0
 #endif
 
 #if TX_PULSE_WIDTH_MAX
