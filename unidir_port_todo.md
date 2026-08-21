@@ -14,7 +14,8 @@
 | 版本 | 內容 | 狀態 |
 |---|---|---|
 | **v240 rc01** | unidir、5 階 fallback、24 kHz stereo、雙 radio、ISI 1、reconnect、階梯 hold | **AT 不在裡面** |
-| **v240 rc02** | AT 層（§1.2）、預配對指令（§1.3） | 之後 |
+| **v240 rc02** | AT 層（§1.2） | **程式碼完成，未上機** |
+| 之後 | 預配對指令（§1.3）、SINE（§1.6） | 不擋 rc02 |
 
 **AT 進 rc02 而不是 rc01**，理由是 audio 不靠它：即使板子上有 SOC，
 不做任何 AT 交握也能開機、配對、出聲、跑滿五階 —— reconnect 做完之後尤其如此。
@@ -95,42 +96,57 @@ flash backend 在 `common_backend/quasar_nv_backend.c`，兩個 app 共用。
 建議切兩個 commit：先「搬檔案 + 保留頁 + backend」（不改行為），
 再「boot 狀態機」（改行為），這樣要回退乾淨。
 
-### 1.2 AT 層
+### 1.2 ~~AT 層~~ —— **程式碼完成**（2026-08-21），未上機
 
-§10 寫「從零」已經過時 —— **三個接線點都在**（`user_data_t`、`tx/rx_data_conn`、
-RX callback），`MAX_DATA_PAYLOAD_SIZE` 也已經是 16，跟 headset 一致。
+commit：`87456f7`（RX 洩漏）、`bd0a9e0` + `6e41a2e`（線上格式共用）、
+`51fe13f`（toolchain）、`acd3597`（backend facade）、`927c3b3`（app 接線）。
 
-缺的是：
+搬的過程翻出**三個既有的 bug**，都不是 AT 造成的，但都是 AT 會踩到的：
 
-* **backend facade 6 個函式**（`facade_expansion_uart_init/write/flush/read_byte`、
-  `facade_system_reset`、`facade_uwb_shutdown`）。`facade_get_tick_ms` 已有。
-* **app 端呼叫**：`at_cmd_core_init()` + role + ~10 個 `register_*`、
-  主迴圈加 `at_cmd_core_process()`、打包時 `user_data_pack_vendor()`、
-  收包時 `user_data_deliver_vendor()` 加 `cmd_type` switch。
-* **`user_data_t` 擴充**：現在只有 2 bytes（`button_state` + `link_margin`），
-  而且 **node 和 coord 各有一份手抄**（node:102、coord:122）——
-  正是 §6.5(a) 那個「改一邊、編得過、跑起來欄位全錯位」的陷阱。
-  headset 已用共用 header 解掉。建議把 `puretone_link_data.h` 搬到 `app/common/`
-  兩邊共用，因為 vendor 通道的線上格式是**要交給 ODM 的契約**，
-  兩個產品不該有兩份定義。
-* **u535 的 console 分配 —— 兩塊板不一樣**（見 §3.3）：
+| bug | 為什麼之前看不到 |
+|---|---|
+| `wireless_read_data` 收到超長 payload 會漏 RX buffer | 兩端 `user_data_t` 都是 2 bytes，不可能收到更長的 |
+| unidir 的 `user_data_t` 有**兩份手抄** | 兩份剛好一致，改一邊才會爆 |
+| `CMAKE_C_FLAGS` 每次 configure 自我累加 | 只有 configure 過很多次的 build dir 會超過命令列上限 |
 
-  | 板子 | AT console | stats / LINK_WATCH |
-  |---|---|---|
-  | **LDO** | **UART4（PC10/PC11）**，因為手上這塊的 PA2 RX pad 不可靠，LPUART1 收不到 | LPUART1（PA3，只發） |
-  | **SMPS** | **LPUART1（PA3/PA2）**，收送都正常，是它天生的位置 | UART4，或維持 LPUART1 共用 |
+第三個最值得記：它讓「**我當下那個改動弄壞了那兩個 target**」看起來千真萬確，
+因為只有歷史最長的兩個 build dir 失敗，而錯誤訊息（`The command line is too long`）
+指著連結器，對長度從哪來隻字不提。
 
-  也就是說 AT console 的落點是**板子相依**的，跟現在 console 的分工一樣用
-  `U535_PWR_LDO` 判別。不要寫成一個固定的選擇。
+#### AT console 的落點是板子相依的
 
-**注意這會改變上空中的格式**（`user_data_t` 2 → 最多 16 bytes，常見 5 bytes），
-兩端必須一起重燒。unidir 目前沒有出貨在外面的版本，所以沒有版本錯配風險——
-但如果 ODM 手上已經有 binary，時間點要挑。
+| 板子 | AT | 統計 |
+|---|---|---|
+| **LDO** | **UART4（PC10/PC11）** —— PA2 收不可靠 | LPUART1 |
+| **SMPS** | **LPUART1（PA3/PA2）** —— 這變體沒有 UART4 header | **共用 LPUART1** |
 
-### 1.3 預配對 AT 指令
+SMPS 上兩個寫入者共用一個 port。統計**沒有被靜音**（那會讓一塊從沒上電過的板子
+帶著零診斷輸出去 ODM），而是交給 AT 的佇列 —— **共用佇列才讓共用電線安全**：
+兩個寫入者各自寫同一個 UART 會在字元中間交錯，同一個 FIFO 餵兩邊只會在整串之間交錯。
+代價是那個變體的開機橫幅（它在任何 UART 存在之前就印了）。
 
-`AT+LE_UWB_SET_PAIR` / `GET_PAIR?` / `SERIAL?`（spec §5.4）。依賴 §1.1 和 §1.2。
-產線用的，不擋 ODM 整合。
+#### 還沒驗的
+
+1. `AT+PING` / `AT+FW_VERSION?` 有沒有回
+2. `AT+LE_UWB_CONN_STATUS?` 跟著對面開關機變動
+3. `AT+VENDOR_CMD` 雙向 pass-through（rc08 的 `script/vendor_cmd_test.py` 可直接用）
+4. **SMPS 上統計與 AT 回覆是整行交錯，不是字元交錯**
+
+#### ⚠️ rc01 和 rc02 不能混在同一對板子上
+
+線上格式從 2 bytes 變成 5 bytes。這件事本身是安全的（append-only + 零代表不存在），
+**但 rc01 帶著沒修的 `wireless_read_data`** —— 它收到較長的封包會漏 buffer，
+每 10 ms 一個，RX queue 塞滿之後 data connection 永久死掉。
+那個修正在 `87456f7`，而 rc01 已經交出去了，**從這裡改不到**。
+
+### 1.3 預配對 AT 指令 —— **不在 rc02**（2026-08-21 決定）
+
+`AT+LE_UWB_SET_PAIR` / `GET_PAIR?` / `SERIAL?`（spec §5.4）。依賴 §1.1 和 §1.2，
+兩者都已完成，所以隨時可以做。
+
+**產線用的，不擋 ODM 整合** —— 這是它排在 rc02 之後的理由：
+ODM 要的是能不能用 AT 控制鏈路和做 vendor pass-through，那在 rc02 就齊了；
+預配對是出廠時把身分寫進去，那條線上還沒有人在等。
 
 ### 1.4 + 1.5 ~~階梯的凍結與釘住~~ —— **已完成**（2026-08-21）
 
