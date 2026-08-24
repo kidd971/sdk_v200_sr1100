@@ -689,7 +689,11 @@ static bool handler_module_info(const char *args, char *resp, uint16_t resp_size
     uint64_t serial     = swc_node_get_radio_serial_number(&err);
 
     snprintf(resp, resp_size,
-             "+MODULE_INFO: HW=%u,FW=v2.3.0,Chip=%u,SN=%08lX%08lX,Addr=0x%02X",
+             /* FW from the single version macro. It was the literal "v2.3.0" here, frozen at
+              * the SDK this file was written against, so AT+MODULE_INFO? and AT+FW_VERSION?
+              * answered different versions -- and the one that looked most like a considered
+              * answer was the stale one. */
+             "+MODULE_INFO: HW=%u,FW=" FW_VERSION_STRING ",Chip=%u,SN=%08lX%08lX,Addr=0x%02X",
              hw_model,
              chip_ver,
              (unsigned long)(serial >> 32),
