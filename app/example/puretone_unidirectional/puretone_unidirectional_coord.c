@@ -347,7 +347,6 @@ static void unpair_device(bool forget_peer);
 static void abort_pairing_procedure(void);
 
 /* Fallback LED and terminal display. */
-static void fallback_led_handler(void);
 static void fallback_hold_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
@@ -471,7 +470,6 @@ int main(void)
 
         if (device_pairing_state == DEVICE_PAIRED) {
             fallback_hold_handler();
-            fallback_led_handler();
         }
 
         /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
@@ -1583,14 +1581,6 @@ static void fallback_hold_handler(void)
 
     s_ladder_prev_mode = mode;
     s_ladder_prev_valid = true;
-}
-
-static void fallback_led_handler(void)
-{
-    sac_status_t sac_status = SAC_OK;
-
-    facade_fallback_status(sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status));
-    ASSERT_SAC_STATUS(sac_status);
 }
 
 /** @brief Audio peripheral receive complete callback.

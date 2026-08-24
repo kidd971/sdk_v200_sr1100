@@ -293,7 +293,6 @@ static void unpair_device(bool forget_peer);
 static void abort_pairing_procedure(void);
 
 /* **** Fallback LED and Terminal Display **** */
-static void fallback_led_handler(void);
 static bool should_print_stats(void);
 static void print_stats(void);
 static void print_diagnostics(void);
@@ -301,7 +300,6 @@ static void print_diagnostics(void);
 static void print_stats_compact(void);
 static const char *fallback_mode_name(uint8_t mode);
 #endif
-
 
 /* **** AT command core callbacks **** */
 static void at_start_pairing(void);
@@ -407,10 +405,6 @@ int main(void)
     while (1) {
         facade_button_handling();
         at_cmd_core_process();
-
-        if (device_pairing_state == DEVICE_PAIRED) {
-            fallback_led_handler();
-        }
 
         /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
         if (should_print_stats()) {
@@ -1424,16 +1418,6 @@ static void app_audio_core_mute_on_underflow_interface_init(sac_processing_inter
     iface->gate = NULL;
 }
 
-/** @brief Update the fallback LED indicator.
- */
-static void fallback_led_handler(void)
-{
-    sac_status_t sac_status = SAC_OK;
-
-    facade_fallback_status(sac_fallback_get_current_mode(&main_channel_fallback_instance, &sac_status));
-    ASSERT_SAC_STATUS(sac_status);
-}
-
 /** @brief Volume up button callback.
  */
 static void volume_up(void)
@@ -1693,7 +1677,6 @@ static void print_diagnostics(void)
              (unsigned long)mrt, (int)irq1, (int)irq2);
     facade_print_string(line);
 #endif
-
 
     uint32_t cfsr = 0, hfsr = 0, pc = 0, lr = 0;
 
