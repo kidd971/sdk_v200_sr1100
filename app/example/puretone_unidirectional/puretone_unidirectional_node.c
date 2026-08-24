@@ -1766,6 +1766,7 @@ static void enter_pairing_mode(void)
     device_pairing_state = DEVICE_PAIRING;
 
     facade_notify_enter_pairing();
+    at_cmd_core_notify_pairing_started();
 
     /* The wireless core must be stopped before starting the pairing procedure. */
     if (swc_get_status() == SWC_STATUS_RUNNING) {
@@ -1792,6 +1793,7 @@ static void enter_pairing_mode(void)
     case PAIRING_EVENT_SUCCESS:
         /* Indicate that the pairing process was successful. */
         facade_notify_pairing_successful();
+        at_cmd_core_notify_pairing_result(true);
 
         /* Persist before connecting, so a power cut between the two does not lose a pairing
          * the user has already been told succeeded. */
@@ -1807,6 +1809,12 @@ static void enter_pairing_mode(void)
     default:
         /* Indicate that the pairing process was unsuccessful. */
         facade_notify_not_paired();
+
+        /* Every unsuccessful outcome reports the same way -- timeout, invalid app code and
+         * abort all reach here. A host that asked for pairing needs to learn that it ended
+         * far more than it needs to learn which of the three ended it, and silence is the one
+         * answer it cannot act on. */
+        at_cmd_core_notify_pairing_result(false);
         device_pairing_state = DEVICE_UNPAIRED;
         break;
     }
@@ -1938,6 +1946,11 @@ static void unpair_device(bool forget_peer)
     /* Forget the peer only when asked. */
     if (forget_peer) {
         (void)reconnect_store_clear();
+        /* Only when the record is actually erased. Tearing the link down and forgetting who
+         * the peer was call for opposite responses from a host -- one is reconnectable, the
+         * other needs pairing -- so reporting the first as the second would send it looking
+         * for a person to press a button that nothing was waiting for. */
+        at_cmd_core_notify_unpaired();
     }
 
     /* Stop the audio pipelines. */
