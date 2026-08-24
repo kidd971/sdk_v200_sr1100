@@ -3,7 +3,7 @@
  *
  *  Persists the 4-byte pairing_assigned_address_t across power cycles so a
  *  previously paired device can re-establish its link on boot without re-running
- *  the pairing procedure (see boot_auto_reconnect_design.md).
+ *  the pairing procedure (see MD/boot_auto_reconnect_design.md).
  *
  *  Board-agnostic: the record format (magic / version / CRC32) lives here; the
  *  actual flash access goes through the byte-oriented facade_nv_* API, which

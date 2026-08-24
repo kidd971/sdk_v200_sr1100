@@ -43,7 +43,7 @@ _Min_Stack_Size = 0x400 ;	/* required amount of stack */
 
 /* Memories definition */
 /* Last 8 KB page (0x0807E000-0x0807FFFF) reserved for boot auto-reconnect
- * user data (see boot_auto_reconnect_design.md). FLASH shortened 512K -> 504K
+ * user data (see MD/boot_auto_reconnect_design.md). FLASH shortened 512K -> 504K
  * so the linker never places code there; the app reaches it via _user_data_base. */
 MEMORY
 {

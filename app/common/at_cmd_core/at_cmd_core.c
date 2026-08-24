@@ -850,7 +850,7 @@ static bool handler_pre_track(const char *args, char *resp, uint16_t resp_size)
  *  it registers the *hardware* callback and implements it as "queue this for the DG", because
  *  the forwarding callback was never wired up. Rather than encode a role split this file
  *  cannot enforce, it now just calls whatever the application registered and lets the
- *  application decide. See at_cmd_bidir_decision_spec.md section 2.
+ *  application decide. See MD/at_cmd_bidir_decision_spec.md section 2.
  */
 static bool handler_play(const char *args, char *resp, uint16_t resp_size)
 {

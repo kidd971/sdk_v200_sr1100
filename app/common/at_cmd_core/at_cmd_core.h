@@ -111,7 +111,7 @@ typedef enum {
  *  written for a forwarding path that was never enabled -- no application ever registered
  *  the callback -- so it never reached a wire. Where a documented-but-dead encoding conflicts
  *  with an undocumented-but-shipping one, the shipping one is the fact. See
- *  at_cmd_bidir_decision_spec.md section 5.
+ *  MD/at_cmd_bidir_decision_spec.md section 5.
  *
  *  AT_CMD_VOL is the one value still free to choose: volume is not forwarded over UWB by
  *  either side today (the DG applies AT+VOL to its own back channel; see

@@ -48,7 +48,7 @@
  *  3. ZERO MEANS ABSENT. Both ends zero-initialize their local copy, and a receiver with a
  *     longer struct than the sender leaves the trailing fields at zero. So the zero value of
  *     every new field must mean "nothing here" -- never a legitimate value, and never a
- *     benign-looking default. See at_cmd_bidir_decision_spec.md section 6 for why this
+ *     benign-looking default. See MD/at_cmd_bidir_decision_spec.md section 6 for why this
  *     matters most for alarm-carrying fields: reporting "I don't know" as "everything is
  *     fine" is the failure this rule exists to prevent.
  *

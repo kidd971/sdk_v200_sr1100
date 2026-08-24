@@ -2398,7 +2398,7 @@ static void data_callback(void)
     /* Edge triggered: clear the slot as soon as it is packed, exactly as the node does.
      * Nothing checks whether the send below succeeded, so a media command issued while the
      * link is down is lost rather than retried -- acceptable for a key press a user can
-     * repeat, and the reason at_cmd_bidir_decision_spec.md keeps state-carrying fields off
+     * repeat, and the reason MD/at_cmd_bidir_decision_spec.md keeps state-carrying fields off
      * this mechanism. */
     transmitted_user_data.cmd_type = s_pending_cmd;
     s_pending_cmd = AT_CMD_NONE;

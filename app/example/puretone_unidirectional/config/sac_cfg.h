@@ -222,7 +222,7 @@
  *  Remove this when the reason for the climbing-and-failing is fixed rather than when it
  *  stops being noticed -- that is the condition, and it is written here so the switch has an
  *  exit and not just a birthday. On the u535 the underlying reason is most likely the arrival
- *  deficit in u535_ldo_rx_deficit.md; on a board without that deficit this switch may never
+ *  deficit in MD/u535_ldo_rx_deficit.md; on a board without that deficit this switch may never
  *  do anything at all.
  *
  *  Only the coordinator reads it. The node follows the mode in the received header and has no

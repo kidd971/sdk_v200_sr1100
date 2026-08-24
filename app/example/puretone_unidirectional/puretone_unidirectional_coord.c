@@ -76,7 +76,7 @@
  *
  *  Three seconds. The two cases are indistinguishable at any single instant -- both are
  *  "nothing is arriving" -- but they are an order of magnitude apart in duration: a reboot
- *  takes seconds, an obstruction lasts hundreds of milliseconds. link_dropout_arms_ledger.md
+ *  takes seconds, an obstruction lasts hundreds of milliseconds. MD/link_dropout_arms_ledger.md
  *  measures obstruction in the hundreds of ms, which is what sets the floor here.
  *
  *  Used only to decide whether a ladder pin survives. A pin says "this link, as it stands,
@@ -1357,7 +1357,7 @@ static void app_audio_core_init(void)
      *
      * The failure this prevents is specific and recognisable: at mode 0 on a dual-radio
      * build, TIM4's ARR wedges at 0xFFFD, the radio IRQ and DMA counters freeze, swc goes to
-     * STOP, and stall_auto_recover() cannot revive it -- see radio_stall_wedge_open_issue.md,
+     * STOP, and stall_auto_recover() cannot revive it -- see MD/radio_stall_wedge_open_issue.md,
      * which recorded that signature before it was connected to this cap. A unidirectional
      * node is affected more directly than the headset ever was, because this ladder STARTS at
      * mode 0: a dual-radio node boots straight into the parking condition.
