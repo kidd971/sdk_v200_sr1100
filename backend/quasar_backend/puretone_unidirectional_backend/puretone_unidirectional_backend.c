@@ -380,24 +380,11 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
     }
 }
 
-#if defined(QUASAR_U535)
-/** @brief Timeout for one console line, in ms. Generous: this is a diagnostic path. */
-#define CONSOLE_UART_TX_TIMEOUT_MS 1000
-
-/** @brief Bring one console UART up on first use and write to it.
- *
- *  Lazy because debug_enabled is false, so quasar_debug_init() never claimed UART4, and
- *  initialising only the two pins named here avoids the extra DEBUG_IO (PA4) GPIO
- *  configuration it would also do.
- *
- *  @param[in]     selection  UART peripheral.
- *  @param[in]     tx_port    TX GPIO port.
- *  @param[in]     tx_pin     TX GPIO pin.
- *  @param[in]     rx_port    RX GPIO port.
- *  @param[in]     rx_pin     RX GPIO pin.
- *  @param[in,out] ready      Per-port "already initialised" flag.
- *  @param[in]     string     Null-terminated text to send.
- */
+/* The AT console selection sits OUTSIDE the QUASAR_U535 guard below, because the six
+ * facade functions it configures are also outside it -- every board links them. Inside,
+ * AT_CONSOLE_UART_SELECTION would be undefined on u5a5, every one of those functions would
+ * take its no-op branch, and the build would be perfectly clean: the command table is in
+ * the image, the host sees an AT port that never answers. */
 /* AT COMMAND CONSOLE *********************************************************/
 /** @brief Which UART carries the AT command channel.
  *
@@ -441,7 +428,15 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
 #define AT_CONSOLE_UART_TX_PIN    QUASAR_DEF_EXPANSION_UART_TX_PIN
 #define AT_CONSOLE_UART_RX_PORT   QUASAR_DEF_EXPANSION_UART_RX_PORT
 #define AT_CONSOLE_UART_RX_PIN    QUASAR_DEF_EXPANSION_UART_RX_PIN
+/* The alternate function is per PERIPHERAL, not per board, and the two boards put a
+ * different peripheral on their expansion pins: LPUART1 on u535, USART2 on u5a5. Writing one
+ * value here compiles on both and muxes the u5a5 pins to a peripheral that is not driving
+ * them, so nothing reaches the wire and nothing says why. */
+#ifdef QUASAR_U535
 #define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF8  /* LPUART1 on PA3/PA2 */
+#else
+#define AT_CONSOLE_UART_GPIO_AF   QUASAR_GPIO_ALTERNATE_AF7  /* USART2 on PA2/PA3 */
+#endif
 #endif
 
 /* Set once facade_expansion_uart_init() has configured the console. Every function that
@@ -449,6 +444,24 @@ static void handle_button_state(button_handle_t *button_handle, void (*button_ca
  * facade_print_string() can reach this file before then. */
 static bool at_console_ready;
 
+#if defined(QUASAR_U535)
+/** @brief Timeout for one console line, in ms. Generous: this is a diagnostic path. */
+#define CONSOLE_UART_TX_TIMEOUT_MS 1000
+
+/** @brief Bring one console UART up on first use and write to it.
+ *
+ *  Lazy because debug_enabled is false, so quasar_debug_init() never claimed UART4, and
+ *  initialising only the two pins named here avoids the extra DEBUG_IO (PA4) GPIO
+ *  configuration it would also do.
+ *
+ *  @param[in]     selection  UART peripheral.
+ *  @param[in]     tx_port    TX GPIO port.
+ *  @param[in]     tx_pin     TX GPIO pin.
+ *  @param[in]     rx_port    RX GPIO port.
+ *  @param[in]     rx_pin     RX GPIO pin.
+ *  @param[in,out] ready      Per-port "already initialised" flag.
+ *  @param[in]     string     Null-terminated text to send.
+ */
 /** @brief Whether any statistics output still goes straight to a UART of its own.
  *
  *  False only on the SMPS variant, where AT takes the single available port and the
