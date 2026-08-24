@@ -597,6 +597,26 @@ void facade_print_string(char *string)
 }
 #endif /* QUASAR_U535 */
 
+#if defined(AT_CONSOLE_UART_SELECTION) && !AT_CONSOLE_ON_STLINK
+/* The expansion pins are not the same peripheral on the two boards, and on the u535 they are
+ * not even the same way round. USART2 does not exist there, so PA3/PA2 are LPUART1_TX/RX
+ * through AF8; on the u5a5 the same pads are USART2 with PA2 as TX, through AF7. That has
+ * been established once already and then lost, which is what these assertions are for --
+ * getting it wrong costs nothing at build time and presents as a port that never answers.
+ *
+ * Asserted rather than hardcoded: the values still come from the BSP, and these only refuse
+ * to build if the BSP stops saying what this code was written against. */
+#ifdef QUASAR_U535
+_Static_assert(AT_CONSOLE_UART_SELECTION == QUASAR_UART_SELECTION_LPUART1,
+               "u535 has no USART2 -- the expansion console is LPUART1");
+_Static_assert(AT_CONSOLE_UART_TX_PIN == QUASAR_GPIO_PIN_3 && AT_CONSOLE_UART_RX_PIN == QUASAR_GPIO_PIN_2,
+               "u535 expansion is PA3=TX PA2=RX, the opposite way round from the u5a5");
+#else
+_Static_assert(AT_CONSOLE_UART_TX_PIN == QUASAR_GPIO_PIN_2 && AT_CONSOLE_UART_RX_PIN == QUASAR_GPIO_PIN_3,
+               "u5a5 expansion is PA2=TX PA3=RX");
+#endif
+#endif
+
 void facade_expansion_uart_init(uint32_t baud_rate)
 {
 #if defined(AT_CONSOLE_UART_SELECTION)
