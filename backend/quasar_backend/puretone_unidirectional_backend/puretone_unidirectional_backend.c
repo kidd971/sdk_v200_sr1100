@@ -617,6 +617,26 @@ _Static_assert(AT_CONSOLE_UART_TX_PIN == QUASAR_GPIO_PIN_2 && AT_CONSOLE_UART_RX
 #endif
 #endif
 
+#if !defined(QUASAR_U535)
+/** @brief Console output for boards that are not the u535.
+ *
+ *  Overrides the weak USB CDC implementation in common_backend.c, which on u5a5 prints
+ *  nothing at all: tud_cdc_connected() is false forever because nothing in this tree ever
+ *  calls tusb_init() or tud_task(). That left the board with no diagnostic output of any
+ *  kind -- not the boot banner, not the per-second statistics -- so "the AT port is silent"
+ *  and "the board is not running" could not be told apart on it.
+ *
+ *  Shares the AT queue rather than taking a second UART, for the reason set out in the u535
+ *  branch above: one FIFO fed by both writers interleaves between whole strings, whereas two
+ *  writers on one UART interleave mid-character. A host sees complete "[DG] ..." lines beside
+ *  complete "+EVENT: ..." lines.
+ */
+void facade_print_string(char *string)
+{
+    facade_expansion_uart_write(string);
+}
+#endif /* !QUASAR_U535 */
+
 void facade_expansion_uart_init(uint32_t baud_rate)
 {
 #if defined(AT_CONSOLE_UART_SELECTION)

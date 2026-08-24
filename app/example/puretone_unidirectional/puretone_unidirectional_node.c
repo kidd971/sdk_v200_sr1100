@@ -325,6 +325,23 @@ int main(void)
     /* Initialize the board and all GPIOs and peripherals for minimal operations. */
     facade_board_init();
 
+    /* AT command channel, first, because on some boards it IS the console: u5a5 has no
+     * other output at all, so a banner printed before this runs is a banner nobody sees.
+     * Everything it needs is already up -- facade_board_init() has configured the clocks
+     * and GPIO -- and putting it here also means a failure anywhere later, including in
+     * audio setup, is still reportable. */
+    at_cmd_core_init();
+    at_cmd_core_set_device_role(AT_DEVICE_ROLE_NODE);
+    at_cmd_core_register_pair_cb(at_start_pairing);
+    at_cmd_core_register_connect_cb(at_start_connect);
+    at_cmd_core_register_disconnect_cb(at_start_disconnect);
+    at_cmd_core_register_shutdown_cb(at_start_shutdown);
+    at_cmd_core_register_link_status_cb(at_get_link_status);
+    at_cmd_core_register_link_margin_cb(at_get_link_margin);
+    at_cmd_core_register_vol_cb(at_set_vol);
+    at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
+    at_cmd_core_notify_uwb_ready();
+
     /* First thing on the console, before anything can fail. Without it "nothing came out of
      * the serial port" has two meanings that cannot be told apart: the console is broken, or
      * the console is fine and the application died before printing anything. On a board whose
@@ -354,20 +371,6 @@ int main(void)
         .volume_down_callback = volume_down,
     };
     facade_set_button_callbacks(button_callbacks);
-
-    /* AT command channel. Initialised before anything can report through it, and before the
-     * audio timers start, so that a failure during audio setup is still reportable. */
-    at_cmd_core_init();
-    at_cmd_core_set_device_role(AT_DEVICE_ROLE_NODE);
-    at_cmd_core_register_pair_cb(at_start_pairing);
-    at_cmd_core_register_connect_cb(at_start_connect);
-    at_cmd_core_register_disconnect_cb(at_start_disconnect);
-    at_cmd_core_register_shutdown_cb(at_start_shutdown);
-    at_cmd_core_register_link_status_cb(at_get_link_status);
-    at_cmd_core_register_link_margin_cb(at_get_link_margin);
-    at_cmd_core_register_vol_cb(at_set_vol);
-    at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
-    at_cmd_core_notify_uwb_ready();
 
     /* Audio process timer initialization. */
     facade_audio_process_timer_init(audio_process_callback);
