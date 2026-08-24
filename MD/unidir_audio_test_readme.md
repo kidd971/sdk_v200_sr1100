@@ -1,40 +1,124 @@
 # puretone_unidirectional v2.4.0 rc02 —— 測試說明
 
-單向音訊：**DG（coordinator）送，HS（node）收**。24 kHz stereo、5 階 fallback、ISI 1。
-rc02 比 rc01 多了 **AT 指令層**。
+**這一版主要是給 ODM 對 AT 指令字串用的。** 所以指令和事件列在最前面。
+音訊、fallback、回連跟 rc01 相同，往下看第 4 節之後。
 
-**這一包裡的 binary 是哪塊板、哪個角色、驗到什麼程度，看同目錄的 `MANIFEST.txt`。**
+單向音訊：**DG（coordinator）送，HS（node）收**。24 kHz stereo、5 階 fallback、ISI 1。
 
 檔名 `dg-` 是送端，`hs-` 是收端。**燒錯角色的症狀是「完全沒聲音」**，
-跟其他故障長得一樣 —— 開機那行會告訴你燒的是哪一包，先看那行再懷疑別的。
+跟其他故障長得一樣 —— 開機那行會告訴你燒的是哪一包。
+哪塊板、驗到什麼程度，看同目錄的 `MANIFEST.txt`。
 
 ---
 
-## ⚠️ rc01 和 rc02 不能混在同一對板子上
+## 1. AT 指令
 
-線上格式從 2 bytes 變成 5 bytes（帶 vendor 指令時最多 14）。這個改動本身是安全的，
-**但 rc01 的接收路徑有一個 bug**：收到比自己長的封包時會漏掉一個接收緩衝區，
-每 10 ms 一個，佇列塞滿之後 data connection 永久死掉。
+以下是**程式碼實際註冊的全部 21 個**。與 PRD 有出入時以這裡為準。
 
-那個修正在 rc02，**到不了已經交出去的 rc01 binary**。
+| 指令 | 回應 |
+|---|---|
+| `AT+PING` | `OK` |
+| `AT+HELP` | `+HELP:` 後接指令清單 |
+| `AT+VER` | `+VER: SPARK SDK SR1100 v2.4.0_rc02` |
+| `AT+FW_VERSION?` | `+FW_VERSION: v2.4.0_rc02` |
+| `AT+MODULE_INFO?` | `+MODULE_INFO: HW=<n>,FW=v2.4.0_rc02,Chip=<n>,SN=<16 hex>,Addr=0x<xx>` |
+| `AT+MODULE_RESET` | `OK`，然後 MCU reset |
+| `AT+LE_UWB_CONN_STATUS?` | `+LE_UWB_CONN_STATUS: <n> (<NAME>)`，`0=STANDBY 1=PAIRING 2=CONNECTED 3=CONNECTING` |
+| `AT+LE_UWB_GET_ROLE?` | `+LE_UWB_GET_ROLE: <n> (<NAME>)`，`0=COORDINATOR 1=NODE` |
+| `AT+LE_UWB_PAIR` | `OK`，立刻進配對 |
+| `AT+LE_UWB_CONNECT` | `OK`，重建已儲存的鏈路（實作是 MCU reset）|
+| `AT+LE_UWB_DISCONNECT` | `OK`，拆鏈路、**保留**配對紀錄 |
+| `AT+LE_UWB_SHUTDOWN` | `OK`，拆鏈路並關掉 radio 電源；MCU 繼續回應 AT |
+| `AT+VENDOR_CMD=<id>[,"<hex>"[,"ACK"]]` | `OK`；`id` 1–223，payload 最多 **8 bytes** |
+| `AT+VOL=<0-100>` / `AT+VOL?` | `OK` / `+VOL: <n>`。**只有 HS 有輸出**，DG 不轉發 |
+| `AT+PLAY` / `AT+STOP` / `AT+NEXT_TRACK` / `AT+PRE_TRACK` | `OK`，見 §7 的重要注意 |
+| `AT+BATTERY?` | `+BATTERY: <0-100>` |
+| `AT+CONN_LM?` | `+CONN_LM: <n>dB` 或 `+CONN_LM: N/A` |
+| `AT+I2S_MUX` | `+I2S_MUX: <sel>`，板內 codec 選擇 |
 
-**兩端都要燒 rc02。** 混用的症狀是「配對成功、link margin 不再更新、階梯亂跳」，
-看起來很像 RF 問題。
+**`AT+CONN_LM?` 兩端意義不同**（PRD 未收錄，依決定不收）：
+HS 直接量自己收到的音訊連線；**DG 是發送端，回的是 HS 最後回報的值**。
+兩者的 `0` 都代表「沒有量測」（未配對，或 HS 還沒回報過），**不是 0 dB**。
 
 ---
 
-## 1. 兩條序列埠
+## 2. 事件（`+EVENT:`）
 
-每塊板有 **AT 指令**和**除錯 console** 兩條，落點依板子而定。全部 **115200 8N1**。
+主動送出，不需要查詢。以下是**程式碼實際會送的全部**，格式照抄。
+
+### 開機
+
+```
++EVENT: BUILD: v2.4.0_rc02 role=<COORDINATOR|NODE> <date> <time>
++EVENT: LE_UWB_READY
+```
+
+### 配對
+
+```
++EVENT: LE_UWB_PAIRING       進入配對
++EVENT: LE_UWB_PAIRED        配對成功
++EVENT: LE_UWB_PAIR_FAIL     逾時 / app code 錯 / 中止，三者共用這一個
++EVENT: LE_UWB_UNPAIRED      配對紀錄已擦除
+```
+
+**`LE_UWB_UNPAIRED` 只會由按鍵觸發**，因為只有按鍵會擦掉紀錄（見 §5）。
+下完 AT 指令不要等這個事件。
+
+### 連線
+
+```
++EVENT: LE_UWB_CONNECTED
++EVENT: LE_UWB_DISCONNECTED
++EVENT: LE_UWB_CONNECT_FAIL
++EVENT: LE_UWB_STANDBY
+```
+
+### 鏈路品質
+
+```
++EVENT: LE_UWB_QUALITY:WEAK
++EVENT: LE_UWB_QUALITY:GOOD
+```
+
+**只在 CONNECTED 狀態下每 1000 ms 檢查一次，而且有遲滯**：
+margin **< 5 dB** 才送 WEAK，要回到 **≥ 10 dB** 才送 GOOD。
+所以 5–10 dB 之間不會來回抖動，也不會每秒重送同一個狀態 —— **只在跨越時送一次**。
+
+### Vendor pass-through
+
+```
++EVENT: VENDOR_CMD:<id>,"<hex>"     收到對面的 vendor 指令
++EVENT: VENDOR_CMD_ACK:<id>         對面確認收到（只有下 "ACK" 才會有）
++EVENT: VENDOR_CMD_FAIL:<id>        重送用完仍未被確認
+```
+
+### 媒體鍵（由對面轉來）
+
+```
++EVENT: PLAY
++EVENT: STOP
++EVENT: NEXT_TRACK
++EVENT: PRE_TRACK
++EVENT: VOL=<n>
+```
+
+---
+
+## 3. 序列埠
+
+每塊板有 **AT** 和**除錯 console** 兩條，落點依板子而定。全部 **115200 8N1**。
 
 | 板子 | AT 指令 | 除錯 console |
 |---|---|---|
 | **u535 LDO** | **UART4 — PC10 (TX) / PC11 (RX)**，即 ST-Link VCP，插 USB 就有 | LPUART1 — PA3，只發 |
 | **u535 SMPS** | **LPUART1 — PA3 (TX) / PA2 (RX)** | **同一條**，見下 |
-| **u5a5** | **USART2 — PA2 (TX) / PA3 (RX)**，expansion 排針，要外接轉接板 | **同一條**，見下 |
+| **u5a5** | **USART2 — PA2 (TX) / PA3 (RX)**，**expansion 排針**，要外接轉接板 | **同一條**，見下 |
 
-**SMPS 和 u5a5 上兩者共用一條線。** 那不是疏漏 —— 那兩塊板各自只有一個可用的埠，
-而把統計靜音會讓板子完全沒有診斷輸出。兩者走同一個傳送佇列，
+u5a5 的 ST-Link VCP 是另一個 UART，**上面什麼都沒有** —— 那是這塊板最先會走錯的地方。
+
+**SMPS 和 u5a5 上 AT 和統計共用一條線。** 那不是疏漏 —— 那兩塊板各自只有一個可用的埠，
+而把統計靜音會讓板子完全沒有診斷輸出。兩者走**同一個傳送佇列**，
 所以**交錯只會發生在整行之間**：
 
 ```
@@ -45,47 +129,29 @@ rc02 比 rc01 多了 **AT 指令層**。
 
 不該出現 `[DG] v240_+EVENT: LE_` 這種字元中間被切斷的情況。**看到就回報。**
 
-開機第一行：
+開機第一行（送到 console；SMPS 和 u5a5 上就是同一條）：
 
 ```
-[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.0_rc02 Aug 24 2026 11:12:09
+[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.0_rc02 Aug 24 2026 13:12:28
 ```
+
+**這行是接電之後幾毫秒就送出的**，terminal 開得晚就會錯過。想看它就先開 terminal 再上電。
 
 ---
 
-## 2. AT 指令
+## ⚠️ rc01 和 rc02 不能混在同一對板子上
 
-完整規格看 PRD。這裡只列測試會用到的，以及**文件沒寫但存在**的。
+線上格式從 2 bytes 變成 5 bytes（帶 vendor 指令時最多 14）。這個改動本身是安全的，
+**但 rc01 的接收路徑有一個 bug**：收到比自己長的封包時會漏掉一個接收緩衝區，
+每 10 ms 一個，佇列塞滿之後 data connection 永久死掉。
+那個修正在 rc02，**到不了已經交出去的 rc01 binary**。
 
-```
-AT+PING                      連通性
-AT+FW_VERSION?               韌體版本
-AT+MODULE_INFO?              硬體／序號／位址
-AT+LE_UWB_CONN_STATUS?       0=STANDBY 1=PAIRING 2=CONNECTED 3=CONNECTING
-AT+LE_UWB_PAIR               開始配對
-AT+LE_UWB_CONNECT            重建已儲存的鏈路（實作方式是 reset）
-AT+LE_UWB_DISCONNECT         拆鏈路，保留配對紀錄
-AT+LE_UWB_SHUTDOWN           拆鏈路並關掉 radio 電源
-AT+LE_UWB_GET_ROLE?          0=coordinator 1=node
-AT+VENDOR_CMD=<id 1-223>[,"<hex>"[,"ACK"]]    vendor pass-through
-AT+VOL=[0-100] / AT+VOL?     只有 HS 有輸出，DG 不轉發
-AT+BATTERY?
-```
-
-**PRD 沒寫但可用的**：`AT+CONN_LM?`（link margin）。
-HS 直接量自己收到的音訊連線；**DG 是發送端，回的是 HS 最後回報的值**。
-兩者的 `0` 都代表「沒有量測」（未配對，或 HS 還沒回報過），**不是 0 dB**。
-
-事件（`+EVENT:`）跟 PRD 一致，包含 `LE_UWB_PAIRING` / `PAIRED` / `PAIR_FAIL` /
-`UNPAIRED` / `READY` / `CONNECTED` / `DISCONNECTED` / `CONNECT_FAIL` /
-`QUALITY:GOOD|WEAK` / `VENDOR_CMD*` / `BUILD:`。
-
-**`+EVENT: LE_UWB_UNPAIRED` 只會由按鍵觸發**，因為只有按鍵會擦掉紀錄（見 §3）。
-不要等 AT 指令產生它。
+**兩端都要燒 rc02。** 混用的症狀是「配對成功、link margin 不再更新、階梯亂跳」，
+看起來很像 RF 問題。
 
 ---
 
-## 3. 配對與回連
+## 4. 配對與回連
 
 | 情況 | LED |
 |---|---|
@@ -101,7 +167,9 @@ HS 直接量自己收到的音訊連線；**DG 是發送端，回的是 HS 最�
 回連逾時**不會**自動重新配對。DG 是時間基準，它的無線核心會繼續跑，
 HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG 把已經好的配對丟掉。
 
-### 要重新配對 —— rc02 有三條路
+---
+
+## 5. 要重新配對 —— rc02 有三條路
 
 **配對紀錄存在 flash，重開機不會清掉。這是刻意的**，也是自動回連能運作的原因。
 所以「重開機再配對一次」**沒有用** —— 它會直接回連到原本那台。
@@ -120,7 +188,7 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 
 ---
 
-## 4. 一行 log 怎麼讀
+## 6. 一行 log 怎麼讀
 
 ```
 [HS] v240_rc02 55493 fb=4 24kHz ADPCM   rx=600/s rej=0/s miss=3106/s fill=16% lm=170
@@ -146,9 +214,9 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 
 ---
 
-## 5. 測 audio 時最需要注意的三件事
+## 7. 測 audio 時最需要注意的三件事
 
-### 5.1 停在 24 kHz 是預期行為，不是故障
+### 7.1 停在 24 kHz 是預期行為，不是故障
 
 階梯一旦**真的因為鏈路變差**從 fb=3 掉到 fb=4，就會**釘在那裡不再往上爬**。會印：
 
@@ -161,12 +229,12 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 
 **「聽起來一直是 24 kHz」不要當成 bug 回報**，除非它是在鏈路明明很好的時候發生的。
 
-### 5.2 重開機不會把階梯拖下去
+### 7.2 重開機不會把階梯拖下去
 
 **任一邊單獨重開機，另一邊的階數應該不動。**
 如果看到「HS 重開之後 DG 就掉到 fb=4」，那是 bug，請回報。
 
-### 5.3 遮擋測試要看的是「有沒有斷音」
+### 7.3 遮擋測試要看的是「有沒有斷音」
 
 不是看 fb 掉到幾階 —— **掉階正是它該做的事**。
 掉階但聲音連續 = 正常運作；聲音斷掉才是問題。
@@ -175,20 +243,20 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 
 ---
 
-## 6. 已知限制
+## 8. 已知限制
 
 | 項目 | 狀況 |
 |---|---|
 | **96 kHz** | **關閉**。這條線上 96 kHz 會斷音，原因未明。不要嘗試打開 |
-| **`AUDIO_CMD_OK` / `AUDIO_CMD_ERROR`** | **未實作**。`AT+PLAY` 等回 `OK` 只代表「已排入下一個封包」，不代表對面收到或執行了。PRD 已改為明確說明模組不提供這層確認 |
-| **解除配對** | 沒有 AT 指令會擦掉紀錄。見 §3 |
-| **u5a5 console** | 跟 AT 共用 USART2。u5a5 沒有 USB CDC 輸出 |
+| **媒體鍵沒有執行確認** | `AT+PLAY` / `STOP` / `NEXT_TRACK` / `PRE_TRACK` 回 `OK` **只代表「已排入下一個封包」**，不代表對面收到或執行了。它們是 edge 觸發、無序號、無重送，所以沒有東西可以確認。PRD 已明確說明模組不提供這層確認。**要可靠的東西請走 `AT+VENDOR_CMD` 的 ACK 模式** |
+| **解除配對** | 沒有 AT 指令會擦掉紀錄。見 §5 |
+| **u5a5 沒有 USB CDC 輸出** | console 跟 AT 共用 USART2 |
 
 各板子還有什麼驗過、什麼沒驗過，看 `MANIFEST.txt`。
 
 ---
 
-## 7. 回報什麼
+## 9. 回報什麼
 
 1. 板子和**開機那行**
 2. 單 radio 還是雙 radio
