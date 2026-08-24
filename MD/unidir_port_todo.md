@@ -14,7 +14,7 @@
 | 版本 | 內容 | 狀態 |
 |---|---|---|
 | **v240 rc01** | unidir、5 階 fallback、24 kHz stereo、雙 radio、ISI 1、reconnect、階梯 hold | **AT 不在裡面** |
-| **v240 rc02** | AT 層（§1.2） | **程式碼完成，未上機** |
+| **v240 rc02** | AT 層（§1.2） | **已發布 2026-08-24**；AT 在 u535 LDO 與 u5a5 驗過，vendor pass-through 與 AT 期間音訊未驗 |
 | 之後 | 預配對指令（§1.3）、SINE（§1.6） | 不擋 rc02 |
 
 **AT 進 rc02 而不是 rc01**，理由是 audio 不靠它：即使板子上有 SOC，

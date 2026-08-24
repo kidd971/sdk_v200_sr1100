@@ -24,10 +24,10 @@ extern "C" {
  *  (-DFW_VERSION_RELEASE=\"rc02\") so a preset can stamp it without editing this file.
  */
 #ifndef FW_VERSION_RELEASE
-#define FW_VERSION_RELEASE  "rc01"
+#define FW_VERSION_RELEASE  "rc02"
 #endif
 
-/** @brief What every version print and version query answers: "v2.4.0_rc01".
+/** @brief What every version print and version query answers: "v2.4.0_rc02".
  *
  *  One string, deliberately, because the alternative has already happened here: the two
  *  halves lived in separate macros with separate rules about when to bump them, and the
@@ -53,7 +53,7 @@ extern "C" {
  */
 #define FW_VERSION_SDK_COMPACT  "v240"
 
-/** @brief One whitespace-free token: "v240_rc01".
+/** @brief One whitespace-free token: "v240_rc02".
  *
  *  For the statistics lines, which are read by eye in a terminal and split on whitespace by
  *  everything else. The release half is the same FW_VERSION_RELEASE the long form uses, so
