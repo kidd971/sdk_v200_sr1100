@@ -368,15 +368,6 @@ static int32_t at_get_link_margin(void);
 static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
 
 
-/* **** AT command core callbacks **** */
-static void at_start_pairing(void);
-static void at_start_connect(void);
-static void at_start_disconnect(void);
-static void at_start_shutdown(void);
-static bool at_get_link_status(void);
-static int32_t at_get_link_margin(void);
-static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
-
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
 static uint32_t get_accumulator_size(sac_pipeline_t *pipeline);
@@ -2080,6 +2071,7 @@ static boot_reconnect_result_t try_boot_reconnect(void)
             break;
         }
         facade_button_handling();
+        at_cmd_core_process();
 
         if (s_boot_reconnect_abort) {
             break;
@@ -2177,6 +2169,13 @@ static void pairing_process_callback(void)
      *       which might take a variable amount of time.
      */
     facade_button_handling();
+
+    /* And the AT channel, for the same reason. pairing_coordinator_start() does not return
+     * until the procedure succeeds, times out or is aborted, so this callback is the only
+     * thing running for the whole pairing window -- without it the module stops answering AT
+     * for PAIRING_TIMEOUT_IN_SECONDS, which is precisely when a host has just sent
+     * AT+LE_UWB_PAIR and is waiting to hear how it went. */
+    at_cmd_core_process();
 }
 
 /** @brief Abort the pairing procedure.

@@ -1873,6 +1873,7 @@ static boot_reconnect_result_t try_boot_reconnect(void)
             break;
         }
         facade_button_handling();
+        at_cmd_core_process();
 
         if (s_boot_reconnect_abort) {
             break;
@@ -1963,6 +1964,13 @@ static void pairing_process_callback(void)
      *       which might take a variable amount of time.
      */
     facade_button_handling();
+
+    /* And the AT channel, for the same reason. pairing_coordinator_start() does not return
+     * until the procedure succeeds, times out or is aborted, so this callback is the only
+     * thing running for the whole pairing window -- without it the module stops answering AT
+     * for PAIRING_TIMEOUT_IN_SECONDS, which is precisely when a host has just sent
+     * AT+LE_UWB_PAIR and is waiting to hear how it went. */
+    at_cmd_core_process();
 }
 
 /** @brief Abort the pairing procedure.
