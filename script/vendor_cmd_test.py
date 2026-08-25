@@ -8,12 +8,21 @@ Two things this is for:
     work" into counted losses, duplicates and reorderings -- and it runs long enough to take
     the module's 8-bit sequence number past its wrap point, which a hand test never does.
 
-  * Load. The +EVENT line is written to the AT UART with a BLOCKING transmit, from the
-    wireless RX callback context. At 115200 baud a vendor event is roughly 2.3 ms spent
-    inside that context. A sustained stream is therefore also an audio/link stress test, and
-    the one the ODM is most likely to produce -- resending state periodically is exactly what
-    this project's own guidance tells them to do. Run it with audio playing and watch for
-    glitches, and watch LINK_WATCH on the other console if that board has one.
+  * Load. Every received vendor command emits a +EVENT line from the wireless RX callback
+    context, which runs at PendSV priority 12 -- above the audio process timers. That used to
+    be a BLOCKING UART write, about 2.3 ms per line at 115200, and it froze the audio pipeline
+    for exactly that long on every event. It is an interrupt-driven FIFO push now, so the cost
+    in that context is microseconds.
+
+    Which is why this is still worth running with audio playing. The fault it guards against
+    was a PER-EVENT cost, not a load effect -- it was audible at ONE command per second, and
+    raising the rate did not make it worse. So --rate 1 is the diagnostic condition, not a
+    gentle warm-up; the higher rates are for pass-through correctness instead.
+
+    It is also the traffic pattern the ODM is most likely to produce: resending state
+    periodically is exactly what this project's own guidance tells them to do. Run it with
+    audio playing and listen, and watch the statistics on the other console if that board has
+    a separate one.
 
 Both AT ports are needed: a command typed on one device surfaces as an event on the OTHER.
 
