@@ -1,7 +1,7 @@
-# puretone_unidirectional v2.4.0 rc02 —— 測試說明
+# puretone_unidirectional v2.4.0 —— 測試說明
 
-**這一版主要是給 ODM 對 AT 指令字串用的。** 所以指令和事件列在最前面。
-音訊、fallback、回連跟 rc01 相同，往下看第 4 節之後。
+指令和事件列在最前面 —— 那是 ODM 整合時最常翻的兩節。
+音訊、fallback、回連在第 4 節之後。
 
 單向音訊：**DG（coordinator）送，HS（node）收**。24 kHz stereo、5 階 fallback、ISI 1。
 
@@ -19,9 +19,9 @@
 |---|---|
 | `AT+PING` | `OK` |
 | `AT+HELP` | `+HELP:` 後接指令清單 |
-| `AT+VER` | `+VER: SPARK SDK SR1100 v2.4.0_rc02` |
-| `AT+FW_VERSION?` | `+FW_VERSION: v2.4.0_rc02` |
-| `AT+MODULE_INFO?` | `+MODULE_INFO: HW=<n>,FW=v2.4.0_rc02,Chip=<n>,SN=<16 hex>,Addr=0x<xx>` |
+| `AT+VER` | `+VER: SPARK SDK SR1100 v2.4.0` |
+| `AT+FW_VERSION?` | `+FW_VERSION: v2.4.0` |
+| `AT+MODULE_INFO?` | `+MODULE_INFO: HW=<n>,FW=v2.4.0,Chip=<n>,SN=<16 hex>,Addr=0x<xx>` |
 | `AT+MODULE_RESET` | `OK`，然後 MCU reset |
 | `AT+LE_UWB_CONN_STATUS?` | `+LE_UWB_CONN_STATUS: <n> (<NAME>)`，`0=STANDBY 1=PAIRING 2=CONNECTED 3=CONNECTING` |
 | `AT+LE_UWB_GET_ROLE?` | `+LE_UWB_GET_ROLE: <n> (<NAME>)`，`0=COORDINATOR 1=NODE` |
@@ -49,7 +49,7 @@ HS 直接量自己收到的音訊連線；**DG 是發送端，回的是 HS 最�
 ### 開機
 
 ```
-+EVENT: BUILD: v2.4.0_rc02 role=<COORDINATOR|NODE> <date> <time>
++EVENT: BUILD: v2.4.0 role=<COORDINATOR|NODE> <date> <time>
 +EVENT: LE_UWB_READY
 ```
 
@@ -122,31 +122,31 @@ u5a5 的 ST-Link VCP 是另一個 UART，**上面什麼都沒有** —— 那是
 所以**交錯只會發生在整行之間**：
 
 ```
-[DG] v240_rc02 12340 fb=1 48kHz 24-bit  tx=600/s idle=0/s ...
+[DG] v240 12340 fb=1 48kHz 24-bit  tx=600/s idle=0/s ...
 +EVENT: LE_UWB_CONNECTED
-[DG] v240_rc02 13340 fb=1 ...
+[DG] v240 13340 fb=1 ...
 ```
 
-不該出現 `[DG] v240_+EVENT: LE_` 這種字元中間被切斷的情況。**看到就回報。**
+不該出現 `[DG] v240 1234 fb=+EVENT: LE_` 這種字元中間被切斷的情況。**看到就回報。**
 
 開機第一行（送到 console；SMPS 和 u5a5 上就是同一條）：
 
 ```
-[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.0_rc02 Aug 24 2026 13:12:28
+[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.0 Aug 24 2026 13:12:28
 ```
 
 **這行是接電之後幾毫秒就送出的**，terminal 開得晚就會錯過。想看它就先開 terminal 再上電。
 
 ---
 
-## ⚠️ rc01 和 rc02 不能混在同一對板子上
+## ⚠️ rc01 不能和之後的版本混在同一對板子上
 
 線上格式從 2 bytes 變成 5 bytes（帶 vendor 指令時最多 14）。這個改動本身是安全的，
 **但 rc01 的接收路徑有一個 bug**：收到比自己長的封包時會漏掉一個接收緩衝區，
 每 10 ms 一個，佇列塞滿之後 data connection 永久死掉。
-那個修正在 rc02，**到不了已經交出去的 rc01 binary**。
+那個修正從 rc02 起才有，**到不了已經交出去的 rc01 binary**。
 
-**兩端都要燒 rc02。** 混用的症狀是「配對成功、link margin 不再更新、階梯亂跳」，
+**兩端要燒同一版。** 混用的症狀是「配對成功、link margin 不再更新、階梯亂跳」，
 看起來很像 RF 問題。
 
 ---
@@ -169,7 +169,7 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 
 ---
 
-## 5. 要重新配對 —— rc02 有三條路
+## 5. 要重新配對 —— 三條路
 
 **配對紀錄存在 flash，重開機不會清掉。這是刻意的**，也是自動回連能運作的原因。
 所以「重開機再配對一次」**沒有用** —— 它會直接回連到原本那台。
@@ -177,7 +177,7 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 | 方式 | 效果 |
 |---|---|
 | **按配對鍵**（配對狀態下按一下） | **擦掉紀錄**，下次開機回到配對模式。發 `+EVENT: LE_UWB_UNPAIRED` |
-| **`AT+LE_UWB_PAIR`** ← rc02 新增 | 立刻進配對。舊紀錄保留到新配對成功才被覆寫。**沒有配對鍵的板子用這個** |
+| **`AT+LE_UWB_PAIR`** | 立刻進配對。舊紀錄保留到新配對成功才被覆寫。**沒有配對鍵的板子用這個** |
 | **flash 全擦除**（chip erase） | 回到出廠狀態 |
 
 **全擦除要用 chip erase，不能只擦 application 區**：紀錄放在 flash 最後一頁，
@@ -191,8 +191,8 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 ## 6. 一行 log 怎麼讀
 
 ```
-[HS] v240_rc02 55493 fb=4 24kHz ADPCM   rx=600/s rej=0/s miss=3106/s fill=16% lm=170
-[DG] v240_rc02 55493 fb=4 24kHz ADPCM   tx=600/s idle=1187/s cca_fail=0/s tx_drop=0/s
+[HS] v240 55493 fb=4 24kHz ADPCM   rx=600/s rej=0/s miss=3106/s fill=16% lm=170
+[DG] v240 55493 fb=4 24kHz ADPCM   tx=600/s idle=1187/s cca_fail=0/s tx_drop=0/s
 ```
 
 `55493` 是開機毫秒數。`fb=` 是目前階數：
@@ -250,7 +250,7 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 | **96 kHz** | **關閉**。這條線上 96 kHz 會斷音，原因未明。不要嘗試打開 |
 | **媒體鍵沒有執行確認** | `AT+PLAY` / `STOP` / `NEXT_TRACK` / `PRE_TRACK` 回 `OK` **只代表「已排入下一個封包」**，不代表對面收到或執行了。它們是 edge 觸發、無序號、無重送，所以沒有東西可以確認。PRD 已明確說明模組不提供這層確認。**要可靠的東西請走 `AT+VENDOR_CMD` 的 ACK 模式** |
 | **解除配對** | 沒有 AT 指令會擦掉紀錄。見 §5 |
-| **u5a5 沒有 USB CDC 輸出** | console 跟 AT 共用 USART2 |
+| **u5a5 的 console** | 預設跟 AT 共用 USART2（expansion 排針，要轉接板）。用 `-DCONSOLE_ON_CDC=1` 重編可改走 **USB CDC**，插 USB 就有 |
 
 各板子還有什麼驗過、什麼沒驗過，看 `MANIFEST.txt`。
 

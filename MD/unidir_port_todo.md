@@ -9,13 +9,18 @@
 
 ---
 
-## 0. 版本切分（2026-08-21 定案）
+## 0. 版本切分
 
 | 版本 | 內容 | 狀態 |
 |---|---|---|
-| **v240 rc01** | unidir、5 階 fallback、24 kHz stereo、雙 radio、ISI 1、reconnect、階梯 hold | **AT 不在裡面** |
-| **v240 rc02** | AT 層（§1.2） | **已發布 2026-08-24**；AT 在 u535 LDO 與 u5a5 驗過，vendor pass-through 與 AT 期間音訊未驗 |
-| 之後 | 預配對指令（§1.3）、SINE（§1.6） | 不擋 rc02 |
+| **v2.4.0_rc01** | unidir、5 階 fallback、24 kHz stereo、雙 radio、ISI 1、reconnect、階梯 hold | AT 不在裡面 |
+| **v2.4.0_rc02** | ＋AT 層（§1.2） | 已發布 2026-08-24，給 ODM 對字串 |
+| **v2.4.0** | ＋u5a5 的 CDC console（§3.4）。**正式版 2026-08-26** | u535 與 u5a5 測試通過 |
+| 之後 | 預配對指令（§1.3）、SINE（§1.6） | 不擋正式版 |
+
+版本字串的後綴自己帶分隔符（`FW_VERSION_RELEASE`）：候選版是 `"_rc02"`，正式版是 `""`。
+分隔符若固定寫在串接處，正式版就會印成 `v2.4.0_` —— 一個看起來像被截斷的尾巴，
+而且會跟著版本進到每一行 log 和每一個 AT 回覆裡。
 
 **AT 進 rc02 而不是 rc01**，理由是 audio 不靠它：即使板子上有 SOC，
 不做任何 AT 交握也能開機、配對、出聲、跑滿五階 —— reconnect 做完之後尤其如此。
@@ -96,7 +101,7 @@ flash backend 在 `common_backend/quasar_nv_backend.c`，兩個 app 共用。
 建議切兩個 commit：先「搬檔案 + 保留頁 + backend」（不改行為），
 再「boot 狀態機」（改行為），這樣要回退乾淨。
 
-### 1.2 ~~AT 層~~ —— **程式碼完成**（2026-08-21），未上機
+### 1.2 ~~AT 層~~ —— **已完成並驗過**（程式碼 2026-08-21，實機 2026-08-24）
 
 commit：`87456f7`（RX 洩漏）、`bd0a9e0` + `6e41a2e`（線上格式共用）、
 `51fe13f`（toolchain）、`acd3597`（backend facade）、`927c3b3`（app 接線）。
@@ -125,12 +130,20 @@ SMPS 上兩個寫入者共用一個 port。統計**沒有被靜音**（那會讓
 兩個寫入者各自寫同一個 UART 會在字元中間交錯，同一個 FIFO 餵兩邊只會在整串之間交錯。
 代價是那個變體的開機橫幅（它在任何 UART 存在之前就印了）。
 
-#### 還沒驗的
+#### 驗過的（2026-08-24 起，u535 LDO 與 u5a5）
 
-1. `AT+PING` / `AT+FW_VERSION?` 有沒有回
-2. `AT+LE_UWB_CONN_STATUS?` 跟著對面開關機變動
-3. `AT+VENDOR_CMD` 雙向 pass-through（rc08 的 `script/vendor_cmd_test.py` 可直接用）
-4. **SMPS 上統計與 AT 回覆是整行交錯，不是字元交錯**
+AT 回應、配對視窗中仍可用、`+EVENT` 全套、vendor pass-through 雙向、
+AT 流量期間音訊不斷。
+
+搬的過程中發現**兩個阻塞視窗沒有 pump AT**（`try_boot_reconnect()` 的等待、
+配對的 `pairing_process_callback`），headset 兩處都有、unidir 兩處都漏。
+出廠裝置一開機就直接進配對視窗，所以它的 AT port 從存在的第一秒就是死的 ——
+那是靠硬體才找得出來的，因為接線是用「從 image 讀回指令表」驗的，
+而那**只證明指令存在，對有沒有東西在跑服務它們的迴圈一個字都沒說**。
+
+#### 仍未驗
+
+* **SMPS 整包**（含統計與 AT 是否整行交錯而非字元交錯）—— 那塊板子從沒上電過
 
 #### ⚠️ rc01 和 rc02 不能混在同一對板子上
 
@@ -271,24 +284,22 @@ gain 兩者都**沒動**，維持原值。
 **§1.1 已完成，這個限制消失了。** 現在鏈路斷掉會自己接回來，
 可以搬著板子掃距離。做的時候照下面三點。
 
-### 3.4 u5a5 完全沒有 console 輸出 —— minor，之後處理
+### 3.4 ~~u5a5 完全沒有 console 輸出~~ —— **已解決**（2026-08-26）
 
-unidir 的 `facade_print_string` 只在 `#if defined(QUASAR_U535)` 裡被覆寫成 UART。
-u5a5 落到 `common_backend.c` 的 weak 版本：
+原因：unidir 的 `facade_print_string` 只在 `#if defined(QUASAR_U535)` 裡被覆寫成 UART，
+u5a5 落到 `common_backend.c` 的 weak 版本，而那個版本要 `tud_cdc_connected()` 為真。
 
-```c
-if (tud_cdc_connected()) { tud_cdc_write_str(string); ... }
-```
+解法用了兩層，而且第二層才是根治：
 
-而**整個 tree 裡沒有任何地方呼叫 `tusb_init()` / `tud_init()` / `tud_task()`**
-（只有 `dev_board_io_test_backend` 有 `tud_task`），unidir 又是 `USB_AUDIO_ENABLED=0`。
-所以 `tud_cdc_connected()` 永遠是 false，**u5a5 上一個字都不會印** ——
-不只開機橫幅，是全部。
+1. **AT 通道兼作 console**（`10461f3`）—— u5a5 的統計與 AT 共用 USART2。
+   但 USART2 在 expansion 排針上，要外接轉接板。
+2. **`CONSOLE_ON_CDC=1`**（`99b6b00`）—— console 直接走 USB CDC，插 USB 就有。
+   **沒有新起任何東西**：`common_backend.c` 本來就無條件呼叫 `tinyusb_baremetal_setup()`，
+   headset 那條線在 u5a5 上就是這樣印的 —— 這只是把輸出接到一個一直在跑的堆疊上。
 
-影響：u5a5 只能靠聽聲音和看 LED 測。已寫進 `unidir_audio_test_readme.md` §6。
-
-修法大概是給 u5a5 一個 UART console（跟 u535 一樣走 facade 覆寫），
-或是把 USB CDC 真的初始化起來。前者簡單得多。
+預設關閉，只有 unidir 實作；用在別的 app 會 **FATAL_ERROR 而不是被忽略** ——
+一個接受了旗標卻印不出東西的 binary，看起來跟一塊沒開機的板子完全一樣，
+而那正是這個旗標要終結的失敗。
 
 ### 3.5 開機橫幅接電幾毫秒就送出，terminal 開得晚會錯過
 

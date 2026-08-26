@@ -17,17 +17,23 @@ extern "C" {
 /** @brief SDK line this firmware is built from. */
 #define FW_VERSION_SDK  "v2.4.0"
 
-/** @brief Release candidate / package tag within that line.
+/** @brief Release-candidate suffix, INCLUDING its separator. Empty for a final release.
  *
- *  Bump when cutting a package, and keep it equal to the bin/<tag>/ directory name so the
- *  banner, the MANIFEST and the folder all agree. Overridable per build
- *  (-DFW_VERSION_RELEASE=\"rc02\") so a preset can stamp it without editing this file.
+ *  Carries the underscore itself rather than having the separator live in the concatenation
+ *  below. A separator that is always present cannot express a final release: the string comes
+ *  out "v2.4.0_", with a trailing character that looks like a truncation and would follow the
+ *  version into every log and every AT reply.
+ *
+ *  So: "_rc02" for a candidate, "" for the release. Bump when cutting a package, and keep it
+ *  equal to the bin/<name>/ suffix so the banner, the MANIFEST and the folder agree.
+ *  Overridable per build (-DFW_VERSION_RELEASE=\"_rc03\") so a preset can stamp it without
+ *  editing this file.
  */
 #ifndef FW_VERSION_RELEASE
-#define FW_VERSION_RELEASE  "rc02"
+#define FW_VERSION_RELEASE  ""
 #endif
 
-/** @brief What every version print and version query answers: "v2.4.0_rc02".
+/** @brief What every version print and version query answers: "v2.4.0".
  *
  *  One string, deliberately, because the alternative has already happened here: the two
  *  halves lived in separate macros with separate rules about when to bump them, and the
@@ -43,7 +49,7 @@ extern "C" {
  *  is what actually identifies a binary, and the MANIFEST's git commit is what actually
  *  identifies the source.
  */
-#define FW_VERSION_STRING  FW_VERSION_SDK "_" FW_VERSION_RELEASE
+#define FW_VERSION_STRING  FW_VERSION_SDK FW_VERSION_RELEASE
 
 /** @brief The SDK line without its dots, for places where the version shares a line with data.
  *
@@ -53,13 +59,13 @@ extern "C" {
  */
 #define FW_VERSION_SDK_COMPACT  "v240"
 
-/** @brief One whitespace-free token: "v240_rc02".
+/** @brief One whitespace-free token: "v240".
  *
  *  For the statistics lines, which are read by eye in a terminal and split on whitespace by
  *  everything else. The release half is the same FW_VERSION_RELEASE the long form uses, so
  *  cutting a package still touches one place.
  */
-#define FW_VERSION_COMPACT  FW_VERSION_SDK_COMPACT "_" FW_VERSION_RELEASE
+#define FW_VERSION_COMPACT  FW_VERSION_SDK_COMPACT FW_VERSION_RELEASE
 
 #ifdef __cplusplus
 }
