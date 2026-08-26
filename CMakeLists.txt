@@ -118,6 +118,28 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(NO_CODEC=1)
     endif()
 
+    # Send the console to the USB CDC port instead of the expansion UART. Off by default.
+    #
+    # For boards where the expansion pads are not reachable and the ST-Link VCP is not
+    # populated -- u5a5 in particular, where the console otherwise has nowhere to go and the
+    # board can only be judged by ear and by LED.
+    #
+    # The USB device stack is already up on every baremetal build: common_backend.c calls
+    # tinyusb_baremetal_setup() with no USB_AUDIO_ENABLED guard, which is how the
+    # puretone_headset line already prints on u5a5. So this routes output rather than
+    # bringing anything new up.
+    #
+    # Only the unidirectional app implements it. A build that asks for it elsewhere is
+    # refused rather than quietly ignored -- a binary that accepted the flag and printed
+    # nowhere would look exactly like a board that never started.
+    if (DEFINED CONSOLE_ON_CDC)
+        if (NOT APP STREQUAL "Puretone-Unidirectional")
+            message(FATAL_ERROR "CONSOLE_ON_CDC is only implemented for APP=Puretone-Unidirectional (got '${APP}')")
+        endif()
+        message("CONSOLE_ON_CDC = ${CONSOLE_ON_CDC}")
+        add_compile_definitions(CONSOLE_ON_CDC=${CONSOLE_ON_CDC})
+    endif()
+
     # Radio-tuning knobs whose headers guard them with #ifndef, so that a comparison arm is a
     # -D on the configure line instead of an edit that has to be remembered and undone. Both
     # take their value through rather than being turned into a flag: NODE_ISI_MITIG is an

@@ -1,84 +1,76 @@
-# Two API questions on link budget — SR1100 / SDK v2.4.0-rc2
+# EVK Audio Demo v1.4.0 out-ranges our build — which combination gets you there?
 
-## Setup
+**To:** Gab (SPARK)
 
-SR1100, SDK v2.4.0-rc2, single radio at both ends, unidirectional audio with a
-five-rung fallback ladder, 21 × 250 µs timeslots (5.25 ms schedule).
+**Reference:** `SPARK_AUDIO_DEMO_node_v1.4.0.bin` + `..._analog_coordinator_v1.4.0.bin`
+**Ours:** `puretone_unidirectional` **v2.4.0 rc01**, SDK v2.4.0-rc2
+**Test:** same two Quasar EVK boards, **single radio at both ends**, same room, 5 m with a
+human body blocking line of sight
+**Result:** **v1.4.0 is better at both ends — close-in blocking and far drop point.**
 
-## What we are seeing
+At our far drop point: `cca_fail = 0` (packets do go out), `rx_rej` climbing (they arrive
+and fail to decode), `lm = 0`.
 
-At a fixed distance of **5 m with a human body blocking line of sight**, the link
-drops. The test is the same every time — same distance, same blocking — so our
-measurements are comparable with each other.
+---
 
-Two counters separate the two failure modes for us:
+## What we changed and measured
 
-- `cca_fail` (coordinator) — **0 at every distance we have measured**, so packets
-  are being transmitted, not held back by CCA.
-- `rx_rej` (node) — climbs during the drop, i.e. packets arrive and fail to decode.
+Helped close-in, **none of it moved the far drop point**:
 
-## What we have already ruled out
+1. ISI mitigation level 2 (level 1 is not enough against close-in multipath)
+2. Retransmission budget: mode 3 = 3.7x, mode 4 = 6.4x
+3. Buffer on modes 3 and 4 = 40 ms
+4. Mode 3 payload 100 B -> 54 B (accumulator 46/10 -> 23/10)
 
-We are not asking you to re-suggest these — all were measured on hardware:
+On ISI: one level has to serve the whole ladder here. In SDK v2.4.0-rc2
+`swc_connection_fallback_cfg_t` carries only `enabled`, `fallback_mode_count`, `thresholds`
+and `cca_try_count` — there is no per-rung PHY preset — and `isi_mitig` is set on the
+connection. So we cannot give the ADPCM rungs a different ISI level from the top rung: the
+preamble has to fit the largest payload on the ladder into a 250 us slot, which is why
+level 3 breaks the top rung for us. **Is per-rung ISI available in your SDK, and does
+v1.4.0 use it?**
 
-| Tried | Result |
+No effect at all, each measured on hardware:
+
+5. CCA try count 2 -> 14 (no-op, `cca_fail` is 0)
+6. Fallback level-4 TX power raised to width 6/6/6/6, gain 1/1/1/0 — measured twice
+7. Fallback level-4 TX power to the ceiling (width 7/7/7/7, gain 0/0/0/0)
+8. Node ACK TX power to the ceiling (width 7, gain 0)
+9. `RADIO_USE_SAVED_CALIB` false -> true
+10. ISI level 3 (top rung breaks) / buffer 30 ms (close-in dropouts return)
+11. Ladder free-running vs locked to the bottom rung — identical drop point
+
+## Our configuration (v2.4.0 rc01)
+
+**Fallback ladder**
+
+| mode | audio | payload | retransmissions | buffer |
+|---|---|---|---|---|
+| 0 | 96 kHz 24-bit | 242 B | 1.0x | 5 ms |
+| 1 | 48 kHz 24-bit | 206 B | 1.0x | 7 ms |
+| 2 | 48 kHz 16-bit | 138 B | 1.0x | 10 ms |
+| 3 | 48 kHz ADPCM stereo | 54 B | 3.7x | 40 ms |
+| 4 | 24 kHz ADPCM stereo | 48 B | 6.4x | 40 ms |
+
+**Radio / SWC**
+
+| | |
 |---|---|
-| CCA try count 2 → 14 | No change (`cca_fail` is 0, so this is a no-op) |
-| ISI mitigation level 1 / 2 / 3 | Level 2 is what we run. Level 1 is not enough close-in; level 3 breaks the top rung. Helps multipath, does nothing for distance |
-| Fallback level-4 TX power → your demo's values | No change |
-| Fallback level-4 TX power → maximum (width 7/7/7/7, gain 0/0/0/0) | No change |
-| Node ACK TX power → maximum (width 7, gain 0) | No change |
-| `RADIO_USE_SAVED_CALIB` false → true (as in your demo) | No change |
-| Bottom-rung buffer 30 → 40 ms | Fixes close-in dropouts, does nothing for distance |
-| Retransmission budget (accumulator) increased | Same |
-| Ladder free-running vs locked to the bottom rung | Identical drop point, so this is not a ladder-threshold problem |
+| Schedule | 21 slots x 250 us = 5.25 ms (coordinator 20 / node 1) |
+| ISI mitigation | level 2, both ends |
+| Chip rate | 20.48 MHz |
+| Pulse count | `SR1100_PULSE_COUNT` = 1 |
+| FEC / modulation | `SWC_FEC_1_2_5_0` / IOOK |
+| Concurrency | high performance |
+| Channels | `{164, 174, 184, 194}`, sequence `{0, 1, 2, 3}` |
+| CCA | main channel try 2 / retry 96; fallback try counts 7 / 13 / 14 / 14 |
+| Node ACK power | width 5, gain 1 |
+| Fallback level-4 TX power | width 7/7/7/7, gain 1/1/1/0 (levels 1-3 step up normally) |
+| Saved calibration | `RADIO_USE_SAVED_CALIB` = false |
 
-We have also confirmed these already match your demo exactly: fallback TX power
-levels 1–3, `SR1100_PULSE_COUNT` (1 on both sides), chip rate (20.48 MHz),
-FEC, modulation, concurrency mode, channels, and node ACK power.
+## Our question
 
-So on our side every "give it more energy" knob reachable from the application
-has been tried and none of them moved the drop point.
-
-## Question 1 — `chip_repet` is missing from `swc_connection_cfg_t`
-
-Chip repetition is the one setting that multiplies energy per bit, and in
-v2.4.0-rc2 we cannot reach it at all:
-
-| | v2.4.0-rc2 |
-|---|---|
-| `swc_chip_repetition_t` type | present (`swc_def.h`) |
-| `swc_connection_cfg_t.chip_repet` field | **absent** |
-| Any public function that sets it | **none found** |
-| Precompiled library symbol `wps_set_chip_repet` | exported, but not declared in any header |
-
-The SDK our reference demo was built against has the field in
-`swc_connection_cfg_t`.
-
-**Is the removal intentional, or is this a header that did not get updated?
-If it is intentional, what is the supported way to set chip repetition in
-v2.4.0?**
-
-(For completeness: we checked, and the demo leaves it at zero-init, i.e.
-`SWC_CHIP_REPET_1`, so this is not the explanation for any difference between
-the two builds. We are asking because it is the only remaining energy knob and
-we currently have no way to evaluate it.)
-
-## Question 2 — will `swc_connection_fallback_cfg_t.presets` ship in v2.4.0?
-
-Per-rung PHY presets are not available to us in v2.4.0-rc2, so a single ISI
-mitigation level has to serve the whole ladder. That forces a compromise: the
-top rung wants a short preamble, the bottom rung wants multipath resistance, and
-level 2 is the value that is wrong for both by the smallest amount.
-
-**Will `presets` be in the v2.4.0 release?** We are not expecting it to solve the
-range problem — we would like to stop trading the top rung against the bottom one.
-
-## One smaller thing
-
-Could you tell us **under what conditions your published range figure is
-measured** — free space or with blocking, what orientation, and whether the
-fallback ladder is free-running or locked? Ours is 5 m with a human body in the
-path, which is a different physical situation from free-space range, and we would
-like to be sure we are comparing the same measurement before we read anything
-into the difference.
+**Which combination gets v1.4.0 its range?** For example: timeslot layout + bottom-rung
+payload + retransmission ratio — or is the wireless core itself doing the work? If you can
+name the three or four items that matter, and their values, we will change exactly those
+and re-measure. We would rather implement your recipe than keep testing one knob at a time.

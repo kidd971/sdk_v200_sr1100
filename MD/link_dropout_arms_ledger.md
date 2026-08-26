@@ -1,7 +1,9 @@
 # 斷音調查總帳 —— 已排除的項目與剩下的候選
 
 > 對象：`app/example/puretone_unidirectional`｜Quasar U5A5 + SR1100，single radio｜SDK v2.4.0-rc2
-> 對照組：SPARK 官方 audio demo `SPARK_AUDIO_DEMO_eng-v1.0.0-ext_codec_support-r1`（同一塊 EVK）
+> 對照組：**`EVK Audio Demo 1.4.0` 的 binary**（同一塊 EVK）。文中的逐值設定比對讀的是
+> `SPARK_AUDIO_DEMO_eng-v1.0.0-ext_codec_support-r1` 原始碼 —— 那包只能讀、build 不出可測的 bin，
+> 目前證據看來 v1.4.0 的 binary 就是這個 code base（已列入向 SPARK 確認的項目）
 > 前一世代的同一問題見 [fallback_mono_rung_rationale.md](fallback_mono_rung_rationale.md)
 > 日期：2026-08-18（§5 於同日重寫）｜基準 commit：`1c3a672`
 

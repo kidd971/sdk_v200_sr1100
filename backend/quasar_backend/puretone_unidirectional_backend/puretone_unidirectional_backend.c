@@ -13,6 +13,7 @@
 #include "quasar.h"
 #include "quasar_it.h" /* dual-radio HW counters + HardFault snapshot (u535 & u5a5) */
 #include "sac_cfg.h"
+#include "tusb.h"  /* CONSOLE_ON_CDC: tud_cdc_* for the console */
 #include <string.h>
 
 /* CONSTANTS ******************************************************************/
@@ -617,14 +618,106 @@ _Static_assert(AT_CONSOLE_UART_TX_PIN == QUASAR_GPIO_PIN_2 && AT_CONSOLE_UART_RX
 #endif
 #endif
 
-#if !defined(QUASAR_U535)
+/** @brief Send the console to the USB CDC port instead of the expansion UART.
+ *
+ *  Off by default, so the shipped routing is unchanged.
+ */
+#ifndef CONSOLE_ON_CDC
+#define CONSOLE_ON_CDC 0
+#endif
+
+#if CONSOLE_ON_CDC
+/** @brief Console output over USB CDC, with everything printed before enumeration kept.
+ *
+ *  The weak implementation in common_backend.c drops any string written while
+ *  tud_cdc_connected() is false, and on this application that silently loses the most
+ *  valuable output there is. The boot banner prints within milliseconds of reset; USB
+ *  enumeration takes hundreds. So the banner -- which is what says WHICH binary is on the
+ *  board -- never reaches the terminal, while messages from a second or two later arrive
+ *  perfectly. A log that begins mid-sequence looks like a board that started mid-sequence.
+ *
+ *  Everything written before the host is listening therefore goes into a buffer, and the
+ *  first write after the port opens flushes it in order. The terminal then shows the whole
+ *  boot from the banner onward, however late it was opened.
+ *
+ *  Overflow drops the NEWEST text rather than the oldest, which is the opposite of a normal
+ *  ring buffer and deliberate: the early lines are the ones that cannot be obtained any other
+ *  way, while later ones will be reprinted by the next periodic pass anyway.
+ */
+static char s_boot_log[3072];
+static uint16_t s_boot_log_len;
+static bool s_cdc_flushed;
+
+/** @brief Push a whole string into the CDC FIFO, letting the timer-driven tud_task drain it.
+ *
+ *  tud_cdc_write() accepts only what currently fits, and the buffered boot log is larger than
+ *  the FIFO. Bounded rather than a plain retry loop: a host that has opened the port and then
+ *  stopped reading must not be able to hold the caller here forever.
+ */
+static void cdc_write_all(const char *data, uint32_t len)
+{
+    uint32_t sent = 0;
+    uint32_t spins = 0;
+
+    while (sent < len && spins < 200000) {
+        uint32_t n = tud_cdc_write(data + sent, len - sent);
+
+        if (n == 0) {
+            spins++;
+        } else {
+            sent += n;
+            spins = 0;
+        }
+        tud_cdc_write_flush();
+    }
+}
+
+void facade_print_string(char *string)
+{
+    uint32_t len;
+
+    if (string == NULL) {
+        return;
+    }
+    len = strlen(string);
+
+    if (!tud_cdc_connected()) {
+        if ((s_boot_log_len + len) < sizeof(s_boot_log)) {
+            memcpy(&s_boot_log[s_boot_log_len], string, len);
+            s_boot_log_len = (uint16_t)(s_boot_log_len + len);
+        }
+        return;
+    }
+
+    if (!s_cdc_flushed) {
+        s_cdc_flushed = true;
+        if (s_boot_log_len > 0) {
+            cdc_write_all(s_boot_log, s_boot_log_len);
+            s_boot_log_len = 0;
+        }
+    }
+
+    cdc_write_all(string, len);
+}
+#endif /* CONSOLE_ON_CDC */
+
+#if !defined(QUASAR_U535) && !CONSOLE_ON_CDC
 /** @brief Console output for boards that are not the u535.
  *
- *  Overrides the weak USB CDC implementation in common_backend.c, which on u5a5 prints
- *  nothing at all: tud_cdc_connected() is false forever because nothing in this tree ever
- *  calls tusb_init() or tud_task(). That left the board with no diagnostic output of any
- *  kind -- not the boot banner, not the per-second statistics -- so "the AT port is silent"
- *  and "the board is not running" could not be told apart on it.
+ *  Overrides the weak USB CDC implementation in common_backend.c.
+ *
+ *  CORRECTION, 2026-08-25. This comment used to claim the CDC path "prints nothing at all"
+ *  because "nothing in this tree ever calls tusb_init() or tud_task()". That is false, and
+ *  believing it cost a bench session: common_backend.c:57-61 calls tinyusb_baremetal_setup()
+ *  UNCONDITIONALLY on every baremetal build -- there is no USB_AUDIO_ENABLED guard -- and
+ *  that function calls tusb_init() and hands tud_task() to a timer. USB CDC is up on u5a5,
+ *  which is exactly how the puretone_headset line prints its statistics there
+ *  (puretone_headset_backend.c:533-535, which never overrides facade_print_string at all).
+ *
+ *  Whatever symptom prompted this override, the mechanism recorded for it was wrong. The
+ *  override is kept as the default because it is what has been tested on the u535 boards and
+ *  a silent console is a bad way to discover otherwise -- but -DCONSOLE_ON_CDC=1 now takes
+ *  it out of the way for boards where the expansion pins are not reachable.
  *
  *  Shares the AT queue rather than taking a second UART, for the reason set out in the u535
  *  branch above: one FIFO fed by both writers interleaves between whole strings, whereas two
