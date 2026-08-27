@@ -11,7 +11,7 @@
             "description": "Base configuration for all presets",
             "hidden": true,
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/b/${presetName}",
+            "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "RADIO_INTERFACE_QSPI": "OFF",

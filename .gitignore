@@ -1,7 +1,6 @@
 # Build output
 build/
 /build
-/b/
 bin/
 dist/
 /app/usb_hid_host/build
