@@ -2,13 +2,13 @@ if (NOT TRANSCEIVER STREQUAL "SR1100")
     return()
 endif()
 
-add_library(puretone_unidirectional_backend "")
-target_include_directories(puretone_unidirectional_backend PUBLIC facade common_backend)
-target_link_libraries(puretone_unidirectional_backend PUBLIC common_backend)
+add_library(unidir_backend "")
+target_include_directories(unidir_backend PUBLIC facade common_backend)
+target_link_libraries(unidir_backend PUBLIC common_backend)
 
 # Link config files to backend
-target_include_directories(puretone_unidirectional_backend PUBLIC config)
-target_link_libraries(puretone_unidirectional_backend PRIVATE audio_core)
+target_include_directories(unidir_backend PUBLIC config)
+target_link_libraries(unidir_backend PRIVATE audio_core)
 
 add_subdirectory(config)
 
@@ -23,7 +23,7 @@ if (NOT MULTI_TRANSCEIVER STREQUAL "DUAL_TRANSCEIVER")
             link_data
             reconnect_store
             audio_core
-            puretone_unidirectional_backend
+            unidir_backend
             swc
             spark_pairing
     )
@@ -42,7 +42,7 @@ target_link_libraries(puretone_unidirectional_node.elf
         link_data
         reconnect_store
         audio_core
-        puretone_unidirectional_backend
+        unidir_backend
         swc
         spark_pairing
 )

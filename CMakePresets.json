@@ -235,21 +235,8 @@
         },
 
         {
-            "name": "bspval-u535-dr",
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "BSP validator on U535 with dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5) - runs radio 1 + radio 2 SPI/CS/reset/IRQ/DMA tests",
-            "cacheVariables": {
-                "APP": "BSP-validator",
-                "TRANSCEIVER": "SR1100",
-                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER"
-            }
-        },
-        {
-            "name": "bspval-u535",
-            "description": "BSP Validator tool with Quasar U535",
+            "name": "bsp-validator-u535-single-radio",
+            "description": "BSP validator on U535, single radio - runs the radio 1 SPI/CS/reset/IRQ/DMA tests",
             "hidden": false,
             "inherits": [
                 "base",
@@ -258,6 +245,19 @@
             "cacheVariables": {
                 "APP": "BSP-validator",
                 "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "bsp-validator-u535-dual-radio",
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "BSP validator on U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5) - runs radio 1 + radio 2 SPI/CS/reset/IRQ/DMA tests",
+            "cacheVariables": {
+                "APP": "BSP-validator",
+                "TRANSCEIVER": "SR1100",
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER"
             }
         },
         {
@@ -781,12 +781,12 @@
             }
         },
         {
-            "name": "unidir-u5a5-rjf",
+            "name": "unidir-u5a5-rjf-single-radio",
             "inherits": [
                 "base",
                 "quasar"
             ],
-            "description": "Puretone unidirectional, u5a5: I2S slave, right-justified, MAX98091 codec. Builds both roles.",
+            "description": "Puretone unidirectional, u5a5, single radio: I2S slave, right-justified, MAX98091 codec. Builds both DG (coordinator) and HS (node).",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
@@ -795,12 +795,12 @@
             }
         },
         {
-            "name": "unidir-u5a5-node-rjf-dr",
+            "name": "unidir-u5a5-rjf-HS-dual-radio",
             "inherits": [
                 "base",
                 "quasar"
             ],
-            "description": "Puretone unidirectional, u5a5 dual-radio node: I2S slave, right-justified, MAX98091 codec. Node only -- the coordinator does not support multi-radio, so flash its half from unidir-u5a5-rjf.",
+            "description": "Puretone unidirectional, u5a5 HS (node), dual radio: I2S slave, right-justified, MAX98091 codec. HS only -- the DG does not support dual radio, so flash its half from unidir-u5a5-rjf-single-radio.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
@@ -810,29 +810,12 @@
             }
         },
         {
-            "name": "unidir-u535-coord-smps",
-            "hidden": false,
+            "name": "unidir-u535-ldo-DG",
             "inherits": [
                 "base",
                 "quasar-u535"
             ],
-            "description": "Puretone unidirectional, u535 coordinator: I2S slave, standard format, no codec, SMPS. Use the coordinator binary.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "2",
-                "NO_CODEC": "1",
-                "U535_PWR_LDO": "0"
-            }
-        },
-        {
-            "name": "unidir-u535-coord-ldo",
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "Puretone unidirectional, u535 coordinator: I2S slave, standard format, no codec, LDO. Use the coordinator binary.",
+            "description": "Puretone unidirectional, u535 LDO, DG (coordinator): I2S slave, standard format, no codec. The DG is single radio only -- there is no dual-radio DG. Use the coordinator binary.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
@@ -843,29 +826,12 @@
             }
         },
         {
-            "name": "unidir-u535-node-smps",
-            "hidden": false,
+            "name": "unidir-u535-ldo-HS-single-radio",
             "inherits": [
                 "base",
                 "quasar-u535"
             ],
-            "description": "Puretone unidirectional, u535 node: I2S master, standard format, no codec, SMPS. Use the node binary.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "2",
-                "NO_CODEC": "1",
-                "U535_PWR_LDO": "0"
-            }
-        },
-        {
-            "name": "unidir-u535-node-ldo",
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "Puretone unidirectional, u535 node: I2S master, standard format, no codec, LDO. Use the node binary.",
+            "description": "Puretone unidirectional, u535 LDO, HS (node), single radio: I2S master, standard format, no codec. Use the node binary.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
@@ -876,30 +842,12 @@
             }
         },
         {
-            "name": "unidir-u535-node-smps-dr",
-            "hidden": false,
+            "name": "unidir-u535-ldo-HS-dual-radio",
             "inherits": [
                 "base",
                 "quasar-u535"
             ],
-            "description": "Puretone unidirectional, u535 dual-radio node: I2S master, standard format, no codec, SMPS. Node only -- the coordinator does not support multi-radio.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
-                "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "2",
-                "NO_CODEC": "1",
-                "U535_PWR_LDO": "0"
-            }
-        },
-        {
-            "name": "unidir-u535-node-ldo-dr",
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "Puretone unidirectional, u535 dual-radio node: I2S master, standard format, no codec, LDO. Node only -- the coordinator does not support multi-radio.",
+            "description": "Puretone unidirectional, u535 LDO, HS (node), dual radio: I2S master, standard format, no codec. HS only -- the DG does not support dual radio.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
@@ -908,6 +856,58 @@
                 "I2S_FMT_DEFAULT": "2",
                 "NO_CODEC": "1",
                 "U535_PWR_LDO": "1"
+            }
+        },
+        {
+            "name": "unidir-u535-smps-DG",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "Puretone unidirectional, u535 SMPS, DG (coordinator): I2S slave, standard format, no codec. The DG is single radio only -- there is no dual-radio DG. Use the coordinator binary.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "unidir-u535-smps-HS-single-radio",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "Puretone unidirectional, u535 SMPS, HS (node), single radio: I2S master, standard format, no codec. Use the node binary.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
+            }
+        },
+        {
+            "name": "unidir-u535-smps-HS-dual-radio",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "Puretone unidirectional, u535 SMPS, HS (node), dual radio: I2S master, standard format, no codec. HS only -- the DG does not support dual radio.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "0"
             }
         },
         {
