@@ -870,6 +870,7 @@
                 "TRANSCEIVER": "SR1100",
                 "I2S_MASTER_MODE": "1",
                 "SINE_INJECT_HS": "1",
+                "SINE_DEBUG_CAPTURE": "1",
                 "I2S_FMT_DEFAULT": "2",
                 "NO_CODEC": "1",
                 "U535_PWR_LDO": "1"
