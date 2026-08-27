@@ -78,7 +78,26 @@
         1,                \
     }
 
-/* Sets the offsets for output power configuration in fallback mode. */
+/* Sets the offsets for output power configuration in fallback mode.
+ *
+ * One row per band, one entry per FALLBACK mode -- not per rung. There are three entries because
+ * SWC_FALLBACK_MODE_COUNT is 3 (puretone_dongle.c:102), and the loop that consumes them indexes
+ * [band][j] for j in 0..2. The app's fb= numbering counts the main mode as 0, so the mapping is
+ * off by one and the LAST entry of each row is the one the bottom rung uses:
+ *
+ *   entry 0 -> fb=1     entry 1 -> fb=2     entry 2 -> fb=3  <- bottom rung
+ *
+ * fb=0 does not appear here at all; it takes TX_AUDIO_PULSE_WIDTH / _GAIN above.
+ *
+ * Width is 0..7 (0 narrow, 7 large). Gain is 0..7 and INVERTED -- 0 is max, 0 dB, and larger
+ * numbers attenuate. That inversion is why the shipped table already descends toward the bottom
+ * rung, 5 -> 4 -> 1 on bands 1 and 2: it is already spending power where the link is worst.
+ *
+ * The values are per-band and deliberately not flat -- band 4 was tuned hotter than band 1 -- so
+ * flattening them discards that tuning. This is the raw output power knob and the whole ladder
+ * radiates through the antenna the certified build was measured with, so re-check emissions
+ * before shipping a change here. Note also that only the coordinator's TX audio lives in this
+ * file; the headset's ACK path is in swc_cfg_node.h and is not affected by anything below. */
 #define TX_AUDIO_FB_BAND_1_PULSE_WIDTH \
     {                                  \
         2,                             \

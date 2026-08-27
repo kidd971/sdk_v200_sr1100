@@ -67,6 +67,14 @@
             }
         },
         {
+            "name": "puretone-headset-quasar-u5a5-slave-rjf-fb48k",
+            "inherits": ["puretone-headset-quasar-u5a5-slave-rjf"],
+            "description": "Control arm for the mode 2<->3 transition pop: bottom rung at 48 kHz (1:2 SRC, same instance as modes 1 and 2) with the accumulator and buffer depth left at the branch defaults, 46/15ms. If this arm pops too, the pop is not the resampler swap. Flash both sides -- the mode index is a wire-level contract.",
+            "cacheVariables": {
+                "FBK3_RUNG_24K": "0"
+            }
+        },
+        {
             "name": "puretone-headset-quasar-u5a5-slave-rjf-nocodec",
             "inherits": ["puretone-headset-quasar-u5a5"],
             "description": "Puretone headset U5A5, I2S slave, RJF, no codec (default external I2S port; AT command switches the mux)",

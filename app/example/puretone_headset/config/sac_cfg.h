@@ -63,7 +63,7 @@
  * new SRC instance has a discard stage warming it, and an anti-alias cutoff near 7 kHz that makes
  * the rung sound dull. */
 #ifndef FBK3_RUNG_24K
-#define FBK3_RUNG_24K 0
+#define FBK3_RUNG_24K 1
 #endif
 
 /* Accumulator ratio for mode 3, as mul/div. This is the retransmission-headroom knob: the

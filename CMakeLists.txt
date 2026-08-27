@@ -96,6 +96,12 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(SINE_INJECT_HS=1)
     endif()
 
+    # Bottom rung of the audio fallback ladder: 1 = 24 kHz (1:4 SRC), 0 = 48 kHz (1:2 SRC).
+    # Takes a value rather than being a presence flag, so both arms of the A/B are explicit.
+    if (DEFINED FBK3_RUNG_24K)
+        add_compile_definitions(FBK3_RUNG_24K=${FBK3_RUNG_24K})
+    endif()
+
     if (U535_PWR_LDO)
         add_compile_definitions(U535_PWR_LDO=1)
     endif()
