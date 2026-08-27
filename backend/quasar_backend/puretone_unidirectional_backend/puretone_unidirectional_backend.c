@@ -620,10 +620,31 @@ _Static_assert(AT_CONSOLE_UART_TX_PIN == QUASAR_GPIO_PIN_2 && AT_CONSOLE_UART_RX
 
 /** @brief Send the console to the USB CDC port instead of the expansion UART.
  *
- *  Off by default, so the shipped routing is unchanged.
+ *  Default ON for u5a5, OFF for u535, and a -DCONSOLE_ON_CDC=<0|1> on the configure line
+ *  overrides either.
+ *
+ *  The two boards are not in the same position. On the u5a5 the console shares USART2 on the
+ *  expansion header with AT, so reading it costs an external adapter and a second port, and
+ *  the USB socket that is already plugged in for power sits idle. The default was OFF because
+ *  the UART path was the tested one -- but the effect was that the ordinary way to build a
+ *  u5a5 produced a board whose console could not be read without extra hardware, and a
+ *  console nobody can reach is the same as no console. USB CDC is up on u5a5 either way:
+ *  common_backend.c calls tinyusb_baremetal_setup() unconditionally on every baremetal build.
+ *
+ *  The u535 keeps the UART. Its expansion pins are LPUART1 and both directions work there,
+ *  which is why AT lives on that line, and that routing is what has been verified on hardware.
+ *
+ *  QUASAR_U535 is reliable HERE and not everywhere: it is PUBLIC on the hardware target, this
+ *  file is compiled into unidir_backend which links hardware directly, and the define is in
+ *  the compile line -- checked, not assumed. Further down the link chain it is lost, which is
+ *  what BOARD_NAME exists for. Do not copy this test into an application file.
  */
 #ifndef CONSOLE_ON_CDC
+#ifdef QUASAR_U535
 #define CONSOLE_ON_CDC 0
+#else
+#define CONSOLE_ON_CDC 1
+#endif
 #endif
 
 #if CONSOLE_ON_CDC
@@ -714,10 +735,11 @@ void facade_print_string(char *string)
  *  which is exactly how the puretone_headset line prints its statistics there
  *  (puretone_headset_backend.c:533-535, which never overrides facade_print_string at all).
  *
- *  Whatever symptom prompted this override, the mechanism recorded for it was wrong. The
- *  override is kept as the default because it is what has been tested on the u535 boards and
- *  a silent console is a bad way to discover otherwise -- but -DCONSOLE_ON_CDC=1 now takes
- *  it out of the way for boards where the expansion pins are not reachable.
+ *  Whatever symptom prompted this override, the mechanism recorded for it was wrong. It is no
+ *  longer the u5a5 default -- CONSOLE_ON_CDC now defaults on there -- so this block is reached
+ *  only by an explicit -DCONSOLE_ON_CDC=0. Kept as that escape hatch rather than deleted:
+ *  it is the routing the u535 boards were verified on, and it is the thing to fall back to if
+ *  the CDC console ever turns out to disturb something on the u5a5.
  *
  *  Shares the AT queue rather than taking a second UART, for the reason set out in the u535
  *  branch above: one FIFO fed by both writers interleaves between whole strings, whereas two
