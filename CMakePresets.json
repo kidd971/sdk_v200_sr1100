@@ -795,6 +795,37 @@
             }
         },
         {
+            "name": "unidir-u5a5-rjf-DG-sine",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "SINE test, u5a5, DG (coordinator): 1 kHz tone injected into the I2S producer buffer, sent over the air on a pinned ladder rung. Use the coordinator binary and pair it with a normal HS -- the node binary from this preset is an ordinary one.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "SINE_INJECT_DG": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "unidir-u5a5-rjf-HS-sine",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "SINE test, u5a5, HS (node): free-running 1 kHz tone straight out I2S, no radio link and no pipeline. Use the node binary; the coordinator binary from this preset is an ordinary one.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "SINE_INJECT_HS": "1",
+                "SINE_DEBUG_CAPTURE": "1",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
             "name": "unidir-u5a5-rjf-HS-dual-radio",
             "inherits": [
                 "base",
