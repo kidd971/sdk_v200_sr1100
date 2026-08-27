@@ -11,7 +11,7 @@
             "description": "Base configuration for all presets",
             "hidden": true,
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/${presetName}",
+            "binaryDir": "${sourceDir}/b/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "RADIO_INTERFACE_QSPI": "OFF",
@@ -235,7 +235,7 @@
         },
 
         {
-            "name": "bsp-validator-quasar-u535-dualradio",
+            "name": "bspval-u535-dr",
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -248,7 +248,7 @@
             }
         },
         {
-            "name": "bsp-validator-tool-quasar-u535",
+            "name": "bspval-u535",
             "description": "BSP Validator tool with Quasar U535",
             "hidden": false,
             "inherits": [
@@ -781,7 +781,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u5a5-slave-rjf",
+            "name": "unidir-u5a5-rjf",
             "inherits": [
                 "base",
                 "quasar"
@@ -795,12 +795,12 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u5a5-node-slave-rjf-dualradio",
+            "name": "unidir-u5a5-node-rjf-dr",
             "inherits": [
                 "base",
                 "quasar"
             ],
-            "description": "Puretone unidirectional, u5a5 dual-radio node: I2S slave, right-justified, MAX98091 codec. Node only -- the coordinator does not support multi-radio, so flash its half from puretone-unidirectional-quasar-u5a5-slave-rjf.",
+            "description": "Puretone unidirectional, u5a5 dual-radio node: I2S slave, right-justified, MAX98091 codec. Node only -- the coordinator does not support multi-radio, so flash its half from unidir-u5a5-rjf.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
@@ -810,7 +810,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u535-coord-slave-std-smps",
+            "name": "unidir-u535-coord-smps",
             "hidden": false,
             "inherits": [
                 "base",
@@ -827,7 +827,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u535-coord-slave-std-ldo",
+            "name": "unidir-u535-coord-ldo",
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -843,7 +843,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u535-node-master-std-smps",
+            "name": "unidir-u535-node-smps",
             "hidden": false,
             "inherits": [
                 "base",
@@ -860,7 +860,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u535-node-master-std-ldo",
+            "name": "unidir-u535-node-ldo",
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -876,7 +876,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u535-node-master-std-smps-dualradio",
+            "name": "unidir-u535-node-smps-dr",
             "hidden": false,
             "inherits": [
                 "base",
@@ -894,7 +894,7 @@
             }
         },
         {
-            "name": "puretone-unidirectional-quasar-u535-node-master-std-ldo-dualradio",
+            "name": "unidir-u535-node-ldo-dr",
             "inherits": [
                 "base",
                 "quasar-u535"
