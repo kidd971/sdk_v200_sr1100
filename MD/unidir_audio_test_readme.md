@@ -113,11 +113,16 @@ margin **< 5 dB** 才送 WEAK，要回到 **≥ 10 dB** 才送 GOOD。
 |---|---|---|
 | **u535 LDO** | **UART4 — PC10 (TX) / PC11 (RX)**，即 ST-Link VCP，插 USB 就有 | LPUART1 — PA3，只發 |
 | **u535 SMPS** | **LPUART1 — PA3 (TX) / PA2 (RX)** | **同一條**，見下 |
-| **u5a5** | **USART2 — PA2 (TX) / PA3 (RX)**，**expansion 排針**，要外接轉接板 | **同一條**，見下 |
+| **u5a5** | **USART2 — PA2 (TX) / PA3 (RX)**，**expansion 排針**，要外接轉接板 | **USB CDC** — 插著供電的那條線就有 |
 
 u5a5 的 ST-Link VCP 是另一個 UART，**上面什麼都沒有** —— 那是這塊板最先會走錯的地方。
 
-**SMPS 和 u5a5 上 AT 和統計共用一條線。** 那不是疏漏 —— 那兩塊板各自只有一個可用的埠，
+**u5a5 的 console 自 `36847a5` 起走 USB CDC**，不再與 AT 共用 USART2。在那之前預設是
+共用的，所以**比這個 commit 早的 binary（含已出貨的 v240 套件）console 仍在 expansion
+排針上**，插 USB 是看不到東西的。`-DCONSOLE_ON_CDC=0` 可以編回舊行為。
+走線的完整對照見 [console_at_uart_routing.md](console_at_uart_routing.md)。
+
+**SMPS 上 AT 和統計共用一條線。** 那不是疏漏 —— 那塊板只有一個可用的埠，
 而把統計靜音會讓板子完全沒有診斷輸出。兩者走**同一個傳送佇列**，
 所以**交錯只會發生在整行之間**：
 
@@ -129,7 +134,7 @@ u5a5 的 ST-Link VCP 是另一個 UART，**上面什麼都沒有** —— 那是
 
 不該出現 `[DG] v240 1234 fb=+EVENT: LE_` 這種字元中間被切斷的情況。**看到就回報。**
 
-開機第一行（送到 console；SMPS 和 u5a5 上就是同一條）：
+開機第一行（送到 console；SMPS 上就是 AT 那一條，u5a5 上是 USB CDC）：
 
 ```
 [BOOT] puretone_unidirectional coordinator u535 r1 v2.4.0 Aug 24 2026 13:12:28
@@ -250,7 +255,7 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 | **96 kHz** | **關閉**。這條線上 96 kHz 會斷音，原因未明。不要嘗試打開 |
 | **媒體鍵沒有執行確認** | `AT+PLAY` / `STOP` / `NEXT_TRACK` / `PRE_TRACK` 回 `OK` **只代表「已排入下一個封包」**，不代表對面收到或執行了。它們是 edge 觸發、無序號、無重送，所以沒有東西可以確認。PRD 已明確說明模組不提供這層確認。**要可靠的東西請走 `AT+VENDOR_CMD` 的 ACK 模式** |
 | **解除配對** | 沒有 AT 指令會擦掉紀錄。見 §5 |
-| **u5a5 的 console** | 預設跟 AT 共用 USART2（expansion 排針，要轉接板）。用 `-DCONSOLE_ON_CDC=1` 重編可改走 **USB CDC**，插 USB 就有 |
+| **u5a5 的 console** | **預設走 USB CDC**（`36847a5` 起），插著供電的 USB 就看得到。更早的 binary 是跟 AT 共用 USART2 expansion 排針。`-DCONSOLE_ON_CDC=0` 可編回去。見 [console_at_uart_routing.md](console_at_uart_routing.md) |
 
 各板子還有什麼驗過、什麼沒驗過，看 `MANIFEST.txt`。
 
