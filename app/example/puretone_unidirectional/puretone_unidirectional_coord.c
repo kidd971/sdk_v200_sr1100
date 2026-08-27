@@ -1360,6 +1360,26 @@ static void app_audio_core_init(void)
     sac_fallback_set_current_mode(&sac_fallback_instance, 1, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
 #endif
+
+#if SINE_INJECT_DG
+    /* Pin whatever mode the two branches above just selected -- mode 1 (48 kHz 24-bit) in the
+     * shipping configuration, mode 0 if someone built with MAIN_CHANNEL_ALLOW_96K.
+     *
+     * Automatic fallback has to stop for a pure-tone test. Left running, a weak link drops the
+     * ladder to mode 2/3/4, whose resampling and ADPCM introduce phase discontinuities at buffer
+     * boundaries; on a tone that is plainly audible as noise, and it gets misread as a fault in
+     * the audio path rather than the ladder doing its job. Manual mode stops automatic changes
+     * and the node follows the mode carried in the transmitted header.
+     *
+     * Note this is one rung below what puretone_dongle.c pins for the same test. It pinned mode
+     * 0, which is uncompressed and not resampled; mode 1 is uncompressed but IS resampled
+     * 96k->48k and back, so a small amount of resampler artefact is expected here and is not a
+     * fault. Mode 0 is unavailable by default on this line because 96 kHz parks a dual-radio
+     * node -- for the cleanest possible tone on a single-radio pair, build with
+     * -DMAIN_CHANNEL_ALLOW_96K=1 and this pins mode 0 instead. */
+    sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
 }
 
 /** @brief Initialize the audio fallback processing stage interface.
@@ -1591,6 +1611,13 @@ static void fallback_hold_handler(void)
 static void audio_rx_complete_callback(void)
 {
     sac_status_t sac_status = SAC_OK;
+
+#if SINE_INJECT_DG
+    /* External I2S clocks the DMA and so still supplies the 96 kHz timing; the buffer it just
+     * filled is overwritten with sine before it enters the pipeline. Same path, same format and
+     * same cadence as real audio -- only the samples differ. */
+    sac_facade_i2s_inject_sine();
+#endif
 
     /* The codec produces audio samples when it receives input audio. */
     sac_pipeline_produce(sac_pipeline, &sac_status);

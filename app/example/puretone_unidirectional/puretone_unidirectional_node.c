@@ -257,6 +257,15 @@ _Static_assert(MAIN_CHANNEL_FBK_4_LATENCY_QUEUE_SIZE * ((MAIN_CHANNEL_BIT_DEPTH 
 
 static volatile uint32_t main_channel_trigger_count;
 
+#if SINE_INJECT_HS
+/* SINE_INJECT_HS (HS local test): free-running 1 kHz sine straight to SAI TX, bypassing both
+ * the pipeline and the radio. The external I2S clock keeps completing the TX DMA; each
+ * completion refills this buffer and re-arms the write, so a tone comes out with no link.
+ * Sized to one local I2S payload -- NOT a fallback rung payload, which is the over-the-air
+ * size and carries a SAC header that has no business in a SAI DMA buffer. */
+static int32_t main_channel_tx_sine_buf[MAIN_CHANNEL_I2S_PAYLOAD_SIZE / sizeof(int32_t)];
+#endif
+
 /* PRIVATE FUNCTION PROTOTYPE *************************************************/
 static void app_init(void);
 static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error_t *swc_err);
@@ -799,6 +808,12 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
  */
 static void audio_tx_complete_callback(void)
 {
+#if SINE_INJECT_HS
+    /* Feed the next sine chunk and re-arm TX. Nothing below runs: the point of the local test
+     * is that the consumer never touches the pipeline, so a silent output means the I2S/SAI
+     * side is at fault and not the link. */
+    sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
+#else
     sac_status_t sac_status = SAC_OK;
 
 #if USB_AUDIO_ENABLED
@@ -825,6 +840,7 @@ static void audio_tx_complete_callback(void)
 
     sac_pipeline_consume(main_channel_accumulator_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+#endif
 #endif
 }
 
@@ -2232,6 +2248,13 @@ static void app_init(void)
     ASSERT_SAC_STATUS(sac_status);
     sac_pipeline_start(main_channel_accumulator_pipeline, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
+
+#if SINE_INJECT_HS
+    /* Kick the first SAI TX so the self-clocked sine loop starts. Without this the consumer
+     * never starts -- the queue stays empty with no audio arriving over the air -- so no
+     * TX-complete would ever fire and there would be nothing to re-arm. */
+    sac_facade_i2s_tx_sine((uint8_t *)main_channel_tx_sine_buf, sizeof(main_channel_tx_sine_buf));
+#endif
 
     /* Start timer used for audio process. */
     facade_audio_process_timer_start();
