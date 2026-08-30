@@ -586,8 +586,14 @@ static void validate_spi_dma(bsp_radio_t radio_index)
 
     interrupt_sources_t i_srcs = get_interrupt_sources(radio_index);
 
-    if (i_srcs.mocked_radio_non_blocking_transfer_irq_count[radio_index] != 1 &&
-        compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH)) {
+    /* Both conditions are evaluated up front: with a short-circuiting || the
+     * compare would be skipped whenever the callback count is already wrong,
+     * and its debug output is the only place the received bytes are shown.
+     */
+    bool rx_callback_ok = (i_srcs.mocked_radio_non_blocking_transfer_irq_count[radio_index] == 1);
+    bool rx_data_ok = compare_reg_value(&rx_data[1], DEFAULT_SFD, SFD_LENGTH);
+
+    if (!rx_callback_ok || !rx_data_ok) {
         print_log(LOG_LEVEL_DEBUG, "             RX callback count was %d",
                   i_srcs.mocked_radio_non_blocking_transfer_irq_count[radio_index]);
         print_log(LOG_LEVEL_ERR, "%s %s", TEST_FAILED_STRING, TEST_NAME_STRING);
@@ -1029,8 +1035,8 @@ static interrupt_sources_t get_interrupt_sources(bsp_radio_t radio_index)
  */
 static void reset_transceiver(bsp_radio_t radio_index)
 {
-    uint8_t tx_buffer[3];
 #if !RADIO_QSPI_ENABLED
+    uint8_t tx_buffer[3];
     uint8_t rx_buffer[3];
 #endif
     uint16_t register_value = 0;
@@ -1050,21 +1056,16 @@ static void reset_transceiver(bsp_radio_t radio_index)
 
     /* Configure communication mode with the radio. */
 
-    /* Get the current config in the register. */
-    tx_buffer[0] = REG16_HARDDISABLES_IOCONFIG;
-
-#if !RADIO_QSPI_ENABLED
-    swc_hal[radio_index].begin_transfer();
-    swc_hal[radio_index].transfer_full_duplex_blocking(tx_buffer, rx_buffer, 3);
-    swc_hal[radio_index].end_transfer();
-    register_value = rx_buffer[1] | (rx_buffer[2] << 8);
-#else
-
-    swc_hal[radio_index].begin_transfer();
-    swc_hal[radio_index].transfer_half_duplex_rx_blocking(tx_buffer[0], (uint8_t *)&register_value, 2);
-    swc_hal[radio_index].end_transfer();
-
-#endif
+    /* Start from what enable_fast_miso() just wrote rather than reading the
+     * register back. That write sets the whole 16-bit register from a zeroed
+     * buffer, so its content here is already known, and the read-modify-write
+     * this replaces added no information while making the interface
+     * configuration depend on the read path being correct -- which is a
+     * bootstrap cycle, since fast MISO is what the read path needs to be
+     * correct in the first place. A read that comes back wrong used to be
+     * written straight back, latching a corrupt IOCONFIG on every reset.
+     */
+    register_value = HARDDISABLES_IOCONFIG_FAST_MISO;
 
     /* Add the desired access mode (SPI/QSPI). */
     register_value = register_value & ~BITS_QSPI;
