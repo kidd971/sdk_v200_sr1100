@@ -15,25 +15,32 @@ extern "C" {
 
 /* CONSTANTS ******************************************************************/
 /** @brief SDK line this firmware is built from. */
-#define FW_VERSION_SDK  "v2.4.0"
+#define FW_VERSION_SDK  "v2.4.1"
 
 /** @brief Release-candidate suffix, INCLUDING its separator. Empty for a final release.
  *
  *  Carries the underscore itself rather than having the separator live in the concatenation
  *  below. A separator that is always present cannot express a final release: the string comes
- *  out "v2.4.0_", with a trailing character that looks like a truncation and would follow the
+ *  out "v2.4.1_", with a trailing character that looks like a truncation and would follow the
  *  version into every log and every AT reply.
  *
- *  So: "_rc02" for a candidate, "" for the release. Bump when cutting a package, and keep it
- *  equal to the bin/<name>/ suffix so the banner, the MANIFEST and the folder agree.
- *  Overridable per build (-DFW_VERSION_RELEASE=\"_rc03\") so a preset can stamp it without
+ *  So: "_rc2" for a candidate, "" for the release, ".1" for a patch on top of one that has
+ *  already shipped. Bump when cutting a package, and keep it equal to the bin/<name>/ suffix
+ *  so the banner, the MANIFEST and the folder agree.
+ *
+ *  The candidate number is not zero-padded -- "_rc2", not "_rc02" -- so it stays the number
+ *  it is and widens on its own at "_rc10". The v2.4.0 line used the padded spelling; a line
+ *  that has already shipped keeps whatever it shipped as, so the two forms coexist in the
+ *  tags and in the older notes. Everything from v2.4.1 on is unpadded.
+ *
+ *  Overridable per build (-DFW_VERSION_RELEASE=\"_rc3\") so a preset can stamp it without
  *  editing this file.
  */
 #ifndef FW_VERSION_RELEASE
-#define FW_VERSION_RELEASE  ""
+#define FW_VERSION_RELEASE  "_rc2"
 #endif
 
-/** @brief What every version print and version query answers: "v2.4.0".
+/** @brief What every version print and version query answers: "v2.4.1_rc2".
  *
  *  One string, deliberately, because the alternative has already happened here: the two
  *  halves lived in separate macros with separate rules about when to bump them, and the
@@ -57,9 +64,9 @@ extern "C" {
  *  dots -- so the two forms of the same number sit together and cannot be changed one without
  *  seeing the other.
  */
-#define FW_VERSION_SDK_COMPACT  "v240"
+#define FW_VERSION_SDK_COMPACT  "v241"
 
-/** @brief One whitespace-free token: "v240".
+/** @brief One whitespace-free token: "v241_rc2".
  *
  *  For the statistics lines, which are read by eye in a terminal and split on whitespace by
  *  everything else. The release half is the same FW_VERSION_RELEASE the long form uses, so
