@@ -173,6 +173,20 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(FALLBACK_PIN_AT_BOTTOM=${FALLBACK_PIN_AT_BOTTOM})
     endif()
 
+    # Release suffix stamped into every version the firmware reports -- the boot banner,
+    # AT+VER, AT+FW_VERSION and +MODULE_INFO all come from it. fw_version.h has documented
+    # this as overridable per build since it was written, but nothing ever forwarded it, so
+    # the -D was accepted and silently ignored: the same omission recorded above for
+    # MAIN_CHANNEL_ALLOW_96K, and invisible for the same reason -- the header's #ifndef
+    # default keeps producing a correct-looking build.
+    #
+    # Pass it WITHOUT the quotes; they are added here so the value reaches the compiler as a
+    # C string literal. -DFW_VERSION_RELEASE=_rc2_r1 gives "v2.4.1_rc2_r1".
+    if (DEFINED FW_VERSION_RELEASE)
+        message("FW_VERSION_RELEASE = ${FW_VERSION_RELEASE}")
+        add_compile_definitions(FW_VERSION_RELEASE="${FW_VERSION_RELEASE}")
+    endif()
+
     if (DEFINED STATS_VERBOSE)
         add_compile_definitions(STATS_VERBOSE=${STATS_VERBOSE})
     endif()
