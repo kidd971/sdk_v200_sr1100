@@ -118,7 +118,9 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(NO_CODEC=1)
     endif()
 
-    # Send the console to the USB CDC port instead of the expansion UART. Off by default.
+    # Send the console to the USB CDC port instead of the expansion UART. Not a default in
+    # either direction: the backend picks one per board -- ON for u5a5, OFF for u535 -- and
+    # this overrides that choice. Asking for it on the u535 is refused there, not honoured.
     #
     # For boards where the expansion pads are not reachable and the ST-Link VCP is not
     # populated -- u5a5 in particular, where the console otherwise has nowhere to go and the
