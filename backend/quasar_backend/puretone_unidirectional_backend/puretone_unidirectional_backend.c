@@ -645,6 +645,8 @@ _Static_assert(AT_CONSOLE_UART_TX_PIN == QUASAR_GPIO_PIN_2 && AT_CONSOLE_UART_RX
 #else
 #define CONSOLE_ON_CDC 1
 #endif
+#elif CONSOLE_ON_CDC && defined(QUASAR_U535)
+#error "CONSOLE_ON_CDC is not available on the u535: it already defines facade_print_string"
 #endif
 
 #if CONSOLE_ON_CDC
