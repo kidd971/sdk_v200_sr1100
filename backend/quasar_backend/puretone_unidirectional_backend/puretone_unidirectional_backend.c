@@ -864,3 +864,17 @@ void facade_uwb_shutdown(void)
     quasar_radio_1_set_shutdown_pin();
     quasar_radio_2_set_shutdown_pin();
 }
+
+void facade_set_i2s_mux(bool use_ext)
+{
+#if !NO_CODEC
+    /* No tracking counterpart to the headset backend's facade_i2s_backend_track_mux() here, and
+     * deliberately so. That one exists because quasar_audio_init_sai() resets the mux to the
+     * on-board codec every time it runs, and the headset re-initializes its SAI while running.
+     * This backend calls it once, from facade_audio_coord_init()/facade_audio_node_init() during
+     * app_init(), so whatever is selected here is the last word until reset. */
+    quasar_audio_set_i2s_mux_selection(use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC);
+#else
+    (void)use_ext;
+#endif
+}

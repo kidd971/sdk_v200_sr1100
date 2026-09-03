@@ -278,6 +278,16 @@ bool facade_get_multi_radio_timer_regs(uint32_t *cr1, uint32_t *arr, uint32_t *c
  */
 bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc, uint32_t *lr);
 
+/** @brief Set the I2S MUX selection.
+ *
+ *  Drives the board's MUX_SEL line, which decides whether the SAI reaches the on-board codec or
+ *  the external codec header. Only u5a5 brings that line out; on u535 the pin is not connected
+ *  and the BSP call underneath is a documented no-op, so this is safe to wire on both.
+ *
+ *  @param[in] use_ext  true = external codec port, false = on-board codec.
+ */
+void facade_set_i2s_mux(bool use_ext);
+
 #ifdef __cplusplus
 }
 #endif

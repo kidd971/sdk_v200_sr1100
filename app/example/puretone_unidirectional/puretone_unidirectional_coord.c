@@ -395,6 +395,7 @@ int main(void)
     at_cmd_core_register_link_status_cb(at_get_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
     at_cmd_core_register_cmd_tx_cb(at_cmd_tx);
+    at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
     at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
     at_cmd_core_notify_uwb_ready();
 
