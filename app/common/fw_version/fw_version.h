@@ -31,7 +31,7 @@ extern "C" {
  *  keeps counting: bump N when cutting a package, whatever the package is for, and keep the
  *  value equal to the bin/<name>/ suffix so the banner, the MANIFEST and the folder agree.
  *
- *  The number is not zero-padded -- "_rc2", not "_rc02" -- so it stays the number it is and
+ *  The number is not zero-padded -- "_rc3", not "_rc03" -- so it stays the number it is and
  *  widens on its own at "_rc10". The v2.4.0 line used the padded spelling; a line that has
  *  already shipped keeps whatever it shipped as, so the two forms coexist in the tags and in
  *  the older notes. Everything from v2.4.1 on is unpadded.
@@ -41,10 +41,10 @@ extern "C" {
  *  CMakeLists.txt adds them; quoting it there lands two sets of quotes on the compiler line.
  */
 #ifndef FW_VERSION_RELEASE
-#define FW_VERSION_RELEASE  "_rc2"
+#define FW_VERSION_RELEASE  "_rc3"
 #endif
 
-/** @brief What every version print and version query answers: "v2.4.1_rc2".
+/** @brief What every version print and version query answers: "v2.4.1_rc3".
  *
  *  One string, deliberately, because the alternative has already happened here: the two
  *  halves lived in separate macros with separate rules about when to bump them, and the
@@ -70,7 +70,7 @@ extern "C" {
  */
 #define FW_VERSION_SDK_COMPACT  "v241"
 
-/** @brief One whitespace-free token: "v241_rc2".
+/** @brief One whitespace-free token: "v241_rc3".
  *
  *  For the statistics lines, which are read by eye in a terminal and split on whitespace by
  *  everything else. The release half is the same FW_VERSION_RELEASE the long form uses, so

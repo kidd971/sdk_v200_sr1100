@@ -1,4 +1,4 @@
-# puretone_unidirectional v2.4.1_rc2 —— 測試說明
+# puretone_unidirectional v2.4.1_rc3 —— 測試說明
 
 指令和事件列在最前面 —— 那是 ODM 整合時最常翻的兩節。
 音訊、fallback、回連在第 4 節之後。
@@ -19,9 +19,9 @@
 |---|---|
 | `AT+PING` | `OK` |
 | `AT+HELP` | `+HELP:` 後接指令清單 |
-| `AT+VER` | `+VER: SPARK SDK SR1100 v2.4.1_rc2` |
-| `AT+FW_VERSION?` | `+FW_VERSION: v2.4.1_rc2` |
-| `AT+MODULE_INFO?` | `+MODULE_INFO: HW=<n>,FW=v2.4.1_rc2,Chip=<n>,SN=<16 hex>,Addr=0x<xx>` |
+| `AT+VER` | `+VER: SPARK SDK SR1100 v2.4.1_rc3` |
+| `AT+FW_VERSION?` | `+FW_VERSION: v2.4.1_rc3` |
+| `AT+MODULE_INFO?` | `+MODULE_INFO: HW=<n>,FW=v2.4.1_rc3,Chip=<n>,SN=<16 hex>,Addr=0x<xx>` |
 | `AT+MODULE_RESET` | `OK`，然後 MCU reset |
 | `AT+LE_UWB_CONN_STATUS?` | `+LE_UWB_CONN_STATUS: <n> (<NAME>)`，`0=STANDBY 1=PAIRING 2=CONNECTED 3=CONNECTING` |
 | `AT+LE_UWB_GET_ROLE?` | `+LE_UWB_GET_ROLE: <n> (<NAME>)`，`0=COORDINATOR 1=NODE` |
@@ -43,7 +43,7 @@
 是反方向的代理值**，不等於音訊鏈路的餘裕。
 `0` 代表「沒有量測」（未配對），**不是 0 dB**。
 
-v2.4.1_rc2 起才是 dB；更早的版本回的是 transceiver 原始碼值（近距離約 200），
+v2.4.1_rc3 起才是 dB；更早的版本回的是 transceiver 原始碼值（近距離約 200），
 卻也加了 `dB` 字尾。**診斷用，不要拿它做切換判斷** —— 判斷看 `AT+CONN_QUALITY?`。
 
 ---
@@ -55,7 +55,7 @@ v2.4.1_rc2 起才是 dB；更早的版本回的是 transceiver 原始碼值（�
 ### 開機
 
 ```
-+EVENT: BUILD: v2.4.1_rc2 role=<COORDINATOR|NODE> <date> <time>
++EVENT: BUILD: v2.4.1_rc3 role=<COORDINATOR|NODE> <date> <time>
 +EVENT: LE_UWB_READY
 ```
 
@@ -88,7 +88,7 @@ v2.4.1_rc2 起才是 dB；更早的版本回的是 transceiver 原始碼值（�
 +EVENT: LE_UWB_QUALITY:CRITICAL
 ```
 
-**判準是 fallback 階數，不是 link margin**（v2.4.1_rc2 起；舊版用 5/10 dB 門檻，
+**判準是 fallback 階數，不是 link margin**（v2.4.1_rc3 起；舊版用 5/10 dB 門檻，
 在 0.5 m 也會報 WEAK，因為它比較的是原始碼值不是 dB）。對應關係：
 
 | 階 | 音訊格式 | 事件 | SoC 該做什麼 |
@@ -118,7 +118,7 @@ DG 的只會是前者。**DG 不會比 HS 晚發現階數問題**，它少的只
 - 變壞**立刻**送；變好要**連續 5 秒**而且**一次只回一階**
   （`CRITICAL`→`WEAK`→`GOOD` 最少 10 秒）。
 
-> **舊韌體沒有連上後這一則。** `v2.4.1_rc2`（`c057a45`）之前是跨門檻觸發的：
+> **舊韌體沒有連上後這一則。** `v2.4.1_rc3`（`c057a45`）之前是跨門檻觸發的：
 > 一條連上就正常的鏈路兩個門檻都沒跨過，從頭到尾一個事件都不會送。
 > 如果 host 端看到的是「連上之後完全沒有品質回報」，先確認韌體版本 ——
 > 打 `AT+CONN_QUALITY?`，舊版沒有這個指令，會吐 help 而且不回 `OK` 也不回 `ERROR`。
@@ -174,17 +174,17 @@ u5a5 的 ST-Link VCP 是另一個 UART，**上面什麼都沒有** —— 那是
 所以**交錯只會發生在整行之間**：
 
 ```
-[DG] v241_rc2 12340 fb=1 48kHz 24-bit  tx=600/s idle=0/s ...
+[DG] v241_rc3 12340 fb=1 48kHz 24-bit  tx=600/s idle=0/s ...
 +EVENT: LE_UWB_CONNECTED
-[DG] v241_rc2 13340 fb=1 ...
+[DG] v241_rc3 13340 fb=1 ...
 ```
 
-不該出現 `[DG] v241_rc2 1234 fb=+EVENT: LE_` 這種字元中間被切斷的情況。**看到就回報。**
+不該出現 `[DG] v241_rc3 1234 fb=+EVENT: LE_` 這種字元中間被切斷的情況。**看到就回報。**
 
 開機第一行（送到 console；SMPS 上就是 AT 那一條，u5a5 上是 USB CDC）：
 
 ```
-[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.1_rc2 <date> <time>
+[BOOT] puretone_unidirectional coordinator u535 r1 v2.4.1_rc3 <date> <time>
 ```
 
 **這行是接電之後幾毫秒就送出的**，terminal 開得晚就會錯過。想看它就先開 terminal 再上電。
@@ -243,8 +243,8 @@ HS 什麼時候開機都能同步上 —— 所以「HS 還沒開」不該讓 DG
 ## 6. 一行 log 怎麼讀
 
 ```
-[HS] v241_rc2 55493 fb=4 24kHz ADPCM   rx=600/s rej=0/s miss=3106/s fill=16% lm=170
-[DG] v241_rc2 55493 fb=4 24kHz ADPCM   tx=600/s idle=1187/s cca_fail=0/s tx_drop=0/s
+[HS] v241_rc3 55493 fb=4 24kHz ADPCM   rx=600/s rej=0/s miss=3106/s fill=16% lm=170
+[DG] v241_rc3 55493 fb=4 24kHz ADPCM   tx=600/s idle=1187/s cca_fail=0/s tx_drop=0/s
 ```
 
 `55493` 是開機毫秒數。`fb=` 是目前階數：

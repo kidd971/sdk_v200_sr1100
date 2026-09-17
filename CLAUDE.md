@@ -341,9 +341,17 @@ later replaced. Where a doc and the code disagree, the code is the fact; fix the
   background, then the six-step plan for porting it onto a third-party MCU (Airoha AB1595).
 
 Release packages are assembled under `bin/<version>_<variant>/` — role-named binaries
-(`v241rc2_u535ldo_std_HS_node.bin`) plus a `MANIFEST.md` naming the git commit and what was
+(`v241rc3_u535ldo_std_HS_node.bin`) plus a `MANIFEST.md` naming the git commit and what was
 verified. Keep the folder suffix equal to `FW_VERSION_RELEASE`. `bin/` is gitignored, so these are
 local artifacts; the MANIFEST's commit is what actually identifies the source a package came from.
+
+**Read the version string back out of every `.bin` before shipping it.** A cache variable set
+once on a build directory lives there forever: `cmake --preset` reuses `build/<preset>/`, so a
+`-DFW_VERSION_RELEASE=…` passed for one package silently stamps every later build in that
+directory, and the header's `#ifndef` never gets a say. This has already shipped a mislabelled
+pair — `grep`/`re.search` the image for `+FW_VERSION: ` and compare, or delete the build
+directory before cutting a package. The same trap applies to any knob a package overrides
+(`I2S_FMT_DEFAULT`, `FALLBACK_FORCE_MODE`, `MAIN_CHANNEL_ALLOW_96K`).
 
 ## Conventions
 
