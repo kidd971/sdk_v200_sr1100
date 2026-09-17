@@ -288,6 +288,25 @@ bool facade_get_hardfault_snapshot(uint32_t *cfsr, uint32_t *hfsr, uint32_t *pc,
  */
 void facade_set_i2s_mux(bool use_ext);
 
+/** @brief Initialize the TX-activity debug IO used to correlate FW timing with the radio.
+ *
+ *  Drives QUASAR_DEBUG_IO_1 (PA4), the only debug IO wired on both u5a5 and u535. On the u5a5
+ *  EVK it lands on expansion header J802 pin 2; on u535 it is the single expansion debug pin.
+ *
+ *  @note This does NOT go through quasar_debug_init(): that call also claims the ST-Link UART,
+ *        which these apps deliberately leave free (quasar_config.debug_enabled is false in
+ *        common_backend.c). Only the GPIO is brought up here.
+ */
+void facade_debug_txen_io_init(void);
+
+/** @brief Drive the TX-activity debug IO high.
+ */
+void facade_debug_txen_io_set(void);
+
+/** @brief Drive the TX-activity debug IO low.
+ */
+void facade_debug_txen_io_clear(void);
+
 #ifdef __cplusplus
 }
 #endif

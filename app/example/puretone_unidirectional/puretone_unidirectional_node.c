@@ -370,6 +370,12 @@ int main(void)
         facade_print_string(banner);
     }
 
+#if DEBUG_IO_TXEN
+    /* Scope marker for correlating this side's frame timing against the radio module's own
+     * SYNC_TXEN pin (SR1120 pin 5, module test point TP1). Off unless -DDEBUG_IO_TXEN=1. */
+    facade_debug_txen_io_init();
+#endif
+
     /* Initialize wireless core context switch handler before pairing is available. */
     facade_set_context_switch_handler(swc_connection_callbacks_processing_handler);
 
@@ -720,6 +726,13 @@ static void conn_rx_audio_success_callback(void *conn, void *arg)
     (void)conn;
     (void)arg;
 
+#if DEBUG_IO_TXEN
+    /* One pulse per received audio frame. The Node's own TP1 (SYNC_TXEN) only goes high for its
+     * ACK/data bursts, so lining this pin up against TP1 shows where the ACK sits relative to the
+     * RX slot -- which is the sync being checked. */
+    facade_debug_txen_io_set();
+#endif
+
     facade_rx_audio_conn_status();
 
     /* The SWC produces audio samples upon receiving them from the Coordinator. */
@@ -729,6 +742,10 @@ static void conn_rx_audio_success_callback(void *conn, void *arg)
     /* Trigger main channel process. */
     facade_audio_process_timer_trigger();
     main_channel_trigger_count++;
+
+#if DEBUG_IO_TXEN
+    facade_debug_txen_io_clear();
+#endif
 }
 
 /** @brief Callback function when a previously sent data frame has been ACK'd.

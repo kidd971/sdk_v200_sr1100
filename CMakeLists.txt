@@ -225,6 +225,14 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(U535_PWR_LDO=1)
     endif()
 
+    # Scope marker on the expansion debug IO (PA4 -- u5a5 J802 pin 2, and the only debug IO the
+    # u535 still defines). Pulses high once per audio frame so the FW's frame timing can be
+    # overlaid with the radio module's own SYNC_TXEN pin (SR1120 pin 5, module test point TP1).
+    # Bench instrumentation only: leave it out of release builds.
+    if (DEFINED DEBUG_IO_TXEN)
+        add_compile_definitions(DEBUG_IO_TXEN=${DEBUG_IO_TXEN})
+    endif()
+
     project(IDP CXX C ASM)
     add_subdirectory(library)
     add_subdirectory(third-party)

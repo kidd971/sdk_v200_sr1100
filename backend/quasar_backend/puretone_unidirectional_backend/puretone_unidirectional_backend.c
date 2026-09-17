@@ -11,6 +11,7 @@
 #include "at_cmd_core_facade.h"
 #include "puretone_unidirectional_facade.h"
 #include "quasar.h"
+#include "quasar_debug.h"
 #include "quasar_it.h" /* dual-radio HW counters + HardFault snapshot (u535 & u5a5) */
 #include "sac_cfg.h"
 #include "tusb.h"  /* CONSOLE_ON_CDC: tud_cdc_* for the console */
@@ -878,5 +879,34 @@ void facade_set_i2s_mux(bool use_ext)
     quasar_audio_set_i2s_mux_selection(use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC);
 #else
     (void)use_ext;
+#endif
+}
+
+/* TX-activity debug IO. QUASAR_DEBUG_IO_1 is PA4 on both u5a5 and u535 -- the only debug IO the
+ * u535 quasar_def.h still defines, so it is the one pin these two boards have in common.
+ *
+ * Deliberately not routed through quasar_debug_init(): that also brings up the ST-Link UART, and
+ * common_backend.c leaves quasar_config.debug_enabled false precisely to keep UART4 unclaimed. */
+#define DEBUG_TXEN_IO QUASAR_DEBUG_IO_1
+
+void facade_debug_txen_io_init(void)
+{
+#if DEBUG_IO_TXEN
+    quasar_debug_io_init(DEBUG_TXEN_IO);
+    quasar_debug_io_clear(DEBUG_TXEN_IO);
+#endif
+}
+
+void facade_debug_txen_io_set(void)
+{
+#if DEBUG_IO_TXEN
+    quasar_debug_io_set(DEBUG_TXEN_IO);
+#endif
+}
+
+void facade_debug_txen_io_clear(void)
+{
+#if DEBUG_IO_TXEN
+    quasar_debug_io_clear(DEBUG_TXEN_IO);
 #endif
 }
