@@ -45,7 +45,7 @@ PRESET=unidir-u5a5-rjf-single-radio ./.pixi/bin/pixi.exe run _build_preset
 - Build tree: `build/<presetName>/`, and each app's artifacts land under
   `build/<preset>/app/example/<app>/`. A `.bin` is produced next to each `.elf` by a POST_BUILD
   `objcopy`.
-- 81 configure presets, 16 of them visible; the rest are hidden bases or the withdrawn headset line.
+- 79 configure presets, 11 of them visible; the rest are hidden bases or the withdrawn headset line.
 - Add a one-off flag by appending it to the configure step, e.g.
   `cmake --preset=<p> -G Ninja -DSTATS_VERBOSE=1 && cmake --build build/<p>`.
 - Interactive debug is VS Code + cortex-debug + pyocd (`.vscode/launch.json` has per-ST-Link-serial
@@ -65,7 +65,10 @@ neither directory ships here and no preset sets `BUILD_TESTS`. Verification is o
 - `tools/at_rx_stress.py` — measures AT RX corruption rate, using the firmware's own `+DBG OK:` echo
   as the oracle. Run it twice (UWB idle, then connected + audio) and compare; the delta is the
   pass/fail metric for the RX path. Its header records the TX/RX pin swap between boards.
-- The `*-sine` presets inject a 1 kHz tone so a signal path can be judged without a source.
+- `unidir-u5a5-rjf-DG-sine` injects a 1 kHz tone so a signal path can be judged without a source. It
+  is the only `*-sine` preset left visible; the u5a5 HS and both u535 sine presets are hidden, not
+  deleted — unhide the one you need (or add `-DSINE_INJECT_DG=1` / `-DSINE_INJECT_HS=1` to a normal
+  preset's configure line) rather than assuming the tone injection was removed.
 
 ## Preset and binary selection — the most common way to waste a bench session
 

@@ -811,6 +811,7 @@
         },
         {
             "name": "unidir-u5a5-rjf-HS-sine",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar"
@@ -858,6 +859,7 @@
         },
         {
             "name": "unidir-u535-ldo-DG-sine",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
@@ -891,6 +893,7 @@
         },
         {
             "name": "unidir-u535-ldo-HS-sine",
+            "hidden": true,
             "inherits": [
                 "base",
                 "quasar-u535"
