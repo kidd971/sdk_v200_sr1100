@@ -234,6 +234,33 @@
 #define FALLBACK_PIN_AT_BOTTOM 1
 #endif
 
+/** @brief Hold the ladder on one rung for the whole run, disabling fallback entirely.
+ *
+ *  -1, the default, leaves the automatic ladder alone. 0 to 4 selects a mode, puts the fallback
+ *  module into manual mode before the link comes up, and never takes it out again.
+ *
+ *  This exists to make a latency measurement attributable. The configured latency is per rung --
+ *  5/7/10/40/40 ms down this ladder -- so a figure measured while the ladder is moving cannot be
+ *  assigned to any of them, and this ladder does move: it descends within seconds of connecting.
+ *  Pinning is the difference between "the link is 56 ms" and "the link is 56 ms at mode 1", and
+ *  only the second one can be compared against anything.
+ *
+ *  It is an instrument, not a shipping configuration. With fallback disabled, a link that
+ *  degrades has nowhere to go: instead of dropping a rung it drops audio. Do not leave it set in
+ *  a build that goes anywhere near a range test.
+ *
+ *  Only the coordinator reads it, as with FALLBACK_PIN_AT_BOTTOM above -- the node follows the
+ *  mode carried in the received header and has no say. fallback_hold_handler() compiles out
+ *  entirely when this is set, because its thaw path hands the ladder back.
+ */
+#ifndef FALLBACK_FORCE_MODE
+#define FALLBACK_FORCE_MODE (-1)
+#endif
+
+#if (FALLBACK_FORCE_MODE) == 0 && !MAIN_CHANNEL_ALLOW_96K
+#error "FALLBACK_FORCE_MODE=0 also needs -DMAIN_CHANNEL_ALLOW_96K=1: mode 0 is deactivated by default because 96 kHz parks a dual-radio node."
+#endif
+
 #ifndef MAIN_CHANNEL_ALLOW_96K
 #define MAIN_CHANNEL_ALLOW_96K 0
 #endif

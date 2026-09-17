@@ -175,6 +175,14 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(FALLBACK_PIN_AT_BOTTOM=${FALLBACK_PIN_AT_BOTTOM})
     endif()
 
+    # Disables the ladder outright and holds one rung, so a latency figure can be attributed to
+    # a mode. A measurement instrument -- see the note in sac_cfg.h before shipping anything
+    # built with it.
+    if (DEFINED FALLBACK_FORCE_MODE)
+        message("FALLBACK_FORCE_MODE = ${FALLBACK_FORCE_MODE}")
+        add_compile_definitions(FALLBACK_FORCE_MODE=${FALLBACK_FORCE_MODE})
+    endif()
+
     # Release suffix stamped into every version the firmware reports -- the boot banner,
     # AT+VER, AT+FW_VERSION and +MODULE_INFO all come from it. fw_version.h has documented
     # this as overridable per build since it was written, but nothing ever forwarded it, so

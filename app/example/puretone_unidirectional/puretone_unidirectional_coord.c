@@ -266,8 +266,11 @@ static bool s_ladder_frozen; /* peer is absent -- descending would be meaningles
 static bool s_ladder_pinned; /* stepped down into the bottom rung -- stay there */
 
 /* Last mode seen by fallback_hold_handler(), so it can tell a step DOWN into the bottom rung
- * from merely being parked there. Initialised on the first pass. */
+ * from merely being parked there. Initialised on the first pass. Only that function reads
+ * s_ladder_prev_mode, so it goes with it when the ladder is forced to one rung. */
+#if FALLBACK_FORCE_MODE < 0
 static uint8_t s_ladder_prev_mode;
+#endif
 static bool s_ladder_prev_valid;
 
 /* Link margin as last reported BY THE NODE. This side transmits the audio, so it has no
@@ -293,8 +296,10 @@ static uint8_t s_peer_link_margin;
 static uint8_t s_pending_cmd;
 
 /* When the peer most recently became reachable, and whether the ladder has been let go since.
- * See LADDER_SETTLE_MS. */
+ * See LADDER_SETTLE_MS. s_link_up_tick has no reader once the ladder is forced to one rung. */
+#if FALLBACK_FORCE_MODE < 0
 static uint32_t s_link_up_tick;
+#endif
 static bool s_link_up_valid;
 static bool s_link_settled;
 
@@ -1362,6 +1367,20 @@ static void app_audio_core_init(void)
     ASSERT_SAC_STATUS(sac_status);
 #endif
 
+#if FALLBACK_FORCE_MODE >= 0
+    /* Overrides the ceiling above. The requested rung is activated whatever it is -- forcing a
+     * mode that cannot be reached would be a silent no-op, which is worse than the override --
+     * then selected, then the module is put in manual mode so nothing moves it again.
+     *
+     * The #error in sac_cfg.h is what stops this re-enabling mode 0 by accident. */
+    sac_fallback_mode_set_active_state(&sac_fallback_instance, FALLBACK_FORCE_MODE, true, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_set_current_mode(&sac_fallback_instance, FALLBACK_FORCE_MODE, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+    sac_fallback_set_manual_mode(&sac_fallback_instance, true, &sac_status);
+    ASSERT_SAC_STATUS(sac_status);
+#endif
+
 #if SINE_INJECT_DG
     /* Pin whatever mode the two branches above just selected -- mode 1 (48 kHz 24-bit) in the
      * shipping configuration, mode 0 if someone built with MAIN_CHANNEL_ALLOW_96K.
@@ -1513,6 +1532,11 @@ static void app_audio_core_compression_discard_interface_init(sac_processing_int
  */
 static void fallback_hold_handler(void)
 {
+#if FALLBACK_FORCE_MODE >= 0
+    /* The rung is nailed down for the whole run, so there is no ladder to hold -- and
+     * the thaw path below would hand it straight back by calling set_manual_mode()
+     * with s_ladder_pinned, which is false. Compile the whole thing out instead. */
+#else
     sac_status_t sac_status = SAC_OK;
     /* Five modes are added to this instance and the last index is the bottom rung. Derived
      * from the state enum so that adding a rung does not leave this behind. */
@@ -1602,6 +1626,7 @@ static void fallback_hold_handler(void)
 
     s_ladder_prev_mode = mode;
     s_ladder_prev_valid = true;
+#endif
 }
 
 /** @brief Audio peripheral receive complete callback.
