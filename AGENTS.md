@@ -246,9 +246,15 @@ handler is `bool (*)(const char *args, char *resp, uint16_t resp_size)` where `a
 `"=val"` or `"=?"`. All 22 are registered in one place, `at_cmd_core_init()`.
 
 **Both roles register the same 22 commands**; what differs is which app callbacks are wired behind
-them, so several commands answer `OK` and do nothing on one side (`AT+VOL` on the DG, `AT+PLAY` on
-the HS). That is by design, not a bug to "fix" — check `at_cmd_core_register_*_cb()` call sites in
-`..._coord.c:394` and `..._node.c:340` before concluding a command is broken.
+them, so a command can answer `OK` and do nothing on one side — `AT+VOL` on the DG is the live
+example, and it is by design: the HS owns the only output, so both roles' `at_cmd_tx()` filter
+`AT_CMD_VOL` out rather than give one setting two owners. Check the
+`at_cmd_core_register_*_cb()` call sites in `..._coord.c:394` and `..._node.c:340` before
+concluding a command is broken. The media keys are *not* an example any more: `AT+PLAY` /
+`STOP` / `NEXT_TRACK` / `PRE_TRACK` now cross in both directions. Note what makes that safe —
+each role registers `cmd_tx_cb` to forward and leaves the per-key hardware callbacks NULL,
+because `at_cmd_core_notify_*_received()` calls those same hardware callbacks and a side that
+forwarded from them would bounce every key back at the 10 ms packet rate.
 
 To add a command, everything happens in `at_cmd_core.c` — prototype, handler, `at_server_register()`
 — plus **the hand-maintained `cmds[]` list in `handler_help()`**, which is a second copy of the

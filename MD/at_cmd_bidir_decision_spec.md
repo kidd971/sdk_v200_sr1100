@@ -705,6 +705,25 @@ vendor 通道在這件事上的價值特別明顯:unidir 那邊要接的**只有
 
 這也是 §7「改動盡量壓進 core」那條紀律的全部理由。
 
+### 2026-09-17 後記:移植完成了,而且方向搬反了一次
+
+unidir 的 AT 已經從零移植完(22 個指令、vendor 通道、事件全在),上面那句
+「`puretone_unidirectional` 目前 `at_cmd_core` 呼叫數是 0」只剩歷史意義。
+
+值得記一筆的是移植之後方向錯了。unidir 的 coordinator 註冊了
+`at_cmd_core_register_cmd_tx_cb()`,node 沒有——§1/§4 那個「回 OK 但什麼都沒做」的
+bug 修好之後,原封不動地搬到了另一端:headset 線上是 HS→DG 通、DG→HS 斷,unidir 反過來,
+DG→HS 通、HS→DG 斷。而 unidir 的 HS 是耳機端,那正是人會去按鍵的地方,所以搬反的
+是比較重要的那一個方向。
+
+2026-09-17 補上 HS→DG,做法照 §7 步驟 2:node 註冊 `cmd_tx_cb`(**不是**逐鍵的硬體
+callback,理由見上面的 echo 迴圈——`notify_*_received()` 呼叫的就是那組)、
+`data_callback()` 打包 `cmd_type`、coordinator 的 RX handler 解碼。兩端的
+`at_cmd_tx()` 都濾掉 `AT_CMD_VOL`,與 §7 末段一致。
+
+線上成本是零:`cmd_type` 的 offset 在 `vendor_id` 之前,`user_data_tx_size()` 的最短
+長度本來就涵蓋它,HS 每秒 100 次一直在送這個 byte,只是永遠是 0。
+
 ---
 
 ## 11. AT 介面改名:`UWB_*` → `LE_UWB_*`,以及與 PRD 的對齊

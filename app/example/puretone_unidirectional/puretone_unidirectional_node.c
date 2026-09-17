@@ -224,6 +224,12 @@ static pairing_assigned_address_t pairing_assigned_address;
 static volatile uint32_t s_coord_rx_tick;
 static volatile bool s_coord_rx_seen;
 
+/* Media key waiting to be sent to the coordinator, an at_cmd_code_t. Edge triggered: set from
+ * the AT handler in the main loop, read and cleared in data_callback() from the TIM16 ISR, so
+ * volatile. See the note on cmd_type in puretone_link_data.h for why losing one to a dropped
+ * packet is acceptable here and would not be for an alarm. */
+static volatile uint8_t s_pending_cmd;
+
 /* True while try_boot_reconnect() owns a half-open link and is polling it; the button
  * handler defers through s_boot_reconnect_abort so the loop unwinds before teardown. */
 static bool s_boot_reconnect_active;
@@ -320,6 +326,7 @@ static int32_t at_get_link_margin(void);
 static uint8_t at_get_fb_rung(void);
 static uint32_t at_get_dropout_count(void);
 static void at_set_vol(uint8_t vol);
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
 static uint16_t wireless_read_data(void *received_data, uint8_t size, swc_error_t *swc_err);
@@ -350,6 +357,7 @@ int main(void)
     at_cmd_core_register_fb_rung_cb(at_get_fb_rung);
     at_cmd_core_register_dropout_count_cb(at_get_dropout_count);
     at_cmd_core_register_vol_cb(at_set_vol);
+    at_cmd_core_register_cmd_tx_cb(at_cmd_tx);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
     at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
     at_cmd_core_notify_uwb_ready();
@@ -1746,6 +1754,12 @@ static void data_callback(void)
     transmitted_user_data.link_margin = fallback_info.link_margin;
     transmitted_user_data.button_state = facade_read_button_state();
 
+    /* Media key, if one is waiting. Cleared as it is packed: it is an edge, and the sender
+     * has no way to learn whether this packet arrived. Costs no airtime -- cmd_type sits
+     * ahead of vendor_id, so user_data_tx_size() was already sending this byte as a zero. */
+    transmitted_user_data.cmd_type = s_pending_cmd;
+    s_pending_cmd = 0;
+
     user_data_pack_vendor(&transmitted_user_data);
 
     /* user_data_tx_size(), not sizeof(). The struct now reserves room for the vendor block,
@@ -2244,6 +2258,33 @@ static void at_set_vol(uint8_t vol)
                             SAC_VOLUME_INCREASE, SAC_NO_ARG, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
     }
+}
+
+/** @brief AT+PLAY / STOP / NEXT_TRACK / PRE_TRACK -- forward a media key to the coordinator.
+ *
+ *  This is the hook the AT core was designed around, and registering it here rather than the
+ *  per-key hardware callbacks is what keeps the link from echoing. at_cmd_core_notify_*_received()
+ *  calls those same hardware callbacks, so a side that forwarded from them would bounce every
+ *  key the peer sent straight back, forever, at the 10 ms packet rate. That loop was found and
+ *  removed on the headset line; see MD/at_cmd_bidir_decision_spec.md section 7. The hardware
+ *  callbacks stay NULL on this side, so an arriving key only raises +EVENT for the local SOC.
+ *
+ *  Queued, not sent: the data packet goes out on its own 10 ms timer, and sending here would
+ *  mean a second transmit path with its own failure modes.
+ *
+ *  AT_CMD_VOL is dropped rather than queued, as it is on the coordinator. Volume on this link
+ *  is this side's own output level and at_set_vol() has already applied it; forwarding it
+ *  would give one setting two owners.
+ */
+static void at_cmd_tx(uint8_t cmd_type, uint8_t value)
+{
+    (void)value;
+
+    if (cmd_type == AT_CMD_VOL) {
+        return;
+    }
+
+    s_pending_cmd = cmd_type;
 }
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err)

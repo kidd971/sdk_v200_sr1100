@@ -273,10 +273,11 @@ static uint8_t s_ladder_prev_mode;
 #endif
 static bool s_ladder_prev_valid;
 
-/* Media key waiting to be sent to the node, an at_cmd_code_t. Edge triggered: set when the
- * command arrives over AT, cleared as it is packed. See the note on cmd_type in
- * puretone_link_data.h for why that is acceptable here and would not be for an alarm. */
-static uint8_t s_pending_cmd;
+/* Media key waiting to be sent to the node, an at_cmd_code_t. Edge triggered: set from the AT
+ * handler in the main loop, read and cleared in data_callback() from the TIM16 ISR, so
+ * volatile. See the note on cmd_type in puretone_link_data.h for why that is acceptable here
+ * and would not be for an alarm. */
+static volatile uint8_t s_pending_cmd;
 
 /* When the peer most recently became reachable, and whether the ladder has been let go since.
  * See LADDER_SETTLE_MS. s_link_up_tick has no reader once the ladder is forced to one rung. */
@@ -906,6 +907,31 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* The fallback state is updated. */
         sac_fallback_set_rx_link_margin(&sac_fallback_instance, received_user_data.link_margin, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
+
+        /* Media keys from the node -- someone pressing play on the headset rather than on the
+         * source. Edge triggered, so a lost packet loses the press; acceptable only because a
+         * person is in the loop to press it again. AT_CMD_VOL never arrives here: the node
+         * owns its own output level and filters it out before it reaches the air.
+         *
+         * notify_*_received() raises +EVENT for this side's SOC. It also calls the per-key
+         * hardware callbacks, which this side deliberately leaves unregistered -- registering
+         * them to forward would echo every key back to the node at the packet rate. */
+        switch (received_user_data.cmd_type) {
+        case AT_CMD_NEXT_TRACK:
+            at_cmd_core_notify_next_track_received();
+            break;
+        case AT_CMD_PRE_TRACK:
+            at_cmd_core_notify_pre_track_received();
+            break;
+        case AT_CMD_PLAY:
+            at_cmd_core_notify_play_received();
+            break;
+        case AT_CMD_STOP:
+            at_cmd_core_notify_stop_received();
+            break;
+        default:
+            break;
+        }
 
         /* Vendor pass-through, unconditionally: a packet carrying no command still carries
          * the node's acknowledgement of ours. De-duplication and the +EVENT line happen in

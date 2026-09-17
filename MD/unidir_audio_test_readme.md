@@ -31,7 +31,7 @@
 | `AT+LE_UWB_SHUTDOWN` | `OK`，拆鏈路並關掉 radio 電源；MCU 繼續回應 AT |
 | `AT+VENDOR_CMD=<id>[,"<hex>"[,"ACK"]]` | `OK`；`id` 1–223，payload 最多 **8 bytes** |
 | `AT+VOL=<0-100>` / `AT+VOL?` | `OK` / `+VOL: <n>`。**只有 HS 有輸出**，DG 不轉發 |
-| `AT+PLAY` / `AT+STOP` / `AT+NEXT_TRACK` / `AT+PRE_TRACK` | `OK`，見 §7 的重要注意 |
+| `AT+PLAY` / `AT+STOP` / `AT+NEXT_TRACK` / `AT+PRE_TRACK` | `OK`。**兩端都能下**，對面吐對應的 `+EVENT`。見 §8 的重要注意 |
 | `AT+BATTERY?` | `+BATTERY: <0-100>` |
 | `AT+CONN_LM?` | `+CONN_LM: <n>dB` 或 `+CONN_LM: N/A` |
 | `AT+CONN_QUALITY?` | `+CONN_QUALITY: GOOD` / `WEAK` / `CRITICAL` / `N/A`，見 §2 |
@@ -119,13 +119,18 @@ DG 量不到，所以 **DG 永遠不會送 `CRITICAL`**，它的事件只代表�
 
 ### 媒體鍵（由對面轉來）
 
+兩個方向都會轉：DG 下的鍵在 HS 吐，HS 下的鍵在 DG 吐。
+
 ```
 +EVENT: PLAY
 +EVENT: STOP
 +EVENT: NEXT_TRACK
 +EVENT: PRE_TRACK
-+EVENT: VOL=<n>
 ```
+
+**沒有 `+EVENT: VOL=<n>`。** `AT+VOL` 不過線——它設的是 HS 自己的輸出級，
+兩端的轉發都明確濾掉它，所以不會有哪一端收到對面的音量。舊版的說明列過這一行，
+那是錯的：韌體裡沒有任何路徑會送出它。
 
 ---
 
