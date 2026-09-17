@@ -353,6 +353,17 @@ pair — `grep`/`re.search` the image for `+FW_VERSION: ` and compare, or delete
 directory before cutting a package. The same trap applies to any knob a package overrides
 (`I2S_FMT_DEFAULT`, `FALLBACK_FORCE_MODE`, `MAIN_CHANNEL_ALLOW_96K`).
 
+**Build a one-off `-D` in its own directory, never the preset's.** The `build/lat-*` trees are
+the house pattern: a separate directory per `FALLBACK_FORCE_MODE` arm, so the preset's own tree
+keeps building the shipping configuration. Overriding in place leaves the directory configured
+as the last arm, and the next person to run `cmake --build build/<preset>` — an IDE task, a
+VS Code build, anything that skips the configure step — silently gets that arm instead of the
+preset. Building the three u5a5 I2S formats in place did exactly this: the tree was left on
+`I2S_FMT_DEFAULT=2`, and the next rebuild produced an `std` binary under an `rjf` preset name,
+which on an `rjf` rig is constant crackle and looks nothing like a build-system fault. A plain
+`cmake --preset=<p>` reconfigure does restore the preset's value — the fix is cheap once you
+know; finding out is not.
+
 ## Conventions
 
 - **Comments explain why, not what.** The prevailing style in this tree is a long comment recording
