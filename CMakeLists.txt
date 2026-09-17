@@ -191,7 +191,8 @@ if (NOT BUILD_TESTS)
     # default keeps producing a correct-looking build.
     #
     # Pass it WITHOUT the quotes; they are added here so the value reaches the compiler as a
-    # C string literal. -DFW_VERSION_RELEASE=_rc2_r1 gives "v2.4.1_rc2_r1".
+    # C string literal. -DFW_VERSION_RELEASE=_rc3 gives "v2.4.1_rc3". The suffix is always
+    # "_rcN" -- see fw_version.h for why there is no bare-release or patch spelling.
     if (DEFINED FW_VERSION_RELEASE)
         message("FW_VERSION_RELEASE = ${FW_VERSION_RELEASE}")
         add_compile_definitions(FW_VERSION_RELEASE="${FW_VERSION_RELEASE}")

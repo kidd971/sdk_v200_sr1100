@@ -17,24 +17,28 @@ extern "C" {
 /** @brief SDK line this firmware is built from. */
 #define FW_VERSION_SDK  "v2.4.1"
 
-/** @brief Release-candidate suffix, INCLUDING its separator. Empty for a final release.
+/** @brief Release suffix, INCLUDING its separator. Always "_rcN".
  *
  *  Carries the underscore itself rather than having the separator live in the concatenation
- *  below. A separator that is always present cannot express a final release: the string comes
- *  out "v2.4.1_", with a trailing character that looks like a truncation and would follow the
- *  version into every log and every AT reply.
+ *  below, so the suffix is one value a -D can replace outright without anything having to
+ *  know how it joins to the half in front of it.
  *
- *  So: "_rc2" for a candidate, "" for the release, ".1" for a patch on top of one that has
- *  already shipped. Bump when cutting a package, and keep it equal to the bin/<name>/ suffix
- *  so the banner, the MANIFEST and the folder agree.
+ *  One shape, for every package including the ones that ship -- decided 2026-09-17. It used
+ *  to be a scheme: "_rcN" while a package was a candidate, "" once it shipped, ".1" for a
+ *  patch on top of something already out. Three spellings of one line meant a version string
+ *  had to be interpreted before it could be compared, and the spelling that mattered most --
+ *  the bare release -- was the one that read as a field gone missing. So the number just
+ *  keeps counting: bump N when cutting a package, whatever the package is for, and keep the
+ *  value equal to the bin/<name>/ suffix so the banner, the MANIFEST and the folder agree.
  *
- *  The candidate number is not zero-padded -- "_rc2", not "_rc02" -- so it stays the number
- *  it is and widens on its own at "_rc10". The v2.4.0 line used the padded spelling; a line
- *  that has already shipped keeps whatever it shipped as, so the two forms coexist in the
- *  tags and in the older notes. Everything from v2.4.1 on is unpadded.
+ *  The number is not zero-padded -- "_rc2", not "_rc02" -- so it stays the number it is and
+ *  widens on its own at "_rc10". The v2.4.0 line used the padded spelling; a line that has
+ *  already shipped keeps whatever it shipped as, so the two forms coexist in the tags and in
+ *  the older notes. Everything from v2.4.1 on is unpadded.
  *
- *  Overridable per build (-DFW_VERSION_RELEASE=\"_rc3\") so a preset can stamp it without
- *  editing this file.
+ *  Overridable per build so a preset can stamp it without editing this file. Pass it through
+ *  CMake WITHOUT quotes -- -DFW_VERSION_RELEASE=_rc3 -- because the forward in the root
+ *  CMakeLists.txt adds them; quoting it there lands two sets of quotes on the compiler line.
  */
 #ifndef FW_VERSION_RELEASE
 #define FW_VERSION_RELEASE  "_rc2"
