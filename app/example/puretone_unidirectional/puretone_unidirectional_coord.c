@@ -369,6 +369,7 @@ static void at_start_disconnect(void);
 static void at_start_shutdown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
+static uint8_t at_get_fb_rung(void);
 static void at_cmd_tx(uint8_t cmd_type, uint8_t value);
 
 
@@ -399,6 +400,7 @@ int main(void)
     at_cmd_core_register_shutdown_cb(at_start_shutdown);
     at_cmd_core_register_link_status_cb(at_get_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
+    at_cmd_core_register_fb_rung_cb(at_get_fb_rung);
     at_cmd_core_register_cmd_tx_cb(at_cmd_tx);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
     at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
@@ -1076,6 +1078,11 @@ static void app_audio_core_init(void)
     sac_fallback_instance.is_tx_device = true;
     sac_fallback_instance.get_tick = facade_get_tick_ms;
     sac_fallback_instance.tick_frequency_hz = 1000;
+    /* Report the rung as it changes instead of letting the AT layer poll for it. The whole
+     * warning this link can give a host is a couple of hundred milliseconds (see
+     * AT_UWB_QUALITY_WEAK_RUNG), and a polling interval would be most of it. This fires from
+     * the ladder itself; the notify only marks state dirty. */
+    sac_fallback_instance.fallback_state_change_callback = at_cmd_core_notify_fb_rung_change;
     sac_fallback_processing = sac_processing_stage_init(&sac_fallback_instance, "Main channel fallback TX",
                                                         fallback_iface, &sac_status);
     ASSERT_SAC_STATUS(sac_status);
@@ -2401,6 +2408,31 @@ static int32_t at_get_link_margin(void)
     }
 
     return (int32_t)s_peer_link_margin;
+}
+
+/** @brief The rung this side is currently sending at.
+ *
+ *  This is the only quality input the coordinator has, and it is deliberately not paired with
+ *  a dropout count: the gaps happen at the node's speaker, and this side cannot hear them. So
+ *  a coordinator's LE_UWB_QUALITY is a statement about how much headroom the ladder has left,
+ *  never about what anyone heard, and it will not report CRITICAL for a dropout the way the
+ *  node does. MD/uwb_quality_indicator_decision_spec.md 3.4 has the reasoning and what it
+ *  would take to change it.
+ *
+ *  Returns 0 rather than asserting when there is nothing to ask; see the node's copy.
+ */
+static uint8_t at_get_fb_rung(void)
+{
+    sac_status_t sac_status = SAC_OK;
+    uint8_t rung;
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return 0;
+    }
+
+    rung = sac_fallback_get_current_mode(&sac_fallback_instance, &sac_status);
+
+    return (sac_status == SAC_OK) ? rung : 0;
 }
 
 /** @brief AT+PLAY / STOP / NEXT_TRACK / PRE_TRACK -- forward a media key to the node.

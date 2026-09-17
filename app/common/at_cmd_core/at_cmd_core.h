@@ -82,14 +82,67 @@ typedef enum {
  */
 #define AT_UWB_DISCONNECT_DEBOUNCE_MS  400
 
-/** @brief Link margin threshold (dB) below which +EVENT: LE_UWB_QUALITY:WEAK is sent. */
-#define AT_UWB_LINK_QUALITY_WEAK_THRESHOLD_DB   5
+/** @brief Fallback rung at which the link is reported WEAK, and at which it is reported CRITICAL.
+ *
+ *  The quality report is driven by the fallback rung, not by link margin, and the reason is
+ *  measured rather than preferred. Range on v240 is 32.9 m unobstructed against 3.5 m blocked
+ *  -- a 19.5 dB step -- so inside the 5x5 m room the PRD specifies, distance never takes the
+ *  link down and blocking always does, in one step. There is no gradual slope for a margin
+ *  threshold to sit on: the margin reads near its ceiling everywhere in the usable envelope
+ *  and then the link is gone. The rung is the only quantity that moves in between, because
+ *  the ladder descends on the coordinator's transmit queue backing up, which happens before
+ *  the node misses its first packet.
+ *
+ *  WEAK at rung 2 and CRITICAL at rung 3 rather than one rung later each: with 33 m of
+ *  unobstructed reach, any descent indoors is already evidence of an obstruction rather than
+ *  of distance, and waiting for the bottom rung means waiting for the step to finish. The
+ *  cost of being early is a Bluetooth path warmed and not used.
+ *
+ *  The ladder can descend one rung per 10 Hz sample, so rung 2 to rung 4 is ~200 ms. That is
+ *  the whole warning budget this product can offer, which is why the host must keep Bluetooth
+ *  ready rather than start preparing it on WEAK. See MD/uwb_quality_indicator_decision_spec.md.
+ */
+#define AT_UWB_QUALITY_WEAK_RUNG      2
+#define AT_UWB_QUALITY_CRITICAL_RUNG  3
 
-/** @brief Link margin threshold (dB) above which the WEAK state clears (hysteresis). */
-#define AT_UWB_LINK_QUALITY_GOOD_THRESHOLD_DB   10
+/** @brief Interval (ms) between quality evaluations while connected.
+ *
+ *  The rung itself does not wait for this -- a rung change is reported through
+ *  at_cmd_core_notify_fb_rung_change() as it happens. This interval only paces the dropout
+ *  backstop, which counts events per unit time and so needs a window.
+ */
+#define AT_UWB_QUALITY_CHECK_INTERVAL_MS   1000
 
-/** @brief Interval (ms) between link quality polls when connected. */
-#define AT_UWB_LINK_QUALITY_CHECK_INTERVAL_MS   1000
+/** @brief How long after CONNECTED before quality is evaluated at all.
+ *
+ *  Matched to the coordinator's LADDER_SETTLE_MS. A link that has just come up has a transmit
+ *  queue full of warm-up rather than evidence, and the ladder is held for that long on purpose;
+ *  reporting the rung during the hold would report whatever it was before the outage.
+ */
+#define AT_UWB_QUALITY_SETTLE_MS   2000
+
+/** @brief How long an improvement must hold before it is reported, per level.
+ *
+ *  Deliberately asymmetric with the immediate report of a degradation. Going down costs the
+ *  host one source switch; coming back up too eagerly costs it another one straight after,
+ *  and the bottom of the ladder is known to oscillate (see FALLBACK_PIN_AT_BOTTOM in
+ *  sac_cfg.h). One level per window, so a recovery from CRITICAL to GOOD takes two.
+ */
+#define AT_UWB_QUALITY_RECOVER_MS  5000
+
+/** @brief Link quality reported by AT+CONN_QUALITY? and +EVENT: LE_UWB_QUALITY.
+ *
+ *  Ordered worst-last on purpose: the state machine compares these to decide whether a new
+ *  reading is a degradation (report at once) or an improvement (make it hold first), and
+ *  steps one level at a time when recovering.
+ */
+typedef enum {
+    AT_LINK_QUALITY_UNKNOWN  = 0, /*!< Not connected, or inside the post-connect settle window.
+                                   *   Reported as N/A; no event is sent for it. */
+    AT_LINK_QUALITY_GOOD     = 1, /*!< Rung 0-1. Nothing to do. */
+    AT_LINK_QUALITY_WEAK     = 2, /*!< Rung 2. Bluetooth should already be ready to sound. */
+    AT_LINK_QUALITY_CRITICAL = 3, /*!< Rung 3+, or audio has dropped out. Switch. */
+} at_link_quality_t;
 
 /** @brief Device role codes reported by AT+LE_UWB_GET_ROLE?. */
 typedef enum {
@@ -430,6 +483,52 @@ void at_cmd_core_register_i2s_mux_cb(void (*cb)(bool use_ext));
  * @param[in] cb  Function returning link margin in dB. May be NULL to unregister.
  */
 void at_cmd_core_register_link_margin_cb(int32_t (*cb)(void));
+
+/**
+ * @brief Register a getter for the current audio fallback rung.
+ *
+ * Drives +EVENT: LE_UWB_QUALITY and AT+CONN_QUALITY?. The callback should return
+ * sac_fallback_get_current_mode() for the application's main-channel fallback instance, and
+ * must be safe to call at any time -- including before the audio core exists, where it should
+ * return 0 rather than reach into an uninitialised instance.
+ *
+ * Both roles register this. The coordinator owns the ladder; the node mirrors it from the
+ * received packet header, which is a rung behind only for as long as no packet arrives.
+ *
+ * @param[in] cb  Function returning the current rung index. May be NULL to unregister.
+ */
+void at_cmd_core_register_fb_rung_cb(uint8_t (*cb)(void));
+
+/**
+ * @brief Register a getter for the cumulative audio dropout count.
+ *
+ * The backstop under the rung: any increase means the listener has already heard a gap, so
+ * the report goes to CRITICAL whatever the rung says. The callback should return the
+ * consumer buffer underflow count of the pipeline that feeds the output -- on this product
+ * the one carrying the mute-on-underflow stage, since that is the count that turns into
+ * audible silence. Free-running; this module differences it.
+ *
+ * Only the receiving side can register this. The coordinator has no consumer and therefore no
+ * backstop, which is why its report is a statement about the ladder rather than about what
+ * anyone heard.
+ *
+ * @param[in] cb  Function returning a cumulative dropout count. May be NULL to unregister.
+ */
+void at_cmd_core_register_dropout_count_cb(uint32_t (*cb)(void));
+
+/**
+ * @brief Report that the fallback rung has changed.
+ *
+ * Wire this to sac_fallback_instance_t::fallback_state_change_callback so a rung change is
+ * acted on when it happens instead of at the next poll. On a link whose entire warning budget
+ * is a couple of hundred milliseconds, a polling interval is most of it.
+ *
+ * Runs in the audio processing context, so it only marks the state dirty; the event is emitted
+ * from at_cmd_core_process() like every other one.
+ *
+ * @param[in] rung  The rung just switched to. Recorded for the next evaluation.
+ */
+void at_cmd_core_notify_fb_rung_change(uint8_t rung);
 
 /**
  * @brief Register a callback invoked when an AT command requires sending a

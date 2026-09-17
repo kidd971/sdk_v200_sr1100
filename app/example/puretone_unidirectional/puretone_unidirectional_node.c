@@ -317,6 +317,8 @@ static void at_start_disconnect(void);
 static void at_start_shutdown(void);
 static bool at_get_link_status(void);
 static int32_t at_get_link_margin(void);
+static uint8_t at_get_fb_rung(void);
+static uint32_t at_get_dropout_count(void);
 static void at_set_vol(uint8_t vol);
 
 static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_error_t *swc_err);
@@ -345,6 +347,8 @@ int main(void)
     at_cmd_core_register_shutdown_cb(at_start_shutdown);
     at_cmd_core_register_link_status_cb(at_get_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
+    at_cmd_core_register_fb_rung_cb(at_get_fb_rung);
+    at_cmd_core_register_dropout_count_cb(at_get_dropout_count);
     at_cmd_core_register_vol_cb(at_set_vol);
     at_cmd_core_register_i2s_mux_cb(facade_set_i2s_mux);
     at_cmd_core_notify_build(AT_CMD_CORE_BUILD_ID);
@@ -1070,6 +1074,11 @@ static void app_audio_core_init(void)
 
     main_channel_fallback_instance.connection = rx_audio_conn;
     main_channel_fallback_instance.is_tx_device = false;
+    /* Report the rung as it changes instead of letting the AT layer poll for it. The whole
+     * warning this link can give a host is a couple of hundred milliseconds (see
+     * AT_UWB_QUALITY_WEAK_RUNG), and a polling interval would be most of it. This fires in the
+     * audio processing context; the notify only marks state dirty. */
+    main_channel_fallback_instance.fallback_state_change_callback = at_cmd_core_notify_fb_rung_change;
     main_channel_fallback_processing = sac_processing_stage_init(&main_channel_fallback_instance,
                                                                  "Main channel fallback RX", fallback_iface,
                                                                  &sac_status);
@@ -2138,6 +2147,55 @@ static int32_t at_get_link_margin(void)
     ASSERT_SWC_STATUS(swc_err);
 
     return (int32_t)info.link_margin;
+}
+
+/** @brief The rung the coordinator is currently sending at.
+ *
+ *  Mirrored rather than decided: this side's fallback instance follows the mode carried in the
+ *  received header, so this is the coordinator's judgement arriving one packet late. Which is
+ *  as early as it can be known here, and earlier than any measurement this side could make --
+ *  the ladder moves on the coordinator's transmit queue, before a packet goes missing.
+ *
+ *  Returns 0 rather than asserting when there is nothing to ask. This is a status query, and a
+ *  status query that halts the firmware is worse than one that says "top rung".
+ */
+static uint8_t at_get_fb_rung(void)
+{
+    sac_status_t sac_status = SAC_OK;
+    uint8_t rung;
+
+    if (device_pairing_state != DEVICE_PAIRED) {
+        return 0;
+    }
+
+    rung = sac_fallback_get_current_mode(&main_channel_fallback_instance, &sac_status);
+
+    return (sac_status == SAC_OK) ? rung : 0;
+}
+
+/** @brief How many times the output has run dry -- free running, the AT layer differences it.
+ *
+ *  The accumulator pipeline, not the main one: its consumer is the codec, and it is the one
+ *  carrying the mute-on-underflow stage. That stage watches this same counter and mutes for
+ *  30 ms on every increment, so one count here is one audible gap, which is what makes it
+ *  worth reporting at all.
+ *
+ *  Zero while the pipeline is gone. That only happens after unpairing has torn the audio core
+ *  down, by which point the link is not CONNECTED and the AT layer has already discarded its
+ *  baseline -- so the step back down to zero is never read as a change.
+ */
+static uint32_t at_get_dropout_count(void)
+{
+    sac_status_t sac_status = SAC_OK;
+    uint32_t count;
+
+    if (main_channel_accumulator_pipeline == NULL) {
+        return 0;
+    }
+
+    count = sac_pipeline_get_consumer_buffer_underflow_count(main_channel_accumulator_pipeline, &sac_status);
+
+    return (sac_status == SAC_OK) ? count : 0;
 }
 
 /** @brief AT+VOL -- set the output level, 0..100.

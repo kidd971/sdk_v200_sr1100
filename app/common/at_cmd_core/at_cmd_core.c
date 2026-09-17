@@ -23,6 +23,7 @@ static bool handler_uwb_pair(const char *args, char *resp, uint16_t resp_size);
 static bool handler_fw_version(const char *args, char *resp, uint16_t resp_size);
 static bool handler_module_reset(const char *args, char *resp, uint16_t resp_size);
 static bool handler_conn_lm(const char *args, char *resp, uint16_t resp_size);
+static bool handler_conn_quality(const char *args, char *resp, uint16_t resp_size);
 static bool handler_i2s_mux(const char *args, char *resp, uint16_t resp_size);
 static bool handler_uwb_connect(const char *args, char *resp, uint16_t resp_size);
 static bool handler_uwb_disconnect(const char *args, char *resp, uint16_t resp_size);
@@ -62,8 +63,22 @@ static bool                 s_pair_requested        = false;
 static bool                 s_reset_requested       = false;
 static bool                 s_connect_requested    = false;
 static uint32_t             s_connect_start_tick   = 0;
-static bool                 s_link_quality_weak    = false;
-static uint32_t             s_link_quality_last_check_tick = 0;
+/* **** Link quality ****
+ *
+ * s_fb_rung_dirty is written from the audio processing context by
+ * at_cmd_core_notify_fb_rung_change() and cleared here, hence volatile. Everything else is
+ * touched only from at_cmd_core_process().
+ */
+static uint8_t            (*s_fb_rung_cb)(void)       = NULL;
+static uint32_t           (*s_dropout_count_cb)(void) = NULL;
+static at_link_quality_t    s_link_quality         = AT_LINK_QUALITY_UNKNOWN;
+static volatile bool        s_fb_rung_dirty        = false;
+static uint32_t             s_quality_check_tick   = 0;
+static uint32_t             s_quality_settle_tick  = 0;
+static uint32_t             s_quality_recover_tick = 0;
+static bool                 s_quality_recover_valid = false;
+static uint32_t             s_dropout_count_last   = 0;
+static bool                 s_dropout_count_valid  = false;
 /* Down-edge debounce for the link status poll; see AT_UWB_DISCONNECT_DEBOUNCE_MS. */
 static bool                 s_link_down_pending    = false;
 static uint32_t             s_link_down_since_tick = 0;
@@ -138,6 +153,7 @@ void at_cmd_core_init(void)
     at_server_register("LE_UWB_PAIR",        handler_uwb_pair);
     at_server_register("FW_VERSION",      handler_fw_version);
     at_server_register("CONN_LM",         handler_conn_lm);
+    at_server_register("CONN_QUALITY",    handler_conn_quality);
     at_server_register("I2S_MUX",         handler_i2s_mux);
     at_server_register("LE_UWB_CONNECT",     handler_uwb_connect);
     at_server_register("LE_UWB_DISCONNECT",  handler_uwb_disconnect);
@@ -169,6 +185,22 @@ void at_cmd_core_register_link_status_cb(bool (*cb)(void))
 void at_cmd_core_register_link_margin_cb(int32_t (*cb)(void))
 {
     s_link_margin_cb = cb;
+}
+
+void at_cmd_core_register_fb_rung_cb(uint8_t (*cb)(void))
+{
+    s_fb_rung_cb = cb;
+}
+
+void at_cmd_core_register_dropout_count_cb(uint32_t (*cb)(void))
+{
+    s_dropout_count_cb = cb;
+}
+
+void at_cmd_core_notify_fb_rung_change(uint8_t rung)
+{
+    (void)rung; /* The evaluation reads the rung itself; this only says "look now". */
+    s_fb_rung_dirty = true;
 }
 
 void at_cmd_core_register_i2s_mux_cb(void (*cb)(bool use_ext))
@@ -526,6 +558,118 @@ void at_cmd_core_set_device_role(at_device_role_t role)
     s_device_role = role;
 }
 
+/** @brief Name for a quality level, as the event and AT+CONN_QUALITY? spell it. */
+static const char *quality_name(at_link_quality_t quality)
+{
+    switch (quality) {
+    case AT_LINK_QUALITY_GOOD:
+        return "GOOD";
+    case AT_LINK_QUALITY_WEAK:
+        return "WEAK";
+    case AT_LINK_QUALITY_CRITICAL:
+        return "CRITICAL";
+    default:
+        return "N/A";
+    }
+}
+
+/** @brief Start the settle window; nothing is reported until it expires.
+ *
+ *  Called on every up edge, including the one that ends a brief outage. See
+ *  AT_UWB_QUALITY_SETTLE_MS for why the rung is not readable before then.
+ */
+static void quality_on_link_up(void)
+{
+    s_quality_settle_tick = facade_get_tick_ms();
+    s_link_quality = AT_LINK_QUALITY_UNKNOWN;
+    s_quality_recover_valid = false;
+    /* The peer that comes back may be a different one, or the same one restarted. Either way
+     * its dropout counter is not a continuation of the one being differenced here. */
+    s_dropout_count_valid = false;
+}
+
+/** @brief Forget the quality state; a link that is down has no quality to report. */
+static void quality_on_link_down(void)
+{
+    s_link_quality = AT_LINK_QUALITY_UNKNOWN;
+    s_quality_recover_valid = false;
+    s_dropout_count_valid = false;
+    s_fb_rung_dirty = false;
+}
+
+/** @brief Read both inputs and return what they say right now, before any debouncing.
+ *
+ *  Worse of the two, not an average: they answer different questions -- the rung says how
+ *  much headroom is left, the dropout count says whether any has already been spent -- and a
+ *  reading that is fine on one and bad on the other is exactly the case worth reporting.
+ */
+static at_link_quality_t quality_evaluate(void)
+{
+    at_link_quality_t quality = AT_LINK_QUALITY_GOOD;
+
+    if (s_fb_rung_cb != NULL) {
+        uint8_t rung = s_fb_rung_cb();
+
+        if (rung >= AT_UWB_QUALITY_CRITICAL_RUNG) {
+            quality = AT_LINK_QUALITY_CRITICAL;
+        } else if (rung >= AT_UWB_QUALITY_WEAK_RUNG) {
+            quality = AT_LINK_QUALITY_WEAK;
+        }
+    }
+
+    /* The backstop. Registered only on the side that has an output to lose (see the header),
+     * so a NULL here is the coordinator rather than a missing wire-up. */
+    if (s_dropout_count_cb != NULL) {
+        uint32_t count = s_dropout_count_cb();
+
+        /* The first reading after a link comes up establishes the baseline and nothing else:
+         * the counter is free-running and whatever it accumulated before does not belong to
+         * this link. */
+        if (s_dropout_count_valid && (count != s_dropout_count_last)) {
+            quality = AT_LINK_QUALITY_CRITICAL;
+        }
+        s_dropout_count_last = count;
+        s_dropout_count_valid = true;
+    }
+
+    return quality;
+}
+
+/** @brief Apply a new reading to the reported state, and emit the event if it moved.
+ *
+ *  Degradations are reported the instant they are read; improvements have to hold for
+ *  AT_UWB_QUALITY_RECOVER_MS and move one level at a time. The asymmetry is the whole point --
+ *  see the constant.
+ */
+static void quality_apply(at_link_quality_t reading, uint32_t now)
+{
+    char event[48];
+
+    if (reading > s_link_quality) {
+        /* Includes the first reading after the settle window, where the state is UNKNOWN and
+         * anything is an increase: the host hears the starting level rather than silence. */
+        s_link_quality = reading;
+        s_quality_recover_valid = false;
+    } else if (reading < s_link_quality) {
+        if (!s_quality_recover_valid) {
+            s_quality_recover_tick = now;
+            s_quality_recover_valid = true;
+            return;
+        }
+        if ((now - s_quality_recover_tick) < AT_UWB_QUALITY_RECOVER_MS) {
+            return;
+        }
+        s_link_quality--;
+        s_quality_recover_tick = now;
+    } else {
+        s_quality_recover_valid = false;
+        return;
+    }
+
+    snprintf(event, sizeof(event), "+EVENT: LE_UWB_QUALITY:%s\r\n", quality_name(s_link_quality));
+    facade_expansion_uart_write(event);
+}
+
 void at_cmd_core_process(void)
 {
     at_module_process();
@@ -600,6 +744,7 @@ void at_cmd_core_process(void)
     if (s_uwb_conn_status == AT_UWB_CONN_STATUS_CONNECTING) {
         if (s_link_status_cb()) {
             s_uwb_conn_status = AT_UWB_CONN_STATUS_CONNECTED;
+            quality_on_link_up();
             facade_expansion_uart_write("+EVENT: LE_UWB_CONNECTED\r\n");
         } else if (facade_get_tick_ms() - s_connect_start_tick >= AT_UWB_CONNECT_TIMEOUT_MS) {
             s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
@@ -620,6 +765,7 @@ void at_cmd_core_process(void)
         s_link_down_pending = false;
         if (s_uwb_conn_status != AT_UWB_CONN_STATUS_CONNECTED) {
             s_uwb_conn_status = AT_UWB_CONN_STATUS_CONNECTED;
+            quality_on_link_up();
             facade_expansion_uart_write("+EVENT: LE_UWB_CONNECTED\r\n");
         }
     } else if (s_uwb_conn_status == AT_UWB_CONN_STATUS_CONNECTED) {
@@ -631,23 +777,29 @@ void at_cmd_core_process(void)
         } else if ((down_now - s_link_down_since_tick) >= AT_UWB_DISCONNECT_DEBOUNCE_MS) {
             s_link_down_pending = false;
             s_uwb_conn_status = AT_UWB_CONN_STATUS_STANDBY;
-            s_link_quality_weak = false; /* reset on disconnect so WEAK can fire again */
+            quality_on_link_down();
             facade_expansion_uart_write("+EVENT: LE_UWB_DISCONNECTED\r\n");
         }
     }
 
-    /* Link quality monitor: poll link margin periodically and notify on threshold crossing. */
-    if (s_uwb_conn_status == AT_UWB_CONN_STATUS_CONNECTED && s_link_margin_cb != NULL) {
+    /* Link quality: worse of the fallback rung and the dropout backstop, reported on change.
+     *
+     * Evaluated when the rung moves (marked dirty from the audio context) or once an interval,
+     * whichever comes first. The rung path is what gives the host its warning, and on this link
+     * the whole warning is a couple of hundred milliseconds, so it must not wait for the
+     * interval; the interval is there for the dropout count, which needs a window to be a rate.
+     */
+    if ((s_uwb_conn_status == AT_UWB_CONN_STATUS_CONNECTED) &&
+        ((s_fb_rung_cb != NULL) || (s_dropout_count_cb != NULL))) {
         uint32_t now = facade_get_tick_ms();
-        if (now - s_link_quality_last_check_tick >= AT_UWB_LINK_QUALITY_CHECK_INTERVAL_MS) {
-            s_link_quality_last_check_tick = now;
-            int32_t margin = s_link_margin_cb();
-            if (!s_link_quality_weak && margin < AT_UWB_LINK_QUALITY_WEAK_THRESHOLD_DB) {
-                s_link_quality_weak = true;
-                facade_expansion_uart_write("+EVENT: LE_UWB_QUALITY:WEAK\r\n");
-            } else if (s_link_quality_weak && margin >= AT_UWB_LINK_QUALITY_GOOD_THRESHOLD_DB) {
-                s_link_quality_weak = false;
-                facade_expansion_uart_write("+EVENT: LE_UWB_QUALITY:GOOD\r\n");
+
+        if ((now - s_quality_settle_tick) >= AT_UWB_QUALITY_SETTLE_MS) {
+            bool rung_moved = s_fb_rung_dirty;
+
+            if (rung_moved || ((now - s_quality_check_tick) >= AT_UWB_QUALITY_CHECK_INTERVAL_MS)) {
+                s_fb_rung_dirty = false;
+                s_quality_check_tick = now;
+                quality_apply(quality_evaluate(), now);
             }
         }
     }
@@ -742,6 +894,19 @@ static bool handler_module_reset(const char *args, char *resp, uint16_t resp_siz
     (void)args;
     s_reset_requested = true;
     snprintf(resp, resp_size, "OK");
+    return true;
+}
+
+/** @brief AT+CONN_QUALITY? — report the link quality the events also report.
+ *
+ *  Same variable the event is emitted from, so a host that missed an event and polls instead
+ *  cannot be told something different from what was sent. N/A while disconnected or inside the
+ *  settle window, which is honest: neither input means anything yet.
+ */
+static bool handler_conn_quality(const char *args, char *resp, uint16_t resp_size)
+{
+    (void)args;
+    snprintf(resp, resp_size, "+CONN_QUALITY: %s", quality_name(s_link_quality));
     return true;
 }
 
@@ -1103,6 +1268,7 @@ static bool handler_help(const char *args, char *resp, uint16_t resp_size)
         "  AT+FW_VERSION?\r\n",
         "  AT+MODULE_INFO?\r\n",
         "  AT+LE_UWB_CONN_STATUS? (0=STANDBY, 1=PAIRING, 2=CONNECTED, 3=CONNECTING)\r\n",
+        "  AT+CONN_QUALITY? (GOOD, WEAK, CRITICAL, N/A)\r\n",
         "  AT+LE_UWB_PAIR\r\n",
         "  AT+MODULE_RESET\r\n",
         //"  AT+CONN_LM? (internal)\r\n",
