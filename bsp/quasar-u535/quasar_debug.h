@@ -42,6 +42,17 @@ void quasar_debug_init(void);
  */
 void quasar_debug_deinit(void);
 
+/** @brief Initialize a single debug IO peripheral, without touching the debug UART.
+ *
+ *  quasar_debug_init() is the all-or-nothing entry point: it brings up every debug IO *and*
+ *  claims the ST-Link UART. Applications that run with quasar_config.debug_enabled = false
+ *  (the puretone apps, which keep that UART free) still need a usable scope pin, and this is
+ *  how they get one without the UART coming along.
+ *
+ *  @param[in] quasar_debug_io_peripheral  Selected debug io peripheral.
+ */
+void quasar_debug_io_init(quasar_debug_io_peripheral_t quasar_debug_io_peripheral);
+
 /** @brief Set debug IO peripheral.
  *
  *  @param[in] quasar_debug_io_peripheral  Selected debug io peripheral.

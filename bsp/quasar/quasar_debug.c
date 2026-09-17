@@ -14,7 +14,6 @@
 #include "quasar_uart.h"
 
 /* PRIVATE FUNCTION PROTOTYPES ************************************************/
-static void debug_io_init(quasar_debug_io_peripheral_t quasar_debug_io_peripheral);
 static void debug_io_deinit(quasar_debug_io_peripheral_t quasar_debug_io_peripheral);
 static void debug_uart_init(void);
 static void debug_uart_deinit(void);
@@ -24,11 +23,11 @@ static quasar_uart_config_t debug_uart_get_default_config(void);
 /* PUBLIC FUNCTIONS ***********************************************************/
 void quasar_debug_init(void)
 {
-    debug_io_init(QUASAR_DEBUG_IO_1);
-    debug_io_init(QUASAR_DEBUG_IO_2);
-    debug_io_init(QUASAR_DEBUG_IO_3);
-    debug_io_init(QUASAR_DEBUG_IO_4);
-    debug_io_init(QUASAR_DEBUG_IO_5);
+    quasar_debug_io_init(QUASAR_DEBUG_IO_1);
+    quasar_debug_io_init(QUASAR_DEBUG_IO_2);
+    quasar_debug_io_init(QUASAR_DEBUG_IO_3);
+    quasar_debug_io_init(QUASAR_DEBUG_IO_4);
+    quasar_debug_io_init(QUASAR_DEBUG_IO_5);
     debug_uart_init();
 }
 
@@ -40,6 +39,13 @@ void quasar_debug_deinit(void)
     debug_io_deinit(QUASAR_DEBUG_IO_4);
     debug_io_deinit(QUASAR_DEBUG_IO_5);
     debug_uart_deinit();
+}
+
+void quasar_debug_io_init(quasar_debug_io_peripheral_t quasar_debug_io_peripheral)
+{
+    quasar_gpio_config_t debug_config = debug_io_get_default_config(quasar_debug_io_peripheral);
+
+    quasar_gpio_init(debug_config);
 }
 
 void quasar_debug_io_set(quasar_debug_io_peripheral_t quasar_debug_io_peripheral)
@@ -71,17 +77,6 @@ void quasar_debug_uart_transmit_blocking(uint8_t *data, uint16_t size, uint32_t 
 }
 
 /* PRIVATE FUNCTIONS **********************************************************/
-/** @brief Initialize the selected debug io peripheral.
- *
- *  @param[in] quasar_debug_io_peripheral  Selected debug io peripheral.
- */
-static void debug_io_init(quasar_debug_io_peripheral_t quasar_debug_io_peripheral)
-{
-    quasar_gpio_config_t debug_config = debug_io_get_default_config(quasar_debug_io_peripheral);
-
-    quasar_gpio_init(debug_config);
-}
-
 /** @brief Deinitialize the selected debug io peripheral.
  *
  *  @param[in] quasar_debug_io_peripheral  Selected debug io peripheral.
