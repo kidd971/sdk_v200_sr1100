@@ -273,23 +273,6 @@ static uint8_t s_ladder_prev_mode;
 #endif
 static bool s_ladder_prev_valid;
 
-/* Link margin as last reported BY THE NODE. This side transmits the audio, so it has no
- * receive connection to ask -- the only measurement of how well the audio is arriving is
- * taken at the far end and sent back in the data packet. Stored here so AT+CONN_LM can
- * answer without waiting for the next one. */
-static uint8_t s_peer_link_margin;
-
-/* Media key waiting to be sent to the node, an at_cmd_code_t. Edge triggered: set when the
- * command arrives over AT, cleared as it is packed. See the note on cmd_type in
- * puretone_link_data.h for why that is acceptable here and would not be for an alarm. */
-static uint8_t s_pending_cmd;
-
-/* Link margin as last reported BY THE NODE. This side transmits the audio, so it has no
- * receive connection to ask -- the only measurement of how well the audio is arriving is
- * taken at the far end and sent back in the data packet. Stored here so AT+CONN_LM can
- * answer without waiting for the next one. */
-static uint8_t s_peer_link_margin;
-
 /* Media key waiting to be sent to the node, an at_cmd_code_t. Edge triggered: set when the
  * command arrives over AT, cleared as it is packed. See the note on cmd_type in
  * puretone_link_data.h for why that is acceptable here and would not be for an alarm. */
@@ -923,7 +906,6 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
         /* The fallback state is updated. */
         sac_fallback_set_rx_link_margin(&sac_fallback_instance, received_user_data.link_margin, &sac_status);
         ASSERT_SAC_STATUS(sac_status);
-        s_peer_link_margin = received_user_data.link_margin;
 
         /* Vendor pass-through, unconditionally: a packet carrying no command still carries
          * the node's acknowledgement of ours. De-duplication and the +EVENT line happen in
@@ -2395,19 +2377,41 @@ static bool at_get_link_status(void)
     return link_is_up();
 }
 
-/** @brief AT+CONN_LM? -- the link margin, as measured at the node.
+/** @brief AT+CONN_LM? -- link margin in dB, measured here on the data connection.
  *
- *  Zero when unpaired, which is also the value a node that has not reported yet leaves here.
- *  Both mean "no measurement", which is the honest answer; a stale reading would look like a
- *  live one.
+ *  Measured locally now, where it used to be whatever the node last reported. Two things were
+ *  wrong with the report: it was a raw transceiver code being printed with a "dB" suffix, and
+ *  it stopped updating the moment the node did -- so the coordinator answered most confidently
+ *  exactly when it knew least.
+ *
+ *  The direction is the honest catch, and it is the reverse one: this is the margin of the
+ *  node's packets arriving here, not of the audio going out. It is a proxy for the path rather
+ *  than a measurement of the audio link. A dB figure for the forward direction would have to
+ *  come from the node, which means a new user_data_t field and both ends reflashed; see
+ *  MD/uwb_quality_indicator_decision_spec.md 3.4. The quality report no longer depends on
+ *  either, which is what makes the proxy acceptable here.
+ *
+ *  Block average when the platform fills it, running average otherwise; see the node's copy.
  */
 static int32_t at_get_link_margin(void)
 {
+    swc_error_t swc_err = SWC_ERR_NONE;
+    swc_statistics_t *stats = NULL;
+    uint32_t tenth_db;
+
     if (device_pairing_state != DEVICE_PAIRED) {
         return 0;
     }
 
-    return (int32_t)s_peer_link_margin;
+    stats = swc_connection_update_stats(rx_data_conn, &swc_err);
+    if ((stats == NULL) || (swc_err != SWC_ERR_NONE)) {
+        return 0;
+    }
+
+    tenth_db = (stats->link_margin_block_avg_tenth_db != 0) ? stats->link_margin_block_avg_tenth_db
+                                                            : stats->link_margin_avg;
+
+    return (int32_t)(tenth_db / 10);
 }
 
 /** @brief The rung this side is currently sending at.

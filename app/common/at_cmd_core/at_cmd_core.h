@@ -475,10 +475,13 @@ void at_cmd_core_register_i2s_mux_cb(void (*cb)(bool use_ext));
 /**
  * @brief Register a link margin getter polled by AT+CONN_LM?.
  *
- * The callback should call swc_connection_update_stats() on the application's
- * primary RX connection and return the link margin in whole dB
- * (i.e. stats->link_margin_avg / 10, cast to int32_t).
+ * The callback should call swc_connection_update_stats() on a connection that receives
+ * unconditionally -- the data connection, not the audio one, whose margin goes to zero
+ * whenever the source pauses -- and return whole dB (the stats are in tenths).
  * Set to NULL to unregister (e.g. on unpair); the command then returns N/A.
+ *
+ * Diagnostic only. The quality report deliberately does not read this: see
+ * at_cmd_core_register_fb_rung_cb() and MD/uwb_quality_indicator_decision_spec.md.
  *
  * @param[in] cb  Function returning link margin in dB. May be NULL to unregister.
  */

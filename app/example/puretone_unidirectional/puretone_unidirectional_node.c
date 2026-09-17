@@ -2129,24 +2129,41 @@ static bool at_get_link_status(void)
     return link_is_up();
 }
 
-/** @brief AT+CONN_LM? -- the link margin of the audio this side is receiving.
+/** @brief AT+CONN_LM? -- link margin in dB, measured on the data connection.
  *
- *  Measured locally, unlike on the coordinator: this is the receiving end, so the figure
- *  comes from the audio connection directly rather than from a report by the peer.
+ *  The data connection rather than the audio one, for the same reason the heartbeat uses it:
+ *  it carries a packet every DATA_TX_PERIOD_MS whatever else is happening, so the figure is
+ *  live even with nothing playing. The audio connection's margin went to zero whenever the
+ *  source paused, which is how AT+CONN_LM? came to answer 0 at half a metre.
+ *
+ *  Real dB, unlike what this used to return. swc_fallback_info_t::link_margin is a raw
+ *  transceiver code -- around 200 close in -- and reporting it with a "dB" suffix invited
+ *  exactly the reading it got. stats::link_margin_avg is documented in tenths of a dB.
+ *
+ *  Block average when the platform fills it, running average otherwise: same quantity and
+ *  same unit either way, the block one just follows the room instead of everything since the
+ *  link came up. If this number does not move when the boards do, the fallback is what is
+ *  being reported.
  */
 static int32_t at_get_link_margin(void)
 {
     swc_error_t swc_err = SWC_ERR_NONE;
-    swc_fallback_info_t info;
+    swc_statistics_t *stats = NULL;
+    uint32_t tenth_db;
 
     if (device_pairing_state != DEVICE_PAIRED) {
         return 0;
     }
 
-    info = swc_connection_get_fallback_info(rx_audio_conn, &swc_err);
-    ASSERT_SWC_STATUS(swc_err);
+    stats = swc_connection_update_stats(rx_data_conn, &swc_err);
+    if ((stats == NULL) || (swc_err != SWC_ERR_NONE)) {
+        return 0;
+    }
 
-    return (int32_t)info.link_margin;
+    tenth_db = (stats->link_margin_block_avg_tenth_db != 0) ? stats->link_margin_block_avg_tenth_db
+                                                            : stats->link_margin_avg;
+
+    return (int32_t)(tenth_db / 10);
 }
 
 /** @brief The rung the coordinator is currently sending at.
