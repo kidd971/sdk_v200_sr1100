@@ -13,7 +13,7 @@
 
 ## 1. AT 指令
 
-以下是**程式碼實際註冊的全部 21 個**。與 PRD 有出入時以這裡為準。
+以下是**程式碼實際註冊的全部 22 個**。與 PRD 有出入時以這裡為準。
 
 | 指令 | 回應 |
 |---|---|
@@ -34,6 +34,7 @@
 | `AT+PLAY` / `AT+STOP` / `AT+NEXT_TRACK` / `AT+PRE_TRACK` | `OK`，見 §7 的重要注意 |
 | `AT+BATTERY?` | `+BATTERY: <0-100>` |
 | `AT+CONN_LM?` | `+CONN_LM: <n>dB` 或 `+CONN_LM: N/A` |
+| `AT+CONN_QUALITY?` | `+CONN_QUALITY: GOOD` / `WEAK` / `CRITICAL` / `N/A`，見 §2 |
 | `AT+I2S_MUX` | `+I2S_MUX: <sel>`，板內 codec 選擇 |
 
 **`AT+CONN_LM?` 兩端意義不同**（PRD 未收錄，依決定不收）：
@@ -77,13 +78,31 @@ HS 直接量自己收到的音訊連線；**DG 是發送端，回的是 HS 最�
 ### 鏈路品質
 
 ```
-+EVENT: LE_UWB_QUALITY:WEAK
 +EVENT: LE_UWB_QUALITY:GOOD
++EVENT: LE_UWB_QUALITY:WEAK
++EVENT: LE_UWB_QUALITY:CRITICAL
 ```
 
-**只在 CONNECTED 狀態下每 1000 ms 檢查一次，而且有遲滯**：
-margin **< 5 dB** 才送 WEAK，要回到 **≥ 10 dB** 才送 GOOD。
-所以 5–10 dB 之間不會來回抖動，也不會每秒重送同一個狀態 —— **只在跨越時送一次**。
+**判準是 fallback 階數，不是 link margin**（v2.4.1_rc2 起；舊版用 5/10 dB 門檻，
+在 0.5 m 也會報 WEAK，因為它比較的是原始碼值不是 dB）。對應關係：
+
+| 階 | 音訊格式 | 事件 | SoC 該做什麼 |
+|---|---|---|---|
+| 0–1 | 96k/48k 24-bit | `GOOD` | 維持 UWB |
+| 2 | 48k 16-bit | `WEAK` | 藍芽**必須已經可以出聲** |
+| 3–4 | ADPCM | `CRITICAL` | 切藍芽 |
+
+**HS 另有保底**：只要輸出真的斷了一次（consumer underflow，每次 30 ms 靜音），
+不管在第幾階都直接送 `CRITICAL`。DG 沒有這一條 —— 斷音發生在 HS 的喇叭上，
+DG 量不到，所以 **DG 永遠不會送 `CRITICAL`**，它的事件只代表階梯餘裕。
+
+**時序**：只在狀態改變時送，不重送。變壞立刻送；變好要**連續 5 秒**而且**一次只回一階**
+（`CRITICAL`→`WEAK`→`GOOD` 最少 10 秒）。CONNECTED 後 2 秒內不評估也不送，
+那段時間階數還是上一次斷線前的值。
+
+**重要**：從 `WEAK` 到 `CRITICAL` 最快只有約 200 ms（階梯每 10 Hz 取樣才降一階）。
+藍芽不能等收到 `WEAK` 才開始暖機，來不及；必須常態保持隨時可出聲。
+理由與實測見 `MD/uwb_quality_indicator_decision_spec.md`。
 
 ### Vendor pass-through
 

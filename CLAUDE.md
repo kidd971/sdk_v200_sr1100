@@ -234,15 +234,15 @@ does not link, and it looks exactly like the dual-radio failure), the fallback m
 ### The AT command subsystem
 
 Three layers: `library/at_module` (transport + line parser, hardware-agnostic, function-pointer
-UART) ← `app/common/at_cmd_core` (all 21 commands, the link state machine, the *only* emitter of
+UART) ← `app/common/at_cmd_core` (all 22 commands, the link state machine, the *only* emitter of
 `+EVENT:` lines) ← the app, which registers role-specific callbacks. Hardware comes in through
 `at_cmd_core_facade.h` (7 functions).
 
 Registration is a flat 128-slot array with case-insensitive linear lookup (`at_module.c:43`); a
 handler is `bool (*)(const char *args, char *resp, uint16_t resp_size)` where `args` is `""`, `"?"`,
-`"=val"` or `"=?"`. All 21 are registered in one place, `at_cmd_core_init()`.
+`"=val"` or `"=?"`. All 22 are registered in one place, `at_cmd_core_init()`.
 
-**Both roles register the same 21 commands**; what differs is which app callbacks are wired behind
+**Both roles register the same 22 commands**; what differs is which app callbacks are wired behind
 them, so several commands answer `OK` and do nothing on one side (`AT+VOL` on the DG, `AT+PLAY` on
 the HS). That is by design, not a bug to "fix" — check `at_cmd_core_register_*_cb()` call sites in
 `..._coord.c:394` and `..._node.c:340` before concluding a command is broken.
@@ -312,7 +312,7 @@ several have drifted — some describe the `puretone_headset` line, some describ
 later replaced. Where a doc and the code disagree, the code is the fact; fix the doc rather than
 "restoring" the behaviour it describes.
 
-- `unidir_audio_test_readme.md` — the ODM-facing test procedure; the authoritative list of the 21
+- `unidir_audio_test_readme.md` — the ODM-facing test procedure; the authoritative list of the 22
   registered AT commands and every `+EVENT:` line, and it outranks the PRD where they disagree. It
   has nonetheless drifted from the code in places, so confirm details against `at_cmd_core.c`.
 - `console_at_uart_routing.md` — console/AT pin routing for both apps and all board variants.
@@ -320,8 +320,9 @@ later replaced. Where a doc and the code disagree, the code is the fact; fix the
   PRD diverge.
 - `boot_auto_reconnect_design.md`, `pairing_identity_preprovision_spec.md`,
   `uwb_disconnect_decision_spec.md`, `soc_reset_wake_decision_spec.md` — link lifecycle.
-- `uwb_quality_indicator_decision_spec.md` — what `+EVENT: LE_UWB_QUALITY` should measure, and why
-  the shipping implementation's dB thresholds are the wrong quantity. Not yet implemented.
+- `uwb_quality_indicator_decision_spec.md` — why `+EVENT: LE_UWB_QUALITY` is driven by the fallback
+  rung and not by link margin, and the measured range numbers (32.9 m clear, 3.5 m blocked) that
+  make blocking the only failure mode inside the specified room. Implemented in `c057a45`.
 - `link_dropout_arms_ledger.md`, `fallback_mono_rung_rationale.md`, `link_rf_settings_baseline.md`,
   `spark_link_budget_questions.md` — the measurements the ladder constants are set from.
 - `u535_ldo_rx_deficit.md`, `radio_stall_wedge_open_issue.md`, `dualradio_*.md` — open hardware and
