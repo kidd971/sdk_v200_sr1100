@@ -259,28 +259,37 @@ CDC 就是靠它做時鐘補償的。
 
 ### 4.2 CRITICAL 的恢復,以及 `FALLBACK_PIN_AT_BOTTOM`
 
-**決策:最後一階要可恢復,`FALLBACK_PIN_AT_BOTTOM=0`,但由出貨 preset 帶,default 先不動。**
+**決策:最後一階要可恢復,`FALLBACK_PIN_AT_BOTTOM=0`。**
 
-這個開關已經存在([sac_cfg.h:233](../app/example/puretone_unidirectional/config/sac_cfg.h#L233),
-預設 1,已在 [CMakeLists.txt:174](../CMakeLists.txt#L174) forward 過去),不需要新做一個。
+**2026-09-17 修正:改動 default,不再由出貨 preset 帶。**
+原本的折衷是「default 維持 1,出貨 preset 上加 `-DFALLBACK_PIN_AT_BOTTOM=0`」。
+那等於把一個正確性條件寄放在 build 指令上——忘了加不會有任何徵兆,只會得到一顆
+`CRITICAL` 永遠不解除的韌體,而這正是本節要消滅的失效模式。既然下面的論證得出的結論是
+「pin 對這個產品是錯的」,就該寫在 default 裡,而不是每次 build 記得帶。
+
+這個開關已經存在([sac_cfg.h:247](../app/example/puretone_unidirectional/config/sac_cfg.h#L247),
+現預設 0,已在 [CMakeLists.txt:174](../CMakeLists.txt#L174) forward 過去),不需要新做一個。
 
 但它存在的理由正是恢復問題本身。sac_cfg.h 的註解:
 
 > TEMPORARY. Wanted now because a link that has already fallen to 24 kHz tends to climb, fail and
 > fall again, and the oscillation is worse to listen to than the bottom rung is.
 
-- pin=1(現況):踩進最後一階就鎖住,只有 peer 靜默 `NODE_RESTART_SILENCE_MS`(3 s)才釋放
-  ([coord.c:1633](../app/example/puretone_unidirectional/puretone_unidirectional_coord.c#L1633))。
+- pin=1(舊 default):踩進最後一階就鎖住,只有 peer 靜默 `NODE_RESTART_SILENCE_MS`(3 s)才釋放
+  ([coord.c:1578](../app/example/puretone_unidirectional/puretone_unidirectional_coord.c#L1578))。
   訊號變好也不會升回 → **`CRITICAL` 永遠不會解除**,UWB 再也回不來。
-- pin=0:底部 4↔3 震盪回來。
+- pin=0(現況):底部 4↔3 震盪回來。
 
 震盪在新的架構下**不再是聽感問題**:進階 4 就吐 `CRITICAL`、SoC 就切走了,
 之後的震盪發生在一條沒有人在聽的 link 上。它只剩一個影響——`QUALITY` 事件會在
 `CRITICAL`/`WEAK` 之間抖,而那由 §4.1 的「變好要 5 秒」擋掉。
 
 所以去抖動必須做在事件層,不能靠 pin。pin 只是把震盪藏起來,代價是永遠不恢復。
-退場條件照 sac_cfg.h 寫的:等 climbing-and-failing 的根因修掉(u535 上最可能是
-`u535_ldo_rx_deficit.md` 的到達率不足)再改 default,而不是等它不再被注意到。
+
+震盪本身仍然是個未修的問題,只是換了歸屬:它不再由 pin 遮住,而是由 §4.1 的
+`AT_UWB_QUALITY_RECOVER_MS` 擋在事件層。根因照舊要修(u535 上最可能是
+`u535_ldo_rx_deficit.md` 的到達率不足);把 `FALLBACK_PIN_AT_BOTTOM` 設回 1
+現在只剩一個用途——聽感 A/B 比較,不是出貨組態。
 
 ### 4.3 與斷線的關係
 
@@ -400,7 +409,8 @@ PRD 的設計目標是 LOS > 5 m、5×5 m² 室內良好覆蓋,所以 5 m LOS �
       是提前時間的一部分。
 - [ ] `AT+CONN_LM?` 的量測換成 `rx_data_conn` 的 `stats.link_margin_avg / 10`。
 - [ ] handler 不要把 `"OK"` 放進 `resp`(`at_module` 會自己補,會變兩行 OK)。
-- [ ] 出貨 preset 加 `-DFALLBACK_PIN_AT_BOTTOM=0`(§4.2)。
+- [x] `FALLBACK_PIN_AT_BOTTOM` default 改成 0(§4.2)。原訂做法是出貨 preset 加旗標,
+      改成動 default,出貨 preset 因此不需要任何額外旗標。
 
 文件:
 

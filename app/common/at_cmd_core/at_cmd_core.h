@@ -125,8 +125,11 @@ typedef enum {
  *
  *  Deliberately asymmetric with the immediate report of a degradation. Going down costs the
  *  host one source switch; coming back up too eagerly costs it another one straight after,
- *  and the bottom of the ladder is known to oscillate (see FALLBACK_PIN_AT_BOTTOM in
- *  sac_cfg.h). One level per window, so a recovery from CRITICAL to GOOD takes two.
+ *  and the bottom of the ladder oscillates -- it climbs, fails and falls again. That used to
+ *  be hidden by FALLBACK_PIN_AT_BOTTOM in sac_cfg.h, which is off by default since 2026-09-17
+ *  precisely because a pinned rung left this recovery path unreachable, so this window is now
+ *  the only thing damping it. One level per window, so a recovery from CRITICAL to GOOD takes
+ *  two.
  */
 #define AT_UWB_QUALITY_RECOVER_MS  5000
 

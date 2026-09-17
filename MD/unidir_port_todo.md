@@ -171,8 +171,11 @@ AT 流量期間音訊不斷。
 | **PIN** | 看到**往下踏進底階那一步**（prev < 4 且 cur == 4） | **不是**「現在在底階」，見下 |
 | 全部讓位 | `fallback_state != FALLBACK_AUTO` | 有人按了按鍵選階，不能被蓋掉 |
 
-開關是 `FALLBACK_PIN_AT_BOTTOM`（`sac_cfg.h`，預設 1），只管 PIN；
+開關是 `FALLBACK_PIN_AT_BOTTOM`（`sac_cfg.h`，2026-09-17 起預設 0），只管 PIN；
 FREEZE 和 SETTLE 是無條件的，因為它們修的是既有的錯誤行為，不是新功能。
+預設關掉的理由在 `uwb_quality_indicator_decision_spec.md` §4.2：PIN 會讓
+`+EVENT: LE_UWB_QUALITY` 的 `CRITICAL` 永遠不解除。下面這一整節講的仍然是 PIN=1 時的行為，
+設回 1 就會照這樣跑。
 
 #### 為什麼 PIN 必須是「那一步」而不是「在那裡」
 

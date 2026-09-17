@@ -216,14 +216,27 @@
  */
 /** @brief Stay on the bottom rung once the ladder reaches it, instead of recovering upward.
  *
- *  TEMPORARY. Wanted now because a link that has already fallen to 24 kHz tends to climb,
- *  fail and fall again, and the oscillation is worse to listen to than the bottom rung is.
+ *  Off since 2026-09-17. It was on, and what it bought was real: a link that has already
+ *  fallen to 24 kHz tends to climb, fail and fall again, and that oscillation is worse to
+ *  listen to than the bottom rung is. What it cost is worse still, because the pin outlives
+ *  the condition that earned it. It is released only when the peer has been silent for
+ *  NODE_RESTART_SILENCE_MS, so a link that dipped once and then recovered completely sits at
+ *  24 kHz for the rest of the session -- and the quality indicator is driven by the rung, so
+ *  pinned at the bottom it reports CRITICAL forever and the recovery path in at_cmd_core.c is
+ *  unreachable. An indicator that cannot un-degrade tells the host nothing.
  *
- *  Remove this when the reason for the climbing-and-failing is fixed rather than when it
- *  stops being noticed -- that is the condition, and it is written here so the switch has an
- *  exit and not just a birthday. On the u535 the underlying reason is most likely the arrival
- *  deficit in MD/u535_ldo_rx_deficit.md; on a board without that deficit this switch may never
- *  do anything at all.
+ *  The oscillation it was hiding is therefore back, on purpose. It is no longer the listening
+ *  problem it was, because the host is told CRITICAL on the way into the bottom rung and has
+ *  already switched away by the time the ladder starts hunting; what is left of it is a
+ *  QUALITY event that flickers, and AT_UWB_QUALITY_RECOVER_MS damps that at the event layer
+ *  where it belongs. See MD/uwb_quality_indicator_decision_spec.md section 4.2, which reached
+ *  this conclusion but left the default alone and carried the 0 on the shipping preset; that
+ *  was one more thing to remember at build time for no gain, so the default moved instead.
+ *
+ *  Set it back to 1 for a listening comparison, not for a shipping build. The thing to fix is
+ *  the reason for the climbing-and-failing rather than the symptom -- on the u535 most likely
+ *  the arrival deficit in MD/u535_ldo_rx_deficit.md; on a board without that deficit this
+ *  switch may never do anything at all.
  *
  *  Only the coordinator reads it. The node follows the mode in the received header and has no
  *  say -- see the RX branch of sac_fallback.c.
@@ -231,7 +244,7 @@
  *  Pinning is deliberately conditional on the peer being present; see fallback_hold_handler().
  */
 #ifndef FALLBACK_PIN_AT_BOTTOM
-#define FALLBACK_PIN_AT_BOTTOM 1
+#define FALLBACK_PIN_AT_BOTTOM 0
 #endif
 
 /** @brief Hold the ladder on one rung for the whole run, disabling fallback entirely.
