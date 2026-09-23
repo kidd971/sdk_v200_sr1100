@@ -129,23 +129,24 @@ typedef enum {
  */
 #define AT_UWB_QUALITY_SETTLE_MS   2000
 
-/** @brief How long an improvement must hold before it is reported, per level.
- *
- *  Deliberately asymmetric with the immediate report of a degradation. Going down costs the
- *  host one source switch; coming back up too eagerly costs it another one straight after,
- *  and the bottom of the ladder oscillates -- it climbs, fails and falls again. That used to
- *  be hidden by FALLBACK_PIN_AT_BOTTOM in sac_cfg.h, which is off by default since 2026-09-17
- *  precisely because a pinned rung left this recovery path unreachable, so this window is now
- *  the only thing damping it. One level per window, so a recovery from CRITICAL to GOOD takes
- *  two.
+/* An improvement used to have to hold for AT_UWB_QUALITY_RECOVER_MS (5 s) and was reported one
+ * level at a time. Removed 2026-09-23: it damped the wrong thing in the wrong place, and it
+ * made the report disagree with the ladder. The ladder climbs off rung 4 only after 3 s of good
+ * link margin and off rung 3 after 2 s, while it falls on queue depth in ~100 ms a rung, so
+ * "fast out, slow back" is already in the ladder. Stacking another 5 s per level on top meant
+ * WEAK was emitted five seconds after the ladder reached rung 3 -- by which time it was usually
+ * on rung 2 -- so the host was told WEAK about a link that was already GOOD, and on a link that
+ * stayed on rung 3 the event looked like it had been skipped entirely. What that window was
+ * really guarding, the 4 <-> 3 hunt at the bottom, is a link problem; damping it here only hid
+ * it while making every other report late. A host that does not want to follow the hunt raises
+ * its own bar -- returning to UWB on GOOD rather than WEAK puts two ladder rungs and five
+ * seconds of proven link margin in front of the switch.
  */
-#define AT_UWB_QUALITY_RECOVER_MS  5000
 
 /** @brief Link quality reported by AT+CONN_QUALITY? and +EVENT: LE_UWB_QUALITY.
  *
- *  Ordered worst-last on purpose: the state machine compares these to decide whether a new
- *  reading is a degradation (report at once) or an improvement (make it hold first), and
- *  steps one level at a time when recovering.
+ *  Ordered worst-last on purpose: the state machine compares these to decide whether a reading
+ *  has moved, and the order is what makes "worse of the rung and the dropout count" a max().
  */
 typedef enum {
     AT_LINK_QUALITY_UNKNOWN  = 0, /*!< Not connected, or inside the post-connect settle window.

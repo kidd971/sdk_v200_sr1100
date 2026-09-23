@@ -75,8 +75,6 @@ static at_link_quality_t    s_link_quality         = AT_LINK_QUALITY_UNKNOWN;
 static volatile bool        s_fb_rung_dirty        = false;
 static uint32_t             s_quality_check_tick   = 0;
 static uint32_t             s_quality_settle_tick  = 0;
-static uint32_t             s_quality_recover_tick = 0;
-static bool                 s_quality_recover_valid = false;
 static uint32_t             s_dropout_count_last   = 0;
 static bool                 s_dropout_count_valid  = false;
 /* Down-edge debounce for the link status poll; see AT_UWB_DISCONNECT_DEBOUNCE_MS. */
@@ -582,7 +580,6 @@ static void quality_on_link_up(void)
 {
     s_quality_settle_tick = facade_get_tick_ms();
     s_link_quality = AT_LINK_QUALITY_UNKNOWN;
-    s_quality_recover_valid = false;
     /* The peer that comes back may be a different one, or the same one restarted. Either way
      * its dropout counter is not a continuation of the one being differenced here. */
     s_dropout_count_valid = false;
@@ -592,7 +589,6 @@ static void quality_on_link_up(void)
 static void quality_on_link_down(void)
 {
     s_link_quality = AT_LINK_QUALITY_UNKNOWN;
-    s_quality_recover_valid = false;
     s_dropout_count_valid = false;
     s_fb_rung_dirty = false;
 }
@@ -637,34 +633,25 @@ static at_link_quality_t quality_evaluate(void)
 
 /** @brief Apply a new reading to the reported state, and emit the event if it moved.
  *
- *  Degradations are reported the instant they are read; improvements have to hold for
- *  AT_UWB_QUALITY_RECOVER_MS and move one level at a time. The asymmetry is the whole point --
- *  see the constant.
+ *  Both directions are reported the instant they are read, and the level reported is the level
+ *  read -- no holding an improvement, no walking up one level at a time. The event therefore
+ *  always names the rung the ladder is on now. See the note where AT_UWB_QUALITY_RECOVER_MS
+ *  used to be for why the hold was removed and where the damping belongs instead.
+ *
+ *  The first reading after the settle window moves from UNKNOWN, which is a change like any
+ *  other: the host hears the starting level rather than silence.
  */
 static void quality_apply(at_link_quality_t reading, uint32_t now)
 {
     char event[48];
 
-    if (reading > s_link_quality) {
-        /* Includes the first reading after the settle window, where the state is UNKNOWN and
-         * anything is an increase: the host hears the starting level rather than silence. */
-        s_link_quality = reading;
-        s_quality_recover_valid = false;
-    } else if (reading < s_link_quality) {
-        if (!s_quality_recover_valid) {
-            s_quality_recover_tick = now;
-            s_quality_recover_valid = true;
-            return;
-        }
-        if ((now - s_quality_recover_tick) < AT_UWB_QUALITY_RECOVER_MS) {
-            return;
-        }
-        s_link_quality--;
-        s_quality_recover_tick = now;
-    } else {
-        s_quality_recover_valid = false;
+    (void)now;
+
+    if (reading == s_link_quality) {
         return;
     }
+
+    s_link_quality = reading;
 
     snprintf(event, sizeof(event), "+EVENT: LE_UWB_QUALITY:%s\r\n", quality_name(s_link_quality));
     facade_expansion_uart_write(event);
