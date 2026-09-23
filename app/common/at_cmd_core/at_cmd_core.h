@@ -93,17 +93,25 @@ typedef enum {
  *  the ladder descends on the coordinator's transmit queue backing up, which happens before
  *  the node misses its first packet.
  *
- *  WEAK at rung 2 and CRITICAL at rung 3 rather than one rung later each: with 33 m of
- *  unobstructed reach, any descent indoors is already evidence of an obstruction rather than
- *  of distance, and waiting for the bottom rung means waiting for the step to finish. The
- *  cost of being early is a Bluetooth path warmed and not used.
+ *  WEAK at rung 3 and CRITICAL at the bottom rung, 4. Until 2026-09-22 this was one rung
+ *  earlier each, on the argument that any descent indoors already means an obstruction and
+ *  that waiting for the bottom rung waits for the step to finish. What that got wrong is what
+ *  CRITICAL is for: it is the host's instruction to switch to Bluetooth, and rung 3 -- 48 kHz
+ *  ADPCM -- is continuous audio worth staying on. Reporting it CRITICAL moved the host off UWB
+ *  a rung before it had to go. CRITICAL now means the ladder has nowhere left to go.
  *
- *  The ladder can descend one rung per 10 Hz sample, so rung 2 to rung 4 is ~200 ms. That is
- *  the whole warning budget this product can offer, which is why the host must keep Bluetooth
- *  ready rather than start preparing it on WEAK. See MD/uwb_quality_indicator_decision_spec.md.
+ *  The price is warning time: WEAK to CRITICAL is now one 10 Hz ladder sample, ~100 ms,
+ *  and the top of the ladder to CRITICAL ~300 ms. That was never enough time to prepare
+ *  Bluetooth in, which is why the host must keep it ready rather than start on WEAK. See
+ *  MD/uwb_quality_indicator_decision_spec.md.
+ *
+ *  A reconnect reports CRITICAL first: the ladder resumes where the outage left it, which is
+ *  nearly always the bottom. That is harmless to a host that returns to UWB only on WEAK or
+ *  GOOD -- it is on Bluetooth when the CRITICAL arrives and stays there -- and it is the reason
+ *  the host must not return on LE_UWB_CONNECTED.
  */
-#define AT_UWB_QUALITY_WEAK_RUNG      2
-#define AT_UWB_QUALITY_CRITICAL_RUNG  3
+#define AT_UWB_QUALITY_WEAK_RUNG      3
+#define AT_UWB_QUALITY_CRITICAL_RUNG  4
 
 /** @brief Interval (ms) between quality evaluations while connected.
  *
@@ -142,9 +150,9 @@ typedef enum {
 typedef enum {
     AT_LINK_QUALITY_UNKNOWN  = 0, /*!< Not connected, or inside the post-connect settle window.
                                    *   Reported as N/A; no event is sent for it. */
-    AT_LINK_QUALITY_GOOD     = 1, /*!< Rung 0-1. Nothing to do. */
-    AT_LINK_QUALITY_WEAK     = 2, /*!< Rung 2. Bluetooth should already be ready to sound. */
-    AT_LINK_QUALITY_CRITICAL = 3, /*!< Rung 3+, or audio has dropped out. Switch. */
+    AT_LINK_QUALITY_GOOD     = 1, /*!< Rung 0-2. Nothing to do. */
+    AT_LINK_QUALITY_WEAK     = 2, /*!< Rung 3. Bluetooth should already be ready to sound. */
+    AT_LINK_QUALITY_CRITICAL = 3, /*!< Bottom rung, or audio has dropped out. Switch. */
 } at_link_quality_t;
 
 /** @brief Device role codes reported by AT+LE_UWB_GET_ROLE?. */
