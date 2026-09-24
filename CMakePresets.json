@@ -766,6 +766,21 @@
             }
         },
         {
+            "name": "unidir-u5a5-rjf-single-radio-isi1",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone unidirectional, u5a5, single radio: I2S slave, right-justified, MAX98091 codec. Builds both DG (coordinator) and HS (node). ISI mitigation 1 -- what every u5a5 image before v2.4.1_rc5 ran, so it links with those, with a u535 half and with a dual-radio HS; not with an -isi2 half.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0",
+                "NODE_ISI_MITIG": "SWC_ISI_MITIG_1"
+            }
+        },
+        {
             "name": "unidir-u5a5-rjf-HS-dual-radio",
             "inherits": [
                 "base",

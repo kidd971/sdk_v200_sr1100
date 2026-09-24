@@ -45,7 +45,7 @@ PRESET=unidir-u5a5-rjf-single-radio-isi2 ./.pixi/bin/pixi.exe run _build_preset
 - Build tree: `build/<presetName>/`, and each app's artifacts land under
   `build/<preset>/app/example/<app>/`. A `.bin` is produced next to each `.elf` by a POST_BUILD
   `objcopy`.
-- 80 configure presets, 12 of them visible; the rest are hidden bases or the withdrawn headset line.
+- 81 configure presets, 13 of them visible; the rest are hidden bases or the withdrawn headset line.
 - Add a one-off flag by appending it to the configure step, e.g.
   `cmake --preset=<p> -G Ninja -DSTATS_VERBOSE=1 && cmake --build build/<p>`.
 - Interactive debug is VS Code + cortex-debug + pyocd (`.vscode/launch.json` has per-ST-Link-serial
