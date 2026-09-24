@@ -43,7 +43,6 @@
                 "U535_PWR_LDO": "1"
             }
         },
-
         {
             "name": "puretone-headset-quasar-u5a5",
             "hidden": true,
@@ -233,33 +232,6 @@
                 "USB_AUDIO_ENABLED": "ON"
             }
         },
-
-        {
-            "name": "bsp-validator-u535-single-radio",
-            "description": "BSP validator on U535, single radio - runs the radio 1 SPI/CS/reset/IRQ/DMA tests",
-            "hidden": false,
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "cacheVariables": {
-                "APP": "BSP-validator",
-                "TRANSCEIVER": "SR1100"
-            }
-        },
-        {
-            "name": "bsp-validator-u535-dual-radio",
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "BSP validator on U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5) - runs radio 1 + radio 2 SPI/CS/reset/IRQ/DMA tests",
-            "cacheVariables": {
-                "APP": "BSP-validator",
-                "TRANSCEIVER": "SR1100",
-                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER"
-            }
-        },
         {
             "name": "bsp-validator-tool-quasar",
             "description": "BSP Validator tool with Quasar",
@@ -273,7 +245,6 @@
                 "TRANSCEIVER": "SR1100"
             }
         },
-
         {
             "name": "puretone-headset-quasar-u535",
             "hidden": true,
@@ -564,7 +535,6 @@
                 "SINE_DEBUG_CAPTURE": "1"
             }
         },
-
         {
             "name": "audio-bidirectional-quasar",
             "hidden": true,
@@ -781,49 +751,18 @@
             }
         },
         {
-            "name": "unidir-u5a5-rjf-single-radio",
+            "name": "unidir-u5a5-rjf-single-radio-isi2",
             "inherits": [
                 "base",
                 "quasar"
             ],
-            "description": "Puretone unidirectional, u5a5, single radio: I2S slave, right-justified, MAX98091 codec. Builds both DG (coordinator) and HS (node).",
+            "description": "Puretone unidirectional, u5a5, single radio: I2S slave, right-justified, MAX98091 codec. Builds both DG (coordinator) and HS (node). ISI mitigation 2 -- both halves, and it links only with another ISI-2 half: not with a u535 or any dual-radio HS, which run ISI 1.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
                 "I2S_MASTER_MODE": "0",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "unidir-u5a5-rjf-DG-sine",
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "SINE test, u5a5, DG (coordinator): 1 kHz tone injected into the I2S producer buffer, sent over the air on a pinned ladder rung. Use the coordinator binary and pair it with a normal HS -- the node binary from this preset is an ordinary one.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "I2S_MASTER_MODE": "0",
-                "SINE_INJECT_DG": "1",
-                "I2S_FMT_DEFAULT": "0"
-            }
-        },
-        {
-            "name": "unidir-u5a5-rjf-HS-sine",
-            "hidden": true,
-            "inherits": [
-                "base",
-                "quasar"
-            ],
-            "description": "SINE test, u5a5, HS (node): free-running 1 kHz tone straight out I2S, no radio link and no pipeline. Use the node binary; the coordinator binary from this preset is an ordinary one.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "I2S_MASTER_MODE": "0",
-                "SINE_INJECT_HS": "1",
-                "SINE_DEBUG_CAPTURE": "1",
-                "I2S_FMT_DEFAULT": "0"
+                "I2S_FMT_DEFAULT": "0",
+                "NODE_ISI_MITIG": "SWC_ISI_MITIG_2"
             }
         },
         {
@@ -832,11 +771,25 @@
                 "base",
                 "quasar"
             ],
-            "description": "Puretone unidirectional, u5a5 HS (node), dual radio: I2S slave, right-justified, MAX98091 codec. HS only -- the DG does not support dual radio, so flash its half from unidir-u5a5-rjf-single-radio.",
+            "description": "Puretone unidirectional, u5a5 HS (node), dual radio: I2S slave, right-justified, MAX98091 codec. HS only -- the DG does not support dual radio, so flash its half from unidir-u5a5-rjf-DG-dual-radio. NOT from unidir-u5a5-rjf-single-radio-isi2: that one runs ISI 2, this runs ISI 1, and a mismatched pair does not link.",
             "cacheVariables": {
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
                 "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER",
+                "I2S_MASTER_MODE": "0",
+                "I2S_FMT_DEFAULT": "0"
+            }
+        },
+        {
+            "name": "unidir-u5a5-rjf-DG-dual-radio",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "Puretone unidirectional, u5a5 DG (coordinator) for a DUAL-radio HS: single-radio hardware at ISI 1, to match unidir-u5a5-rjf-HS-dual-radio. Use the coordinator binary; the node binary is an ordinary single-radio HS at ISI 1.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
                 "I2S_MASTER_MODE": "0",
                 "I2S_FMT_DEFAULT": "0"
             }
@@ -858,24 +811,6 @@
             }
         },
         {
-            "name": "unidir-u535-ldo-DG-sine",
-            "hidden": true,
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "SINE test, u535 LDO, DG (coordinator): 1 kHz tone injected into the I2S producer buffer, sent over the air on a pinned ladder rung. Pair with a normal HS. Use the coordinator binary.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "I2S_MASTER_MODE": "0",
-                "SINE_INJECT_DG": "1",
-                "I2S_FMT_DEFAULT": "2",
-                "NO_CODEC": "1",
-                "U535_PWR_LDO": "1"
-            }
-        },
-        {
             "name": "unidir-u535-ldo-HS-single-radio",
             "inherits": [
                 "base",
@@ -886,25 +821,6 @@
                 "APP": "Puretone-Unidirectional",
                 "TRANSCEIVER": "SR1100",
                 "I2S_MASTER_MODE": "1",
-                "I2S_FMT_DEFAULT": "2",
-                "NO_CODEC": "1",
-                "U535_PWR_LDO": "1"
-            }
-        },
-        {
-            "name": "unidir-u535-ldo-HS-sine",
-            "hidden": true,
-            "inherits": [
-                "base",
-                "quasar-u535"
-            ],
-            "description": "SINE test, u535 LDO, HS (node): free-running 1 kHz tone straight out I2S, no radio link and no pipeline. Use the node binary.",
-            "cacheVariables": {
-                "APP": "Puretone-Unidirectional",
-                "TRANSCEIVER": "SR1100",
-                "I2S_MASTER_MODE": "1",
-                "SINE_INJECT_HS": "1",
-                "SINE_DEBUG_CAPTURE": "1",
                 "I2S_FMT_DEFAULT": "2",
                 "NO_CODEC": "1",
                 "U535_PWR_LDO": "1"
@@ -1003,6 +919,103 @@
             "cacheVariables": {
                 "APP": "Profiler",
                 "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "unidir-u5a5-rjf-DG-sine-isi2",
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "SINE test, u5a5, DG (coordinator): 1 kHz tone injected into the I2S producer buffer, sent over the air on a pinned ladder rung. Use the coordinator binary and pair it with a normal HS -- the node binary from this preset is an ordinary one.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "SINE_INJECT_DG": "1",
+                "I2S_FMT_DEFAULT": "0",
+                "NODE_ISI_MITIG": "SWC_ISI_MITIG_2"
+            }
+        },
+        {
+            "name": "unidir-u5a5-rjf-HS-sine",
+            "hidden": true,
+            "inherits": [
+                "base",
+                "quasar"
+            ],
+            "description": "SINE test, u5a5, HS (node): free-running 1 kHz tone straight out I2S, no radio link and no pipeline. Use the node binary; the coordinator binary from this preset is an ordinary one.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "SINE_INJECT_HS": "1",
+                "SINE_DEBUG_CAPTURE": "1",
+                "I2S_FMT_DEFAULT": "0",
+                "NODE_ISI_MITIG": "SWC_ISI_MITIG_2"
+            }
+        },
+        {
+            "name": "unidir-u535-ldo-DG-sine",
+            "hidden": true,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "SINE test, u535 LDO, DG (coordinator): 1 kHz tone injected into the I2S producer buffer, sent over the air on a pinned ladder rung. Pair with a normal HS. Use the coordinator binary.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "0",
+                "SINE_INJECT_DG": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "1"
+            }
+        },
+        {
+            "name": "unidir-u535-ldo-HS-sine",
+            "hidden": true,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "SINE test, u535 LDO, HS (node): free-running 1 kHz tone straight out I2S, no radio link and no pipeline. Use the node binary.",
+            "cacheVariables": {
+                "APP": "Puretone-Unidirectional",
+                "TRANSCEIVER": "SR1100",
+                "I2S_MASTER_MODE": "1",
+                "SINE_INJECT_HS": "1",
+                "SINE_DEBUG_CAPTURE": "1",
+                "I2S_FMT_DEFAULT": "2",
+                "NO_CODEC": "1",
+                "U535_PWR_LDO": "1"
+            }
+        },
+        {
+            "name": "bsp-validator-u535-single-radio",
+            "description": "BSP validator on U535, single radio - runs the radio 1 SPI/CS/reset/IRQ/DMA tests",
+            "hidden": false,
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "cacheVariables": {
+                "APP": "BSP-validator",
+                "TRANSCEIVER": "SR1100"
+            }
+        },
+        {
+            "name": "bsp-validator-u535-dual-radio",
+            "inherits": [
+                "base",
+                "quasar-u535"
+            ],
+            "description": "BSP validator on U535, dual radio (RADIO_2 = UWB_L, SPI2, CS=PD5) - runs radio 1 + radio 2 SPI/CS/reset/IRQ/DMA tests",
+            "cacheVariables": {
+                "APP": "BSP-validator",
+                "TRANSCEIVER": "SR1100",
+                "MULTI_TRANSCEIVER": "DUAL_TRANSCEIVER"
             }
         }
     ]

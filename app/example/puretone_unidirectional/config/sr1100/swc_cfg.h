@@ -93,7 +93,16 @@
  * Must be identical on the coordinator and the node: it changes the preamble both ends use to
  * find each other. A mismatched pair does not link, and that failure looks exactly like the
  * dual-radio one above, so flash both ends together when changing it. Overridable per build
- * (-DNODE_ISI_MITIG=SWC_ISI_MITIG_2) for an A/B arm. */
+ * (-DNODE_ISI_MITIG=SWC_ISI_MITIG_2) for an A/B arm.
+ *
+ * This default is what the dual-radio product needs, not what every preset runs. The u5a5
+ * single-radio presets (unidir-u5a5-rjf-single-radio-isi2 and its sine siblings) set level 2 in
+ * CMakePresets.json: an all-single-radio pair has nothing to conflict with, and level 2 is
+ * what the near field wants there. It cannot be chosen per board automatically -- the DG is
+ * always single radio and has no way to know which HS it will meet -- so it is chosen per
+ * PAIR, by preset, and a u5a5 DG for a dual-radio HS has its own ISI-1 preset
+ * (unidir-u5a5-rjf-DG-dual-radio). The consequence to remember: a u5a5 single-radio half no
+ * longer links with a u535 half. */
 #ifndef NODE_ISI_MITIG
 #define NODE_ISI_MITIG SWC_ISI_MITIG_1
 #endif
