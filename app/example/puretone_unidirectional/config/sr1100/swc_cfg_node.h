@@ -10,10 +10,23 @@
 #define SWC_CFG_NODE_H_
 
 /* CONSTANTS ******************************************************************/
-#define TX_DATA_PULSE_COUNT 1
-#define TX_ACK_PULSE_COUNT  1
+/* Follows SR1100_PULSE_COUNT rather than restating it: the coordinator receives this connection
+ * with rx_pulse_count = SR1100_PULSE_COUNT, so a hard-coded 1 here breaks the data link -- and with
+ * it link_is_up() -- the moment that knob is raised.
+ *
+ * TX_ACK_PULSE_COUNT is referenced by nothing: the audio ACK takes its pulse count from
+ * SR1100_PULSE_COUNT directly (puretone_unidirectional_node.c). Kept only so it cannot disagree. */
+#define TX_DATA_PULSE_COUNT SR1100_PULSE_COUNT
+#define TX_ACK_PULSE_COUNT  SR1100_PULSE_COUNT
 
-/* Sets the output power configuration for transmitting audio data. */
+/* UNUSED in this application -- changing it changes nothing in the binary.
+ *
+ * The node's own audio TX power, inherited from puretone_headset, where the headset also sends
+ * audio back to the dongle. This node never transmits audio: on the audio connection it only
+ * receives, and the one thing it sends there is the acknowledgment, whose power is
+ * TX_ACK_PULSE_WIDTH / TX_ACK_PULSE_GAIN below. The DG's TX_AUDIO_PULSE_WIDTH in swc_cfg_coord.h
+ * shares the name and IS live -- it is the audio power on the top rung. Do not tune this one
+ * expecting that one to move. */
 #define TX_AUDIO_PULSE_WIDTH \
     {                        \
         3,                   \
@@ -165,7 +178,10 @@
     }
 #endif
 
-/* Sets the offsets for output power configuration in fallback mode. */
+/* UNUSED in this application, for the same reason as TX_AUDIO_PULSE_WIDTH above: the per-rung
+ * power of an audio TX this node does not have (puretone_headset.c:952 is the user it came from).
+ * It could not serve as a per-rung ACK power either -- swc_connection_set_fallback_channels() is
+ * TX-connection only, and the node's audio connection is RX. */
 #define TX_AUDIO_FB_PULSE_WIDTH \
     {                           \
         4,                      \

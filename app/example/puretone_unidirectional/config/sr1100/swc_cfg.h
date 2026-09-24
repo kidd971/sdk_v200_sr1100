@@ -14,8 +14,28 @@
 #define SWC_QUEUE_SIZE 2
 /* Maximum channel number. */
 #define MAX_CHANNEL_NUMBER 5
-/* Pulse count for SR1100. */
+/* Pulse count for SR1100 -- pulses per transmitted symbol, 1 to 3, on every connection and in both
+ * directions.
+ *
+ * The one TX energy knob outside the width/gain table, and the larger one: gain spans only 1.8 dB
+ * end to end, while more pulses per symbol puts more energy into each one. Recorded in
+ * MD/link_dropout_arms_ledger.md as the first candidate for range, then set aside only because
+ * SPARK's demo also runs 1 -- it has never been measured on this link.
+ *
+ * It cannot be a rung-4-only setting. The fallback table does carry a tx_pulse_count, but the
+ * node's rx_pulse_count is per connection and has no fallback counterpart, and it must match what
+ * arrives. So it moves every rung, the data link and both ACKs together, and must be identical on
+ * the coordinator and the node -- flash both ends.
+ *
+ * The Wireless Core has warnings for it (SWC_WARN_TX_PULSE_COUNT / _RX_PULSE_COUNT, "use at your
+ * own risk"); they go to swc_warning_handler() and do not stop init. What more pulses cost in
+ * airtime per 250 us slot is not documented in this package -- if a raised count crackles on the
+ * top rungs with no obstruction, that is the ISI level-3 failure in another form.
+ *
+ * Overridable (-DSR1100_PULSE_COUNT=3) for a range arm; not assessed for emissions. */
+#ifndef SR1100_PULSE_COUNT
 #define SR1100_PULSE_COUNT 1
+#endif
 
 /* Inter-symbol interference mitigation level, applied to both roles through swc_node_cfg_t.
  *

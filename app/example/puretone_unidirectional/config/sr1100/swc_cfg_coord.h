@@ -10,7 +10,18 @@
 #define SWC_CFG_COORD_H_
 
 /* CONSTANTS ******************************************************************/
-/* Sets the output power configuration for transmitting audio data. */
+/* Audio TX power on the MAIN channel -- rung 0, 96 kHz, and only rung 0.
+ *
+ * The Wireless Core picks main or fallback channels by payload size against
+ * MAIN_CHANNEL_FALLBACK_PAYLOAD_SIZE: a payload above the level-1 threshold goes out on these
+ * channels, anything at or below it on the TX_AUDIO_FB_BAND_* table further down. Only the 96 kHz
+ * rung's payload is above that threshold, so with MAIN_CHANNEL_ALLOW_96K=0 -- the shipping default
+ * -- this table is expected never to transmit, and rungs 1 to 4 take their power from the fallback
+ * table. That follows from the threshold logic; it has not been confirmed on air.
+ *
+ * Not the same thing as the node's TX_AUDIO_PULSE_WIDTH, which shares the name and is unused. Note
+ * the gains 5 and 4 lie outside the 0..3 that swc_api.h documents -- another sign this table has
+ * not been exercised. */
 #define TX_AUDIO_PULSE_WIDTH \
     {                        \
         1,                   \
@@ -61,7 +72,11 @@
         0,                     \
     }
 
-/* Sets the output power configuration for transmitting acknowledgment data. */
+/* UNUSED in this application -- changing it changes nothing in the binary.
+ *
+ * An audio-ACK power for a coordinator that receives audio, which this one never does. The ACK
+ * the coordinator sends on the node's data connection is TX_DATA_ACK_PULSE_WIDTH / _GAIN above;
+ * the audio ACK the range test cares about is sent by the node, from swc_cfg_node.h. */
 #define TX_ACK_PULSE_WIDTH \
     {                      \
         5,                 \

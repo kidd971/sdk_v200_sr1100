@@ -214,6 +214,12 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(ACK_TX_POWER_MAX=${ACK_TX_POWER_MAX})
     endif()
 
+    # Pulses per symbol, every connection, both roles -- both ends must be flashed together.
+    if (DEFINED SR1100_PULSE_COUNT)
+        message("SR1100_PULSE_COUNT = ${SR1100_PULSE_COUNT}")
+        add_compile_definitions(SR1100_PULSE_COUNT=${SR1100_PULSE_COUNT})
+    endif()
+
     if (DEFINED SINE_INJECT_DG)
         add_compile_definitions(SINE_INJECT_DG=1)
     endif()
