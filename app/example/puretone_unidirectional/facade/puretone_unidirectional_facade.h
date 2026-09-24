@@ -131,6 +131,15 @@ void facade_rx_data_conn_status(void);
  */
 void facade_fallback_status(bool on);
 
+/** @brief Show whether the link is up, for someone looking at the device.
+ *
+ *  Driven by at_cmd_core's link edge, so it follows the same debounced state as
+ *  +EVENT: LE_UWB_CONNECTED / LE_UWB_DISCONNECTED. Called from main-loop context.
+ *
+ *  @param[in] connected  true on the connected edge, false on the disconnected one.
+ */
+void facade_link_status(bool connected);
+
 /** @brief Initialize the audio process timer.
  *
  *  @param[in] callback  Callback function to execute on timer event.

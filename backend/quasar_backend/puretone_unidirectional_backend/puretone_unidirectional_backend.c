@@ -140,12 +140,21 @@ void facade_button_handling(void)
     handle_button_state(&btn4_handle, local_button_callbacks.volume_down_callback);
 }
 
+/* On u535 the two activity LEDs below are the RGB's green and red channels, borrowed
+ * (quasar_def.h), so they share one package with the blue that facade_link_status() holds
+ * on while connected. Toggling them per packet would tint that steady blue cyan or magenta,
+ * so on u535 they stay dark and blue alone says "connected"; the per-second statistics on
+ * the console still carry the packet counts. u5a5 has separate LEDs and keeps its blinking. */
 void facade_tx_audio_conn_status(void)
 {
+#if defined(QUASAR_U535)
+    return;
+#else
     if (facade_is_certification_mode_active()) {
         return;
     }
     quasar_led_toggle(QUASAR_LED_USER_1);
+#endif
 }
 
 void facade_tx_data_conn_status(void)
@@ -154,10 +163,14 @@ void facade_tx_data_conn_status(void)
 
 void facade_rx_audio_conn_status(void)
 {
+#if defined(QUASAR_U535)
+    return;
+#else
     if (facade_is_certification_mode_active()) {
         return;
     }
     quasar_led_toggle(QUASAR_LED_USER_2);
+#endif
 }
 
 void facade_rx_data_conn_status(void)
@@ -174,6 +187,27 @@ void facade_fallback_status(bool on)
     } else {
         quasar_led_clear(QUASAR_LED_USER_3);
     }
+}
+
+void facade_link_status(bool connected)
+{
+    if (facade_is_certification_mode_active()) {
+        return;
+    }
+#if defined(QUASAR_U535)
+    /* Steady blue while connected. Blue is the only colour quasar_rgb can drive on this board
+     * -- facade_notify_pairing_successful() asks for green, which here lights nothing -- so
+     * before this a connected u535 showed no steady indicator at all. */
+    if (connected) {
+        quasar_rgb_configure_color(QUASAR_RGB_COLOR_BLUE);
+        quasar_rgb_set();
+    } else {
+        quasar_rgb_clear();
+    }
+#else
+    /* u5a5 keeps the steady green facade_notify_pairing_successful() sets. */
+    (void)connected;
+#endif
 }
 
 void facade_audio_process_timer_init(void (*callback)(void))

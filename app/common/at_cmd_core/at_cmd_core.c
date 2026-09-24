@@ -58,6 +58,8 @@ static void               (*s_pre_track_hw_cb)(void)                     = NULL;
 static void               (*s_disconnect_cb)(void)      = NULL;
 static void               (*s_shutdown_cb)(void)        = NULL;
 static uint8_t            (*s_battery_cb)(void)         = NULL;
+static void               (*s_link_edge_cb)(bool connected) = NULL;
+static bool                 s_link_edge_reported    = false;
 static bool                 s_i2s_mux_is_ext   = false; /* default: ON_BOARD; AT+I2S_MUX toggles to EXT */
 static bool                 s_pair_requested        = false;
 static bool                 s_reset_requested       = false;
@@ -178,6 +180,11 @@ static void at_cmd_core_fallback(void)
 void at_cmd_core_register_link_status_cb(bool (*cb)(void))
 {
     s_link_status_cb = cb;
+}
+
+void at_cmd_core_register_link_edge_cb(void (*cb)(bool connected))
+{
+    s_link_edge_cb = cb;
 }
 
 void at_cmd_core_register_link_margin_cb(int32_t (*cb)(void))
@@ -659,6 +666,19 @@ static void quality_apply(at_link_quality_t reading, uint32_t now)
 
 void at_cmd_core_process(void)
 {
+    /* Link edge for the app's indicator. Read off s_uwb_conn_status rather than hooked into
+     * each place that writes it: there are several, some outside this function (pairing,
+     * at_cmd_core_set_uwb_conn_status()), and several return early below. Checking here, on
+     * whatever the previous pass left, catches every one of them at the cost of one loop
+     * iteration of latency -- and it is the same debounced state the +EVENT lines report, so
+     * an LED driven from it cannot disagree with what the host was told. */
+    bool connected = (s_uwb_conn_status == AT_UWB_CONN_STATUS_CONNECTED);
+
+    if ((s_link_edge_cb != NULL) && (connected != s_link_edge_reported)) {
+        s_link_edge_reported = connected;
+        s_link_edge_cb(connected);
+    }
+
     at_module_process();
 
     /* Invoke pair callback deferred — after at_module_process() has sent OK. */

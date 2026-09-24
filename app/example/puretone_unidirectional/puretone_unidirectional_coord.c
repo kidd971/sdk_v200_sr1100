@@ -383,6 +383,7 @@ int main(void)
     at_cmd_core_register_disconnect_cb(at_start_disconnect);
     at_cmd_core_register_shutdown_cb(at_start_shutdown);
     at_cmd_core_register_link_status_cb(at_get_link_status);
+    at_cmd_core_register_link_edge_cb(facade_link_status);
     at_cmd_core_register_link_margin_cb(at_get_link_margin);
     at_cmd_core_register_fb_rung_cb(at_get_fb_rung);
     at_cmd_core_register_cmd_tx_cb(at_cmd_tx);

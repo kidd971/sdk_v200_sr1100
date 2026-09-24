@@ -462,6 +462,18 @@ void at_cmd_core_notify_standby(void);
 void at_cmd_core_register_link_status_cb(bool (*cb)(void));
 
 /**
+ * @brief Register a callback invoked when the reported link state changes.
+ *
+ * Fires with true when the status becomes AT_UWB_CONN_STATUS_CONNECTED and false when it
+ * leaves it -- exactly the transitions +EVENT: LE_UWB_CONNECTED / LE_UWB_DISCONNECTED report,
+ * down-edge debounce included. Called from at_cmd_core_process(), so from main-loop context.
+ * Meant for a status indicator; nothing in the link depends on it.
+ *
+ * @param[in] cb  Function to call on each edge. May be NULL to unregister.
+ */
+void at_cmd_core_register_link_edge_cb(void (*cb)(bool connected));
+
+/**
  * @brief Register a callback invoked when AT+LE_UWB_PAIR is received.
  *
  * The callback should initiate the application's pairing procedure.
