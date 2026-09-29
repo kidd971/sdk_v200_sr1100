@@ -31,20 +31,20 @@ extern "C" {
  *  keeps counting: bump N when cutting a package, whatever the package is for, and keep the
  *  value equal to the bin/<name>/ suffix so the banner, the MANIFEST and the folder agree.
  *
- *  The number is not zero-padded -- "_rc5", not "_rc05" -- so it stays the number it is and
+ *  The number is not zero-padded -- "_rc6", not "_rc06" -- so it stays the number it is and
  *  widens on its own at "_rc10". The v2.4.0 line used the padded spelling; a line that has
  *  already shipped keeps whatever it shipped as, so the two forms coexist in the tags and in
  *  the older notes. Everything from v2.4.1 on is unpadded.
  *
  *  Overridable per build so a preset can stamp it without editing this file. Pass it through
- *  CMake WITHOUT quotes -- -DFW_VERSION_RELEASE=_rc5 -- because the forward in the root
+ *  CMake WITHOUT quotes -- -DFW_VERSION_RELEASE=_rc6 -- because the forward in the root
  *  CMakeLists.txt adds them; quoting it there lands two sets of quotes on the compiler line.
  */
 #ifndef FW_VERSION_RELEASE
-#define FW_VERSION_RELEASE  "_rc5"
+#define FW_VERSION_RELEASE  "_rc6"
 #endif
 
-/** @brief What every version print and version query answers: "v2.4.1_rc5".
+/** @brief What every version print and version query answers: "v2.4.1_rc6".
  *
  *  One string, deliberately, because the alternative has already happened here: the two
  *  halves lived in separate macros with separate rules about when to bump them, and the
@@ -70,7 +70,7 @@ extern "C" {
  */
 #define FW_VERSION_SDK_COMPACT  "v241"
 
-/** @brief One whitespace-free token: "v241_rc5".
+/** @brief One whitespace-free token: "v241_rc6".
  *
  *  For the statistics lines, which are read by eye in a terminal and split on whitespace by
  *  everything else. The release half is the same FW_VERSION_RELEASE the long form uses, so
