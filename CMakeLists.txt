@@ -214,6 +214,12 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(ACK_TX_POWER_MAX=${ACK_TX_POWER_MAX})
     endif()
 
+    # Length of every timeslot in the schedule, both roles -- both ends must be flashed together.
+    if (DEFINED SWC_TIMESLOT_US)
+        message("SWC_TIMESLOT_US = ${SWC_TIMESLOT_US}")
+        add_compile_definitions(SWC_TIMESLOT_US=${SWC_TIMESLOT_US})
+    endif()
+
     # Pulses per symbol, every connection, both roles -- both ends must be flashed together.
     if (DEFINED SR1100_PULSE_COUNT)
         message("SR1100_PULSE_COUNT = ${SR1100_PULSE_COUNT}")

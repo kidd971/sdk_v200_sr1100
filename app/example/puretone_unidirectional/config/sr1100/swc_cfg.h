@@ -107,15 +107,31 @@
 #define NODE_ISI_MITIG SWC_ISI_MITIG_1
 #endif
 
+/* Length of every timeslot, in us. A knob so that ISI 2's airtime question can be asked without
+ * an edit. Measured 2026-09-29 on a u5a5 single-radio pair at ISI 2: at 250 the ladder could not
+ * hold any rung above 4; at 280 it climbs to 1 and 2, so the large payloads were not fitting.
+ * But a flat ~35-45% of attempts still failed on EVERY rung, 48 B to ~200 B alike, at 10 cm and
+ * slightly worse at 1 m -- a per-attempt loss that slot length does not reach, and the reason
+ * ISI 2 is not shipped on this link. Backing out the level-4 pulse width did not move it either
+ * (level-4 power, FBK4_TX_POWER_REF=0, was built but not measured). ISI 1 on the same pair was
+ * clean.
+ *
+ * Not free. The coordinator's 20 slots go from 3810/s to 3401/s at 280, and attempts per packet
+ * are slot rate over packet rate (see sac_cfg.h): mode 4 drops from 6.4 to 5.7, mode 3 from 3.7
+ * to 3.3. Must be identical on both ends -- the schedule is what they meet on. */
+#ifndef SWC_TIMESLOT_US
+#define SWC_TIMESLOT_US 250
+#endif
+
 /* Specifies the schedule configuration. */
 // clang-format off
-#define SCHEDULE                 \
-    {                            \
-        250, 250, 250, 250, 250, \
-        250, 250, 250, 250, 250, \
-        250, 250, 250, 250, 250, \
-        250, 250, 250, 250, 250, \
-        250,                     \
+#define SCHEDULE                                                                                  \
+    {                                                                                             \
+        SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US,      \
+        SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US,      \
+        SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US,      \
+        SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US, SWC_TIMESLOT_US,      \
+        SWC_TIMESLOT_US,                                                                          \
     }
 #define COORD_TIMESLOTS                                                                                                       \
     {                                                                                                                         \
