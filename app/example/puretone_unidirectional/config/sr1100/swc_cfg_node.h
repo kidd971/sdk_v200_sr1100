@@ -124,10 +124,14 @@
  *  fine, which is the condition the ISI mitigation work exists to survive. If near-field
  *  obstruction regresses after this, this switch is the first thing to turn off.
  *
+ *  Off by default since 2026-09-29, -DTX_PULSE_WIDTH_MAX=1 for the arm: an unmeasured raise does
+ *  not belong in the base. Not a fix for anything -- see the coordinator's TX_PULSE_WIDTH_MAX in
+ *  swc_cfg_coord.h. At 0 the audio ACK is width 5.
+ *
  *  Emissions compliance has not been assessed for this table.
  */
 #ifndef TX_PULSE_WIDTH_MAX
-#define TX_PULSE_WIDTH_MAX 1
+#define TX_PULSE_WIDTH_MAX 0
 #endif
 
 #ifndef ACK_TX_POWER_MAX

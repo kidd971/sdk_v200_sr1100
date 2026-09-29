@@ -179,10 +179,17 @@
  *  free-running. Nothing here is expected to change that number; if it does, that arm's
  *  result is what needs re-examining.
  *
- *  Set TX_PULSE_WIDTH_MAX to 0 to restore the widths FBK4_TX_POWER_REF selected.
+ *  Off by default since 2026-09-29, and -DTX_PULSE_WIDTH_MAX=1 brings it back as an arm. It was
+ *  a raise that never measured as buying anything (see above), so it does not belong in the
+ *  base. It was turned off while chasing a u5a5 single-radio pair at ISI 2 that lost packets at
+ *  10 cm unobstructed -- DG tx ~1000/s against HS rx 600/s on level 4 -- and turning it off did
+ *  NOT change that loss, so it is not the cause; see NODE_ISI_MITIG in swc_cfg.h. The node's
+ *  TX_PULSE_WIDTH_MAX (the audio ACK) follows the same default.
+ *
+ *  At 0, level 4 takes the widths FBK4_TX_POWER_REF selected.
  */
 #ifndef TX_PULSE_WIDTH_MAX
-#define TX_PULSE_WIDTH_MAX 1
+#define TX_PULSE_WIDTH_MAX 0
 #endif
 
 #if TX_PULSE_WIDTH_MAX
