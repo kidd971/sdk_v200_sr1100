@@ -902,18 +902,24 @@ void facade_uwb_shutdown(void)
     quasar_radio_2_set_shutdown_pin();
 }
 
+/* Last selection made through AT+I2S_MUX, kept because the hardware selection does not survive
+ * an audio teardown. quasar_audio_init_sai() resets the mux to the on-board codec every time it
+ * runs, and this app does re-run it: unpair_device() deinits the SAI and a later pairing calls
+ * app_init() again. The I2S backend reads this to restore the choice after that re-init, and
+ * to step back to the on-board codec before the deinit -- see facade_audio_deinit(). */
+static bool s_i2s_mux_ext = false;
+
 void facade_set_i2s_mux(bool use_ext)
 {
+    s_i2s_mux_ext = use_ext;
 #if !NO_CODEC
-    /* No tracking counterpart to the headset backend's facade_i2s_backend_track_mux() here, and
-     * deliberately so. That one exists because quasar_audio_init_sai() resets the mux to the
-     * on-board codec every time it runs, and the headset re-initializes its SAI while running.
-     * This backend calls it once, from facade_audio_coord_init()/facade_audio_node_init() during
-     * app_init(), so whatever is selected here is the last word until reset. */
     quasar_audio_set_i2s_mux_selection(use_ext ? QUASAR_SELECT_EXT_CODEC : QUASAR_SELECT_ON_BOARD_CODEC);
-#else
-    (void)use_ext;
 #endif
+}
+
+bool unidir_backend_i2s_mux_is_ext(void)
+{
+    return s_i2s_mux_ext;
 }
 
 /* TX-activity debug IO. QUASAR_DEBUG_IO_1 is PA4 on both u5a5 and u535 -- the only debug IO the

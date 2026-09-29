@@ -36,6 +36,12 @@ static void codec_i2c_read(uint8_t dev_addr, uint8_t mem_addr, uint8_t *data);
 static void configure_max98091(bool input_enabled, bool output_enabled);
 #endif
 static void configure_sai(sai_cfg_t sai_cfg);
+#if !NO_CODEC
+static void restore_i2s_mux(void);
+#endif
+
+/* Owned by puretone_unidirectional_backend.c, which is where AT+I2S_MUX lands. */
+bool unidir_backend_i2s_mux_is_ext(void);
 
 /* PRIVATE GLOBALS ************************************************************/
 /* I2S clock role. 0 (the default) makes the SOC the slave and takes MCLK from the other side,
@@ -94,6 +100,8 @@ void facade_audio_coord_init(void)
 #if !NO_CODEC
     /* Configure the codec. */
     configure_max98091(true, false);
+
+    restore_i2s_mux();
 #endif
 }
 
@@ -122,12 +130,27 @@ void facade_audio_node_init(void)
 #if !NO_CODEC
     /* Configure the codec. */
     configure_max98091(false, true);
+
+    restore_i2s_mux();
 #endif
 }
 
 void facade_audio_deinit(void)
 {
     quasar_bsp_status_t quasar_err = QUASAR_OK;
+
+#if !NO_CODEC
+    /* Back to the on-board codec before tearing the SAI down, because the teardown needs its
+     * clock. The SAI is a slave here, so SAI_Disable() inside HAL_SAI_DeInit() only sees SAIEN
+     * clear at the end of a frame, and the DMA channel only drops EN when its block completes --
+     * both clocked by the MAX98091. With AT+I2S_MUX on EXT and nothing driving the expansion
+     * pins, neither ever happens: HAL_DMA_DeInit() times out after 5 ms and the node sits in
+     * quasar_bsp_error_handler() blinking blue. Reproduced as connect -> AT+I2S_MUX (EXT) ->
+     * AT+LE_UWB_DISCONNECT on a u5a5 HS; switching back to ON_BOARD first made it go away.
+     * The codec is still running at this point -- it is reset below, after the SAI. The user's
+     * choice is not lost: the next facade_audio_*_init() re-applies it. */
+    quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_ON_BOARD_CODEC);
+#endif
 
     quasar_audio_deinit_sai(&quasar_err);
     ASSERT_QUASAR_BSP_STATUS(quasar_err);
@@ -240,6 +263,18 @@ static void configure_max98091(bool input_enabled, bool output_enabled)
     }
 
     max98091_init(&codec_hal, &cfg);
+}
+
+/** @brief Re-apply the AT+I2S_MUX selection that quasar_audio_init_sai() just reset.
+ *
+ *  Without this, a device switched to EXT and then re-paired would be back on the on-board
+ *  codec while AT+I2S_MUX still reported EXT, and the next toggle would appear to do nothing.
+ */
+static void restore_i2s_mux(void)
+{
+    if (unidir_backend_i2s_mux_is_ext()) {
+        quasar_audio_set_i2s_mux_selection(QUASAR_SELECT_EXT_CODEC);
+    }
 }
 #endif /* !NO_CODEC */
 
