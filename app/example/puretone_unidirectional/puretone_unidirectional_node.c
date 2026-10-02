@@ -223,6 +223,8 @@ static pairing_assigned_address_t pairing_assigned_address;
  * connections were built. Written from the RX callback, read from the main loop. */
 static volatile uint32_t s_coord_rx_tick;
 static volatile bool s_coord_rx_seen;
+/* Longest wait between two of those packets since the last stats line -- dgap in [HS]. */
+static volatile uint32_t s_coord_rx_gap_max;
 
 /* Media key waiting to be sent to the coordinator, an at_cmd_code_t. Edge triggered: set from
  * the AT handler in the main loop, read and cleared in data_callback() from the TIM16 ISR, so
@@ -804,7 +806,12 @@ static void conn_rx_data_success_callback(void *conn, void *arg)
          * the coordinator sends on this every DATA_TX_PERIOD_MS whatever the audio is
          * doing, so it stays a heartbeat when the ladder is deep and the audio slots are
          * mostly idle. */
-        s_coord_rx_tick = facade_get_tick_ms();
+        uint32_t rx_now = facade_get_tick_ms();
+
+        if (s_coord_rx_seen && ((rx_now - s_coord_rx_tick) > s_coord_rx_gap_max)) {
+            s_coord_rx_gap_max = rx_now - s_coord_rx_tick;
+        }
+        s_coord_rx_tick = rx_now;
         s_coord_rx_seen = true;
 
         /* Media keys from the coordinator. Edge triggered, so a lost packet loses the press;
@@ -1655,6 +1662,25 @@ static void print_stats_compact(void)
     uint32_t slots = rx_rate + miss_rate;
     uint32_t fill_pct = (slots > 0) ? (uint32_t)(((uint64_t)rx_rate * 100U) / slots) : 0;
 
+    /* Longest silence on the coordinator's data connection this second, in ms, counting a
+     * silence still in progress. This is the quantity link_is_up() times out on: nominal is
+     * DATA_TX_PERIOD_MS (10), COORD_RX_TIMEOUT_MS (200) makes the link read down, and 200 plus
+     * the AT layer's 400 ms debounce is LE_UWB_DISCONNECTED. Printed because a disconnect on
+     * the walk back from an obstruction was reported and not reproduced. The first bench
+     * capture with it (2026-09-29) showed the coordinator's data connection sending nothing for
+     * ~5 s while its audio still flowed with idle slots to spare -- so dgap climbing while rx=
+     * holds is the data connection stalling, and dgap climbing with rx= at 0 as well is a link
+     * that is really gone. The DG's dslot/dcca/dfull say why its data stopped.
+     *
+     * Reset after reading. A packet landing between the read and the reset loses its gap, which
+     * can only under-report by one sample; not worth a critical section in a stats print. */
+    uint32_t gap_ms = s_coord_rx_gap_max;
+
+    if (s_coord_rx_seen && ((now - s_coord_rx_tick) > gap_ms)) {
+        gap_ms = now - s_coord_rx_tick;
+    }
+    s_coord_rx_gap_max = 0;
+
     /* Fraction of this connection's scheduled receive slots that carried a packet.
      *
      * rx + miss is the number of slots the schedule gave this connection, and it was measured
@@ -1671,10 +1697,11 @@ static void print_stats_compact(void)
      * Integer percent on purpose: this gets compared between distances by eye, and a decimal
      * would imply a precision a one-second window does not have.
      */
-    len = snprintf(line, sizeof(line), "[HS] " FW_VERSION_COMPACT " %lu fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s fill=%lu%% lm=%u",
+    len = snprintf(line, sizeof(line),
+                   "[HS] " FW_VERSION_COMPACT " %lu fb=%u %-13s rx=%lu/s rej=%lu/s miss=%lu/s fill=%lu%% lm=%u dgap=%lums",
                    (unsigned long)now, (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)rx_rate,
                    (unsigned long)rej_rate, (unsigned long)miss_rate, (unsigned long)fill_pct,
-                   (unsigned)info.link_margin);
+                   (unsigned)info.link_margin, (unsigned long)gap_ms);
 
     /* Scheduler-timer state on the SAME line, not a second one. It is only ever read next to
      * the packet counters -- the wedge shows as those counters going quiet WHILE the timer

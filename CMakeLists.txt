@@ -214,6 +214,12 @@ if (NOT BUILD_TESTS)
         add_compile_definitions(ACK_TX_POWER_MAX=${ACK_TX_POWER_MAX})
     endif()
 
+    # Coordinator only: data connection built first, at the top priority. Experiment arm.
+    if (DEFINED DG_DATA_FIRST)
+        message("DG_DATA_FIRST = ${DG_DATA_FIRST}")
+        add_compile_definitions(DG_DATA_FIRST=${DG_DATA_FIRST})
+    endif()
+
     # Length of every timeslot in the schedule, both roles -- both ends must be flashed together.
     if (DEFINED SWC_TIMESLOT_US)
         message("SWC_TIMESLOT_US = ${SWC_TIMESLOT_US}")

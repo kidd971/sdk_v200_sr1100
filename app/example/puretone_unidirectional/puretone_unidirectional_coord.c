@@ -72,6 +72,11 @@
  */
 #define NODE_RX_TIMEOUT_MS 200
 
+/* Build the data connection before audio and give it the top priority. See app_swc_core_init(). */
+#ifndef DG_DATA_FIRST
+#define DG_DATA_FIRST 0
+#endif
+
 /** @brief Silence long enough to mean the peer restarted rather than was momentarily blocked.
  *
  *  Three seconds. The two cases are indistinguishable at any single instant -- both are
@@ -278,6 +283,10 @@ static bool s_ladder_prev_valid;
  * volatile. See the note on cmd_type in puretone_link_data.h for why that is acceptable here
  * and would not be for an alarm. */
 static volatile uint8_t s_pending_cmd;
+
+/* Times data_callback() found the data connection's queue full and dropped its packet -- dfull
+ * in the [DG] line. Incremented from the TIM16 ISR, read from the main loop. */
+static volatile uint32_t s_data_queue_full_count;
 
 /* When the peer most recently became reachable, and whether the ladder has been let go since.
  * See LADDER_SETTLE_MS. s_link_up_tick has no reader once the ladder is forced to one rung. */
@@ -585,7 +594,20 @@ static void app_swc_core_init(pairing_assigned_address_t *app_pairing, swc_error
         .timeslot_count = ARRAY_SIZE(tx_timeslots),
     };
 
-    if (certification_mode == FACADE_CERTIF_DATA) {
+    /* DG_DATA_FIRST takes the certification branch's order in normal operation: data built
+     * first and given the top priority, audio second. An experiment arm, off by default.
+     *
+     * Why it exists: on the walk back from an obstruction the node reported
+     * LE_UWB_DISCONNECTED while audio was still flowing, and the [DG] line showed the Wireless
+     * Core giving this data connection no timeslots at all -- dslot=0 with dfull=100, dcca=0 --
+     * for 5 s in one capture and 12 s and counting in another (2026-09-29, u5a5, ISI 1), even
+     * through seconds when audio left 2000+ slots idle. The node's only heartbeat is this
+     * connection, so its silence alone is the disconnect. The core is prebuilt and the
+     * reason is not visible from here; this tests whether it is tied to the connection being
+     * the lower-priority, second-built one on shared slots. Data costs ~100 slots/s of 3810,
+     * so letting it win costs audio little. Coordinator only: the node's connections are
+     * receive-side and it does not read this. */
+    if ((certification_mode == FACADE_CERTIF_DATA) || DG_DATA_FIRST) {
         /* Add data connection first to use it for certification mode. */
         tx_data_conn = swc_connection_init(tx_data_conn_cfg, swc_err);
         ASSERT_SWC_STATUS(*swc_err);
@@ -1862,10 +1884,11 @@ static const char *fallback_mode_name(uint8_t mode)
  */
 static void print_stats_compact(void)
 {
-    static uint32_t prev_cca_fail, prev_tx_drop, prev_tx, prev_idle, prev_tick;
+    static uint32_t prev_cca_fail, prev_tx_drop, prev_tx, prev_idle, prev_dtx, prev_dack, prev_tick;
+    static uint32_t prev_dslot, prev_dcca, prev_dfull;
     static bool prev_valid;
 
-    char line[160];
+    char line[240];
     swc_error_t swc_err = SWC_ERR_NONE;
     sac_status_t sac_status = SAC_OK;
     uint32_t now = facade_get_tick_ms();
@@ -1880,10 +1903,40 @@ static void print_stats_compact(void)
      * "the air was empty because nothing was produced" apart from "packets were sent and did
      * not arrive". Those two look identical from either end alone. */
     uint32_t tx_idle = (tx != NULL) ? tx->no_packet_tranmission_count : 0;
+    /* The data connection, which shares the audio connection's slots at the lower priority.
+     * Nominal is 100/s, one per DATA_TX_PERIOD_MS, and dack is how many of those the node
+     * acknowledged. It is also the node's only heartbeat, so dtx falling while idle= reads 0
+     * is audio holding every slot and starving it -- the candidate for a node that reports
+     * LE_UWB_DISCONNECTED while audio is still flowing; see dgap in the node's line.
+     *
+     * Measured 2026-09-29 on a u5a5 pair: that is NOT what happens. dtx went to 0 for ~5 s
+     * around a walk-back disconnect, and for three of those seconds audio had 2000-3000 idle
+     * slots/s and was barely retrying -- the data connection stopped on its own. The three
+     * counters after dack say why it stopped, and the Wireless Core is prebuilt, so they are
+     * the only view in:
+     *   dslot  TX timeslots the core gave the data connection. 0 = the scheduler stopped
+     *          offering it slots at all.
+     *   dcca   packets the core abandoned on a failed clear-channel assessment. This
+     *          connection's fail action is SWC_CCA_ABORT_TX with 15 tries, so a channel that
+     *          reads busy costs the packet without it ever reaching the air -- and cca_fail
+     *          earlier in the line counts the AUDIO connection only.
+     *   dfull  data_callback() found the queue (SWC_QUEUE_SIZE) full and dropped the packet,
+     *          i.e. the core was holding packets it was not sending. */
+    swc_statistics_t *dt = swc_connection_update_stats(tx_data_conn, &swc_err);
+    uint32_t dtx_sent = (dt != NULL) ? (dt->packet_sent_and_acked_count + dt->packet_sent_and_not_acked_count) : 0;
+    uint32_t dtx_acked = (dt != NULL) ? dt->packet_sent_and_acked_count : 0;
+    uint32_t dslot = (dt != NULL) ? dt->tx_timeslot_occurrence : 0;
+    uint32_t dcca = (dt != NULL) ? dt->cca_fail_count : 0;
+    uint32_t dfull = s_data_queue_full_count;
+    uint32_t dslot_rate = 0;
+    uint32_t dcca_rate = 0;
+    uint32_t dfull_rate = 0;
     uint32_t cca_rate = 0;
     uint32_t drop_rate = 0;
     uint32_t tx_rate = 0;
     uint32_t idle_rate = 0;
+    uint32_t dtx_rate = 0;
+    uint32_t dack_rate = 0;
 
     if (prev_valid) {
         uint32_t dms = now - prev_tick;
@@ -1893,19 +1946,34 @@ static void print_stats_compact(void)
             drop_rate = (uint32_t)(((uint64_t)(info.tx_pkt_dropped - prev_tx_drop) * 1000U) / dms);
             tx_rate = (uint32_t)(((uint64_t)(tx_sent - prev_tx) * 1000U) / dms);
             idle_rate = (uint32_t)(((uint64_t)(tx_idle - prev_idle) * 1000U) / dms);
+            dtx_rate = (uint32_t)(((uint64_t)(dtx_sent - prev_dtx) * 1000U) / dms);
+            dack_rate = (uint32_t)(((uint64_t)(dtx_acked - prev_dack) * 1000U) / dms);
+            dslot_rate = (uint32_t)(((uint64_t)(dslot - prev_dslot) * 1000U) / dms);
+            dcca_rate = (uint32_t)(((uint64_t)(dcca - prev_dcca) * 1000U) / dms);
+            dfull_rate = (uint32_t)(((uint64_t)(dfull - prev_dfull) * 1000U) / dms);
         }
     }
+    prev_dslot = dslot;
+    prev_dcca = dcca;
+    prev_dfull = dfull;
     prev_cca_fail = info.cca_fail_count;
     prev_tx_drop = info.tx_pkt_dropped;
     prev_tx = tx_sent;
     prev_idle = tx_idle;
+    prev_dtx = dtx_sent;
+    prev_dack = dtx_acked;
     prev_tick = now;
     prev_valid = true;
 
+    /* dtx/dack go last so that anything already splitting this line on its first fields reads
+     * them where it always has. */
     snprintf(line, sizeof(line),
-             "[DG] " FW_VERSION_COMPACT " %lu fb=%u %-13s tx=%lu/s idle=%lu/s cca_fail=%lu/s tx_drop=%lu/s\r\n", (unsigned long)now,
-             (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)tx_rate, (unsigned long)idle_rate,
-             (unsigned long)cca_rate, (unsigned long)drop_rate);
+             "[DG] " FW_VERSION_COMPACT " %lu fb=%u %-13s tx=%lu/s idle=%lu/s cca_fail=%lu/s tx_drop=%lu/s"
+             " dtx=%lu/s dack=%lu/s dslot=%lu/s dcca=%lu/s dfull=%lu/s\r\n",
+             (unsigned long)now, (unsigned)fb_mode, fallback_mode_name(fb_mode), (unsigned long)tx_rate,
+             (unsigned long)idle_rate, (unsigned long)cca_rate, (unsigned long)drop_rate, (unsigned long)dtx_rate,
+             (unsigned long)dack_rate, (unsigned long)dslot_rate, (unsigned long)dcca_rate,
+             (unsigned long)dfull_rate);
     facade_print_string(line);
 }
 #endif /* !STATS_VERBOSE */
@@ -2493,6 +2561,7 @@ static void wireless_send_data(const void *transmitted_data, uint8_t size, swc_e
     /* Get buffer from queue to hold data. */
     swc_connection_get_payload_buffer(tx_data_conn, &buffer, swc_err);
     if ((*swc_err != SWC_ERR_NONE) || (buffer == NULL)) {
+        s_data_queue_full_count++;
         return;
     }
 
