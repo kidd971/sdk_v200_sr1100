@@ -105,6 +105,18 @@ facade_certification_mode_t facade_get_coord_certification_mode(void);
  */
 facade_certification_mode_t facade_get_node_certification_mode(void);
 
+/** @brief Toggle the certification-mode heartbeat LED once.
+ *
+ *  Non-blocking, unlike the button-selection blink: the caller supplies the cadence from the
+ *  certification while-loop, so a board that has no button and no console on the bench (a
+ *  CERTIF_FORCE_MODE build) still shows that it is running. Toggles the RGB: green for the
+ *  coordinator, blue for the node, so the two can be told apart. On u535 only blue can be
+ *  driven, so both are blue there.
+ *
+ *  @param[in] coordinator  true from the coordinator's loop, false from the node's.
+ */
+void facade_certification_led_toggle(bool coordinator);
+
 /** @brief Notify user of the wireless Audio TX connection status.
  *
  *  @note This function is intended only for the Coordinator, which is responsible for sending audio packets.

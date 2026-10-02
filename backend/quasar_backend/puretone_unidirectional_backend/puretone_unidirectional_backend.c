@@ -54,6 +54,12 @@ static facade_button_callbacks_t local_button_callbacks;
 /* PUBLIC FUNCTIONS ***********************************************************/
 facade_certification_mode_t facade_get_coord_certification_mode(void)
 {
+#ifdef CERTIF_FORCE_MODE
+    /* ST-Link-only cert bench: boot straight into a fixed certification mode without needing the
+     * USER_2 button. Bypasses the button-selection sequence entirely; same shape as the headset
+     * backend's (1d63466). Shipping builds do not define it and are unchanged. */
+    return (facade_certification_mode_t)CERTIF_FORCE_MODE;
+#endif
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* If button 2 is not pressed, the application runs normally without entering any certification mode. */
         return FACADE_CERTIF_NONE;
@@ -110,6 +116,12 @@ facade_certification_mode_t facade_get_coord_certification_mode(void)
 
 facade_certification_mode_t facade_get_node_certification_mode(void)
 {
+#ifdef CERTIF_FORCE_MODE
+    /* ST-Link-only cert bench: boot straight into a fixed certification mode without needing the
+     * USER_2 button. Bypasses the button-selection sequence entirely; same shape as the headset
+     * backend's (1d63466). Shipping builds do not define it and are unchanged. */
+    return (facade_certification_mode_t)CERTIF_FORCE_MODE;
+#endif
     if (!quasar_button_read_state(QUASAR_BUTTON_USER_2)) {
         /* If button 2 is not pressed, the application runs normally without entering any certification mode. */
         return FACADE_CERTIF_NONE;
@@ -120,6 +132,27 @@ facade_certification_mode_t facade_get_node_certification_mode(void)
     quasar_timer_delay_ms(USER_RESPONSE_DELAY_MS);
 
     return FACADE_CERTIF_DATA;
+}
+
+void facade_certification_led_toggle(bool coordinator)
+{
+    /* RGB, one colour per role so a bench with a DG and an HS side by side can tell them apart:
+     * coordinator green, node blue. Blue is the only colour quasar_rgb can drive on u535 (see
+     * facade_link_status()), so there both roles are blue. Cert mode already silences the
+     * activity and link LEDs above, so nothing else competes for it. */
+#if defined(QUASAR_U535)
+    const quasar_rgb_color_t color = QUASAR_RGB_COLOR_BLUE;
+#else
+    const quasar_rgb_color_t color = coordinator ? QUASAR_RGB_COLOR_GREEN : QUASAR_RGB_COLOR_BLUE;
+#endif
+    static bool configured;
+
+    (void)coordinator;
+    if (!configured) {
+        quasar_rgb_configure_color(color);
+        configured = true;
+    }
+    quasar_rgb_toggle();
 }
 
 void facade_set_button_callbacks(facade_button_callbacks_t button_callbacks)

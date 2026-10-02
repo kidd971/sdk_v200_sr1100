@@ -115,6 +115,8 @@
 #define DATA_TX_PERIOD_MS 10
 /* Size of the buffer used to print errors. */
 #define ERROR_MESSAGE_BUFFER_SIZE 50
+/* Certification-mode heartbeat: the status LED toggles this often, so ~2 Hz blink. */
+#define CERTIF_LED_TOGGLE_MS 250
 /* Interval to print statistics in ms. */
 /* Bring the receiver up on the calibration saved in the radio's NVM as well as the fresh one.
  * SPARK's audio demo does; the SDK example this app came from does not. */
@@ -245,6 +247,8 @@ static swc_connection_t *rx_data_conn;
 
 /* **** Application Specific **** */
 static facade_certification_mode_t certification_mode;
+/* Last toggle of the certification heartbeat LED, ms. */
+static uint32_t cert_led_tick;
 /* Variables supporting pairing between the two devices. */
 static device_pairing_state_t device_pairing_state;
 static pairing_cfg_t app_pairing_cfg;
@@ -451,6 +455,15 @@ int main(void)
         app_init();
         device_pairing_state = DEVICE_PAIRED;
         while (1) {
+            /* Certification heartbeat. Non-blocking, so it never stalls stats or TX. cert_led_tick is
+             * file-scope on purpose: a bench with only an ST-Link reads it over SWD to tell a live main
+             * loop from a wedged one (uwTick is the ISR time base and keeps counting either way). */
+            uint32_t cert_now = facade_get_tick_ms();
+
+            if ((cert_now - cert_led_tick) >= CERTIF_LED_TOGGLE_MS) {
+                cert_led_tick = cert_now;
+                facade_certification_led_toggle(true);
+            }
             /* Statistics are displayed at intervals set by the timer when paired; timer stops if unpaired. */
             if (should_print_stats()) {
                 print_stats();
